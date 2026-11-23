@@ -2,14 +2,34 @@ import axios from 'axios';
 
 // Support Vercel / Cloud deployment pointing to external API or fallback to relative /api
 export function normalizeApiUrl(raw?: string): string {
-  if (!raw || !raw.trim()) return '/api';
-  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (!raw || typeof raw !== 'string' || !raw.trim()) {
+    // If running in browser and on a static host, check window / global overrides
+    const win = typeof window !== 'undefined' ? (window as any) : undefined;
+    const winOverride = win?.__ENV__?.VITE_API_URL || win?.VITE_API_URL || win?.ENV?.VITE_API_URL;
+    if (winOverride && typeof winOverride === 'string' && winOverride.trim()) {
+      raw = winOverride.trim();
+    } else {
+      return '/api';
+    }
+  }
+
+  let trimmed = raw.trim();
+  // Ensure protocol if user entered hostname like rentshield.onrender.com or onrender.com
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('/')) {
+    trimmed = `https://${trimmed}`;
+  }
+
+  trimmed = trimmed.replace(/\/+$/, '');
   return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
 }
 
 export function getAssetBaseUrl(raw?: string): string {
-  if (!raw || !raw.trim()) return '';
-  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (!raw || typeof raw !== 'string' || !raw.trim()) return '';
+  let trimmed = raw.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('/')) {
+    trimmed = `https://${trimmed}`;
+  }
+  trimmed = trimmed.replace(/\/+$/, '');
   return trimmed.replace(/\/api$/, '');
 }
 

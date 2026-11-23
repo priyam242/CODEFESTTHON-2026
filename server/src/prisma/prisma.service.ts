@@ -9,9 +9,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   public isConnected = false;
 
   // Resilient in-memory fallback store when PostgreSQL is offline or unreachable
-  private memoryUsers: Map<string, any> = new Map();
-  private memoryTenancies: Map<string, any> = new Map();
-  private memoryItems: Map<string, any> = new Map();
+  public memoryUsers: Map<string, any> = new Map();
+  public memoryTenancies: Map<string, any> = new Map();
+  public memoryItems: Map<string, any> = new Map();
 
   constructor() {
     super();
@@ -38,11 +38,70 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       await this.$connect();
       this.isConnected = true;
       this.logger.log(' Connected to PostgreSQL database via Prisma');
+
+      // Auto-ensure core tables exist on Neon PostgreSQL even on fresh blank database
+      await this.ensureTablesExist();
     } catch (err: any) {
       this.isConnected = false;
       this.logger.warn(` PostgreSQL not reachable (${err?.message || 'Offline'}). Operating with in-memory fallback store for offline continuity.`);
     }
     await this.seedDemoData();
+  }
+
+  async ensureTablesExist() {
+    if (!this.isConnected) return;
+    try {
+      await this.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "User" (
+          "id" TEXT PRIMARY KEY,
+          "email" TEXT UNIQUE NOT NULL,
+          "password" TEXT NOT NULL,
+          "name" TEXT NOT NULL DEFAULT '',
+          "role" TEXT NOT NULL DEFAULT 'TENANT',
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await this.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Tenancy" (
+          "id" TEXT PRIMARY KEY,
+          "propertyTitle" TEXT NOT NULL,
+          "propertyAddress" TEXT NOT NULL,
+          "depositAmount" DECIMAL NOT NULL,
+          "landlordName" TEXT NOT NULL,
+          "landlordPhone" TEXT NOT NULL,
+          "landlordEmail" TEXT,
+          "landlordToken" TEXT UNIQUE NOT NULL,
+          "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+          "moveInHash" TEXT,
+          "estimatedRefund" DECIMAL,
+          "depositAmountDecimal" DECIMAL,
+          "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await this.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Item" (
+          "id" TEXT PRIMARY KEY,
+          "roomName" TEXT NOT NULL,
+          "itemName" TEXT NOT NULL,
+          "moveInNotes" TEXT,
+          "moveInPhotoUrl" TEXT NOT NULL,
+          "moveInPhotoHash" TEXT,
+          "moveOutPhotoUrl" TEXT,
+          "moveOutPhotoHash" TEXT,
+          "aiVerdict" TEXT,
+          "aiExplanation" TEXT,
+          "suggestedCut" DECIMAL,
+          "tenancyId" TEXT NOT NULL REFERENCES "Tenancy"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      this.logger.log(' Core database schema verified / created on PostgreSQL');
+    } catch (e: any) {
+      this.logger.warn(` Schema ensure note: ${e?.message}`);
+    }
   }
 
   async seedDemoData(force = false) {

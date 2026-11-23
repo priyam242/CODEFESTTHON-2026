@@ -52,17 +52,23 @@ export const Login: React.FC = () => {
     setLoading(true);
     const demoEmail = demoRole === 'TENANT' ? 'tenant.demo@rentshield.com' : 'landlord.demo@rentshield.com';
     const demoPass = 'password123';
-    const demoName = demoRole === 'TENANT' ? 'Aarav Tenant' : 'Ramesh Malik (Owner)';
+    const demoName = demoRole === 'TENANT' ? 'Aarav Sharma (Tenant)' : 'Ramesh Malik (Owner)';
 
     try {
       await authApi.login(demoEmail, demoPass);
       navigate('/');
-    } catch {
+    } catch (loginErr: any) {
       try {
         await authApi.register(demoEmail, demoPass, demoRole, demoName);
         navigate('/');
       } catch (regErr: any) {
-        setError(regErr?.response?.data?.message || 'Demo login failed');
+        const errorMsg =
+          loginErr?.response?.data?.message ||
+          regErr?.response?.data?.message ||
+          loginErr?.message ||
+          regErr?.message ||
+          'Demo login failed. Please verify API connection.';
+        setError(errorMsg);
       }
     } finally {
       setLoading(false);

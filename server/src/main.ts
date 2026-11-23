@@ -9,18 +9,8 @@ async function bootstrap() {
   
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // Allow requests with no origin (curl, mobile, same-origin)
-      if (!origin) {
-        return callback(null, true);
-      }
-      // Allow localhost, *.onrender.com, *.vercel.app, and permissive fallback for live judging
-      const isAllowed =
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1') ||
-        origin.endsWith('.onrender.com') ||
-        origin.endsWith('.vercel.app') ||
-        true;
-      callback(null, isAllowed);
+      // Cleanly accept all localhost, onrender.com, vercel.app, and web requests with credentials
+      callback(null, true);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -35,6 +25,22 @@ async function bootstrap() {
       'Expires',
     ],
     exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  });
+
+  // Dedicated CORS preflight & header middleware ensuring https://onrender.com always passes
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const origin = req.headers.origin || '*';
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires',
+    );
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+    next();
   });
   
   app.useGlobalPipes(new ValidationPipe({
