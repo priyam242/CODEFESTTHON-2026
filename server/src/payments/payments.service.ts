@@ -18,6 +18,8 @@ export interface VerifyPaymentDto {
   utrNumber?: string;
   landlordToken?: string;
   customQrUrl?: string;
+  landlordQrUrl?: string;
+  tenantQrUrl?: string;
   tenantUpi?: string;
   landlordUpi?: string;
 }
@@ -163,6 +165,8 @@ export class PaymentsService {
     // Update tenancy record according to escrow stage
     const updatePayload: any = {};
     if (dto.customQrUrl) updatePayload.customQrUrl = dto.customQrUrl;
+    if (dto.landlordQrUrl) updatePayload.landlordQrUrl = dto.landlordQrUrl;
+    if (dto.tenantQrUrl) updatePayload.tenantQrUrl = dto.tenantQrUrl;
     if (dto.tenantUpi) updatePayload.tenantUpi = dto.tenantUpi;
     if (dto.landlordUpi) updatePayload.landlordUpi = dto.landlordUpi;
 
@@ -200,12 +204,21 @@ export class PaymentsService {
     tenantUpi?: string;
     landlordUpi?: string;
     customQrUrl?: string;
+    landlordQrUrl?: string;
+    tenantQrUrl?: string;
   }) {
     const tenancy = await this.findTenancy(dto.tenancyId || dto.landlordToken || '');
     const updatePayload: any = {};
     if (dto.tenantUpi) updatePayload.tenantUpi = dto.tenantUpi;
     if (dto.landlordUpi) updatePayload.landlordUpi = dto.landlordUpi;
     if (dto.customQrUrl) updatePayload.customQrUrl = dto.customQrUrl;
+    if (dto.landlordQrUrl) {
+      updatePayload.landlordQrUrl = dto.landlordQrUrl;
+      updatePayload.customQrUrl = dto.landlordQrUrl; // maintain backwards compat
+    }
+    if (dto.tenantQrUrl) {
+      updatePayload.tenantQrUrl = dto.tenantQrUrl;
+    }
 
     return this.prisma.tenancyClient.update({
       where: { id: tenancy.id },

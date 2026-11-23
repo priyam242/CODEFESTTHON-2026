@@ -36,6 +36,8 @@ model Tenancy {
   depositAmountDecimal Decimal? @db.Decimal
   settledAt       DateTime?
   customQrUrl     String?
+  landlordQrUrl   String?
+  tenantQrUrl     String?
   tenantUpi       String?
   depositPaid     Boolean  @default(false)
   depositPaymentId String?

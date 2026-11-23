@@ -24,6 +24,8 @@ export class PaymentsController {
       tenantUpi?: string;
       landlordUpi?: string;
       customQrUrl?: string;
+      landlordQrUrl?: string;
+      tenantQrUrl?: string;
     },
   ) {
     return this.paymentsService.updateRecipientUpi(dto);

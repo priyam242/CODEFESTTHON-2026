@@ -28,6 +28,7 @@ import {
 import { tenancyApi, itemsApi, paymentsApi, Tenancy, Item, authApi, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
+import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
 
 export const TenancyDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -60,6 +61,7 @@ export const TenancyDetail: React.FC = () => {
   const [bypassDuplicateCheck, setBypassDuplicateCheck] = useState(false);
   const [computedMoveOutHash, setComputedMoveOutHash] = useState<string | null>(null);
   const [showUpiModal, setShowUpiModal] = useState(false);
+  const [showGatePassModal, setShowGatePassModal] = useState(false);
   const [paymentModalStage, setPaymentModalStage] = useState<'DEPOSIT' | 'SETTLEMENT'>('SETTLEMENT');
   const [isRecipientSettingsOnly, setIsRecipientSettingsOnly] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
@@ -330,10 +332,8 @@ export const TenancyDetail: React.FC = () => {
     tenancy.status === 'SETTLED' ||
     Boolean(tenancy.signerAudit);
   const isStep3Done = Boolean(tenancy.depositPaid);
-  const isStep4Done =
-    isStep3Done &&
-    items.length > 0 &&
-    items.every((it) => Boolean(it.moveOutPhotoUrl || it.aiVerdict));
+  const auditedItemsCount = items.filter((it) => Boolean(it.moveOutPhotoUrl && it.aiVerdict)).length;
+  const isStep4Done = isStep3Done && items.length > 0 && auditedItemsCount === items.length;
   const isStep5Done = tenancy.status === 'SETTLED';
   const isStep6Done = tenancy.status === 'SETTLED';
 
@@ -575,7 +575,7 @@ export const TenancyDetail: React.FC = () => {
                     </span>
                   ) : (
                     <span className="text-[10px] text-amber-400 font-semibold">
-                      {items.filter((i) => Boolean(i.moveOutPhotoUrl || i.aiVerdict)).length}/{items.length} Inspected
+                      {auditedItemsCount}/{items.length} Rooms Audited
                     </span>
                   )}
                 </div>
@@ -709,6 +709,15 @@ export const TenancyDetail: React.FC = () => {
                   <span>Open Public Verifier</span>
                   <ExternalLink className="w-3 h-3 ml-0.5" />
                 </Link>
+                {(isStep6Done || tenancy.status === 'SETTLED') && (
+                  <button
+                    type="button"
+                    onClick={() => setShowGatePassModal(true)}
+                    className="mt-2 w-full inline-flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 text-xs font-mono font-bold transition shadow-md shadow-emerald-500/20 active:scale-95"
+                  >
+                    <span>🛂 Society Gate Pass &amp; NOC</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -758,6 +767,30 @@ export const TenancyDetail: React.FC = () => {
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100">{tenancy.propertyTitle}</h1>
                 <p className="mt-1 text-xs sm:text-sm text-slate-400">{tenancy.propertyAddress}</p>
+
+                {/* Tenancy Settled & Society Gate Pass Banner */}
+                {tenancy.status === 'SETTLED' && (
+                  <div className="mt-3.5 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+                    <div className="flex items-center space-x-2.5">
+                      <ShieldCheck className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                      <div>
+                        <span className="font-bold text-xs text-emerald-300 font-mono">
+                          🎉 Tenancy Settled • Society Move-Out Authorized
+                        </span>
+                        <span className="block text-[11px] text-emerald-400/80 mt-0.5 font-mono">
+                          Ref: {tenancy.settlementPaymentId || 'pay_RS_REFUND_994102'} • Security deposit net refund cleared.
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowGatePassModal(true)}
+                      className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap self-start sm:self-center"
+                    >
+                      <span>🛂 View / Print Society Gate Pass &amp; NOC</span>
+                    </button>
+                  </div>
+                )}
 
                 {/* STAGE 1: Move-In Security Deposit Escrow Alert & Pay Button */}
                 {!tenancy.depositPaid && !isLandlord && (
@@ -1050,6 +1083,34 @@ export const TenancyDetail: React.FC = () => {
                 </button>
               </div>
             )}
+
+            {/* Revision Requested Alert Banner */}
+            {tenancy.status === 'REVISION_REQUESTED' && (
+              <div className="mt-4 p-4 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+                <div className="flex items-start space-x-2.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-amber-200 text-sm">⚠️ Revision Requested by Owner</span>
+                    <span className="block text-[11px] text-amber-300/90 mt-1">
+                      Notes from Landlord: {tenancy.revisionNotes || 'Please upload supplementary clearer photos before baseline can be sealed.'}
+                    </span>
+                    <span className="block text-[10px] text-slate-400 mt-0.5">
+                      You can add or update baseline fixtures below, then re-submit to the owner for approval.
+                    </span>
+                  </div>
+                </div>
+                {!isLandlord && (
+                  <button
+                    type="button"
+                    onClick={handleNotifyOwner}
+                    disabled={notifyingOwner}
+                    className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-amber-500/20 whitespace-nowrap self-start sm:self-center active:scale-95"
+                  >
+                    <span>🔄 Re-Submit Fixed Inventory to Owner</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Room Items Inventory Section */}
@@ -1073,7 +1134,7 @@ export const TenancyDetail: React.FC = () => {
                   <span>🏁 Property Vacated &amp; AI Audited</span>
                 </span>
               )}
-              {!isLandlord && (
+              {!isLandlord && tenancy.status !== 'APPROVED' && tenancy.status !== 'LOCKED' && tenancy.status !== 'SETTLED' && (
                 <button
                   onClick={() => setShowAddModal(true)}
                   className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-lg shadow-emerald-500/20"
@@ -1590,6 +1651,15 @@ export const TenancyDetail: React.FC = () => {
             setTenancy(updated);
             loadData();
           }}
+        />
+      )}
+
+      {/* Official Indian Society Move-Out Gate Pass & No-Dues NOC Modal */}
+      {showGatePassModal && (
+        <SocietyGatePassModal
+          isOpen={true}
+          onClose={() => setShowGatePassModal(false)}
+          tenancy={tenancy}
         />
       )}
     </div>

@@ -115,6 +115,8 @@ export interface Tenancy {
   estimatedRefund?: number | string | null;
   settledAt?: string | null;
   customQrUrl?: string | null;
+  landlordQrUrl?: string | null;
+  tenantQrUrl?: string | null;
   tenantUpi?: string | null;
   depositPaid?: boolean | null;
   depositPaymentId?: string | null;
@@ -292,6 +294,8 @@ export const paymentsApi = {
     tenantUpi?: string;
     landlordUpi?: string;
     customQrUrl?: string;
+    landlordQrUrl?: string;
+    tenantQrUrl?: string;
   }) => {
     const res = await axios.post<Tenancy>(`${API_BASE}/payments/update-recipient`, data);
     return res.data;

@@ -24,6 +24,7 @@ import {
 import { tenancyApi, Tenancy, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
+import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
 
 export const LandlordVerify: React.FC = () => {
   const { landlordToken } = useParams<{ landlordToken: string }>();
@@ -45,6 +46,7 @@ export const LandlordVerify: React.FC = () => {
 
   // Owner Payout UPI Modal & Settlement State
   const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [showGatePassModal, setShowGatePassModal] = useState(false);
   const [payoutModalStage, setPayoutModalStage] = useState<'DEPOSIT' | 'SETTLEMENT'>('SETTLEMENT');
   const [isRecipientSettingsOnly, setIsRecipientSettingsOnly] = useState(false);
   const [tenantVpa, setTenantVpa] = useState('tenant.aarav@okhdfcbank');
@@ -158,8 +160,8 @@ export const LandlordVerify: React.FC = () => {
   const items = tenancy.items || [];
   const isApproved = tenancy.status === 'APPROVED';
   const isRevisionRequested = tenancy.status === 'REVISION_REQUESTED';
-  const isMoveOutCompleted = items.length > 0 && items.every((i) => Boolean(i.moveOutPhotoUrl || i.aiVerdict));
-  const hasMoveOut = items.some((i) => Boolean(i.moveOutPhotoUrl || i.aiVerdict));
+  const isMoveOutCompleted = items.length > 0 && items.every((i) => Boolean(i.moveOutPhotoUrl && i.aiVerdict));
+  const hasMoveOut = items.some((i) => Boolean(i.moveOutPhotoUrl && i.aiVerdict));
   const isVacated = isMoveOutCompleted || tenancy.status === 'COMPLETED' || tenancy.status === 'VACATED' || tenancy.status === 'SETTLED' || isSettled;
 
   const totalDeposit = Number(tenancy.depositAmount || 0);
@@ -250,9 +252,18 @@ export const LandlordVerify: React.FC = () => {
             </div>
           </div>
           {isSettled ? (
-            <div className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-bold">
-              <Check className="w-4 h-4 text-emerald-400" />
-              <span>🎉 Refund Settled • Property Free for Next Tenant</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-bold">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>🎉 Refund Settled • Property Free for Next Tenant</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGatePassModal(true)}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-semibold transition"
+              >
+                <span>🛂 Society Gate Pass & NOC</span>
+              </button>
             </div>
           ) : (
             <button
@@ -305,6 +316,15 @@ export const LandlordVerify: React.FC = () => {
           <div className={`p-2 rounded-lg border ${isStep6Done ? 'bg-slate-950 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/40 border-slate-800 text-slate-600'}`}>
             <span className="block font-bold">06 Archive</span>
             <span>{isStep6Done ? '✓ Court Sealed' : 'Pending'}</span>
+            {isStep6Done && (
+              <button
+                type="button"
+                onClick={() => setShowGatePassModal(true)}
+                className="mt-1 block text-[9px] text-emerald-400 hover:underline font-bold"
+              >
+                🛂 Gate Pass NOC
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -724,6 +744,15 @@ export const LandlordVerify: React.FC = () => {
             setTenancy(updated);
             setIsSettled(true);
           }}
+        />
+      )}
+
+      {/* Society Gate Pass & No-Dues NOC Modal */}
+      {showGatePassModal && (
+        <SocietyGatePassModal
+          isOpen={showGatePassModal}
+          onClose={() => setShowGatePassModal(false)}
+          tenancy={tenancy}
         />
       )}
     </div>

@@ -114,12 +114,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const defaultLandlordUpi = tenancy.landlordUpi || 'ramesh.malik@okhdfcbank';
   const initialVpa = isLandlordPaying ? defaultTenantUpi : defaultLandlordUpi;
 
+  // Separate Owner vs Guest QR code storage to prevent collision
+  const initialQrImage = isLandlordPaying
+    ? tenancy.tenantQrUrl || null
+    : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
+
   const [vpa, setVpa] = useState<string>(initialVpa);
   const [activeTab, setActiveTab] = useState<'AUTO_QR' | 'CUSTOM_QR'>(
     isRecipientSettingsOnly ? 'CUSTOM_QR' : 'AUTO_QR'
   );
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string>('');
-  const [customQrImage, setCustomQrImage] = useState<string | null>(tenancy.customQrUrl || null);
+  const [customQrImage, setCustomQrImage] = useState<string | null>(initialQrImage);
   const [utrInput, setUtrInput] = useState<string>('');
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [loadingRazorpay, setLoadingRazorpay] = useState(false);
@@ -135,9 +140,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       ? tenancy.tenantUpi || defaultTenantUpi
       : tenancy.landlordUpi || defaultLandlordUpi;
     setVpa(freshVpa);
-    if (tenancy.customQrUrl) {
-      setCustomQrImage(tenancy.customQrUrl);
-    }
+    const targetQr = isLandlordPaying
+      ? tenancy.tenantQrUrl || null
+      : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
+    setCustomQrImage(targetQr);
   }, [tenancy, isLandlordPaying]);
 
   // Standard NPCI UPI URI with exact .00 amount
@@ -204,7 +210,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         landlordToken,
         tenantUpi: isLandlordPaying ? vpa.trim() : undefined,
         landlordUpi: !isLandlordPaying ? vpa.trim() : undefined,
-        customQrUrl: customQrImage || undefined,
+        tenantQrUrl: isLandlordPaying ? (customQrImage || undefined) : undefined,
+        landlordQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
+        customQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
       });
       emitSyncEvent('TENANCY_UPDATED', tenancy.id);
       if (onSettled) onSettled(updated);
@@ -264,9 +272,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               razorpaySignature: response.razorpay_signature,
               landlordToken,
               customQrUrl: customQrImage || undefined,
+              tenantQrUrl: isLandlordPaying ? (customQrImage || undefined) : undefined,
+              landlordQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
               tenantUpi: isLandlordPaying ? vpa.trim() : undefined,
               landlordUpi: !isLandlordPaying ? vpa.trim() : undefined,
-            });
+            } as any);
 
             if (typeof window !== 'undefined' && effectiveStage === 'SETTLEMENT') {
               localStorage.setItem(`rentshield_settled_${tenancy.id}`, 'true');
@@ -321,9 +331,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         utrNumber: utrInput.trim(),
         landlordToken,
         customQrUrl: customQrImage || undefined,
+        tenantQrUrl: isLandlordPaying ? (customQrImage || undefined) : undefined,
+        landlordQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
         tenantUpi: isLandlordPaying ? vpa.trim() : undefined,
         landlordUpi: !isLandlordPaying ? vpa.trim() : undefined,
-      });
+      } as any);
 
       if (typeof window !== 'undefined' && effectiveStage === 'SETTLEMENT') {
         localStorage.setItem(`rentshield_settled_${tenancy.id}`, 'true');

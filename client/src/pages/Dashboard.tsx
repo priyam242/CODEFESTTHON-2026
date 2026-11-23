@@ -26,6 +26,7 @@ import {
 import { tenancyApi, Tenancy, authApi, api } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
+import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
 
 export const Dashboard: React.FC = () => {
   const [tenancies, setTenancies] = useState<Tenancy[]>([]);
@@ -35,6 +36,10 @@ export const Dashboard: React.FC = () => {
   const [claiming, setClaiming] = useState(false);
   const [claimMsg, setClaimMsg] = useState<string | null>(null);
   const [resettingDemo, setResettingDemo] = useState(false);
+
+  // Society Move-Out Gate Pass & No-Dues NOC Modal State
+  const [showGatePassModal, setShowGatePassModal] = useState(false);
+  const [gatePassTenancy, setGatePassTenancy] = useState<Tenancy | null>(null);
 
   // Real Phone-Scannable Payment & Settlement Modal State
   const [selectedPaymentTenancy, setSelectedPaymentTenancy] = useState<Tenancy | null>(null);
@@ -418,7 +423,7 @@ export const Dashboard: React.FC = () => {
             const totalDeductions = (tenancy.items || []).reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
             const originalDeposit = Number(tenancy.depositAmount || 0);
             const netRefund = Math.max(0, originalDeposit - totalDeductions);
-            const isVacated = (tenancy.items && tenancy.items.length > 0 && tenancy.items.every((item) => Boolean(item.moveOutPhotoUrl || item.aiVerdict))) || tenancy.status === 'COMPLETED' || tenancy.status === 'VACATED';
+            const isVacated = (tenancy.items && tenancy.items.length > 0 && tenancy.items.every((item) => Boolean(item.moveOutPhotoUrl && item.aiVerdict))) || tenancy.status === 'COMPLETED' || tenancy.status === 'VACATED';
 
             // 6-step progress calculation
             const isStep1Done = hasMoveIn;
@@ -769,10 +774,21 @@ export const Dashboard: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="mt-5 pt-3.5 border-t border-slate-800/80 flex items-center space-x-2">
+                  <div className="mt-5 pt-3.5 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGatePassTenancy(tenancy);
+                        setShowGatePassModal(true);
+                      }}
+                      className="w-full py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/35 text-xs font-bold font-mono transition text-center flex items-center justify-center space-x-1.5 shadow-sm"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>🛂 View / Print Society Gate Pass &amp; NOC</span>
+                    </button>
                     <Link
                       to={`/verify?id=${tenancy.id}`}
-                      className="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-semibold font-mono transition text-center flex items-center justify-center space-x-1 shadow-sm"
+                      className="flex-1 py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-semibold font-mono transition text-center flex items-center justify-center space-x-1 shadow-sm"
                     >
                       <FileCheck className="w-3.5 h-3.5" />
                       <span>Court Certificate</span>
@@ -805,6 +821,18 @@ export const Dashboard: React.FC = () => {
             setSettledMap((prev) => ({ ...prev, [updated.id]: true }));
             setSelectedPaymentTenancy(null);
           }}
+        />
+      )}
+
+      {/* Society Move-Out Gate Pass & No-Dues NOC Modal */}
+      {showGatePassModal && gatePassTenancy && (
+        <SocietyGatePassModal
+          isOpen={showGatePassModal}
+          onClose={() => {
+            setShowGatePassModal(false);
+            setGatePassTenancy(null);
+          }}
+          tenancy={gatePassTenancy}
         />
       )}
     </div>

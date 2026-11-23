@@ -1,52 +1,56 @@
 ================================================================================
-RENTSHIELD STRICT 6-STEP ESCROW PROTOCOL & ROLE-AWARE QR ENGINE VERIFICATION
+RENTSHIELD REAL-WORLD RENTAL LOGIC HARDENING & SOCIETY GATE PASS NOC AUDIT
 ================================================================================
-Timestamp: 2026-11-23T21:18:00+05:30
+Timestamp: 2026-11-24T00:34:00+05:30
 Repository: https://github.com/priyam242/CODEFESTTHON-2026.git
 Branch: main
 
-1. STRICT 6-STEP SEQUENTIAL PROTOCOL TRACKER (0/6 -> 6/6 Sealed)
-- Upgraded the 4-step rail in client/src/pages/TenancyDetail.tsx and client/src/pages/LandlordVerify.tsx:
-  * 01 MOVE-IN EVIDENCE: Tenant uploads baseline room photos with local Web Crypto SHA-256 signatures. Status: '✓ X Logged' or 'Action Required'.
-  * 02 OWNER REVIEW & QR SETUP: Landlord reviews baseline photos, verifies SHA-256 signatures, and confirms payout QR. Status: '✓ Sealed' once locked/approved.
-  * 03 SECURITY DEPOSIT PAYMENT (Guest -> Owner): Guest scans Owner's payment QR code (or pays via Razorpay escrow SDK) for depositAmount. Landlord sees '⚙️ Set/Upload My Deposit QR'; Tenant sees prominent '💳 Pay Security Deposit to Owner'. Status: '✓ Deposit Paid' only when depositPaid === true.
-  * 04 MOVE-OUT AUDIT & GUEST REFUND QR:
-    - Strict Gate Lock: If depositPaid !== true, Step 04 and ALL room item 'Upload Move-Out Photo / Run AI Audit' buttons are locked and disabled with warning banner: '🔒 Complete Step 03 (Pay Security Deposit to Owner) to unlock Move-Out Audit'.
-    - Integrated Refund QR Setup: When unlocked, Tenant can set receiving UPI ID and upload custom QR image directly inside the Move-Out modal and in the step tracker.
-    - Status: '✓ Audited' once all fixtures have Move-Out photos & Gemini AI verdicts.
-  * 05 FINAL REFUND SETTLEMENT (Owner -> Guest):
-    - Normal refund (totalDeductions <= depositAmount): Landlord scans Guest's Refund QR with '💸 Scan Guest QR / Pay Net Refund (₹X,XXX)', while Tenant sees '⏳ Awaiting Owner Refund (Your QR Ready)'.
-    - Excess liability (totalDeductions > depositAmount): Direction flips so Tenant pays Owner.
-    - Status: '✓ Settled' once tenancy status is 'SETTLED'.
-  * 06 COURT CERTIFICATE & ARCHIVE:
-    - Status: '✓ Archived & Sealed' when settled; 'Pending Settlement' during active lease.
-    - 'Open Public Verifier' link available at all times.
+1. SEPARATE OWNER vs GUEST QR STORAGE (FIX SINGLE customQrUrl COLLISION BUG)
+- Database & Backend (server/prisma/schema.prisma & server/src/payments):
+  * Added optional fields `landlordQrUrl String?` and `tenantQrUrl String?` to `Tenancy` model while preserving legacy `customQrUrl`.
+  * Updated `PrismaService.ensureSchema` with self-healing migration:
+    `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "landlordQrUrl" TEXT;`
+    `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantQrUrl" TEXT;`
+  * Updated `PaymentsController` and `PaymentsService` to support updating and persisting `landlordQrUrl` and `tenantQrUrl` independently.
+- Frontend Payment Engine (client/src/components/PaymentModal.tsx & client/src/api.ts):
+  * Step 02 / 03 (Security Deposit: Guest -> Owner): Strictly uses and persists `landlordUpi` + `landlordQrUrl`.
+  * Step 04 / 05 (Escrow Refund: Owner -> Guest): Strictly uses and persists `tenantUpi` + `tenantQrUrl`.
+  * Eliminates cross-party QR collisions: Owner's Deposit QR never bleeds into or overrides Guest's Refund QR.
 
-2. ROLE-AWARE CONTROLS (client/src/pages/TenancyDetail.tsx & Dashboard.tsx)
-- Rigorous Landlord identification:
-  user.role === 'LANDLORD' || user.email.toLowerCase() === tenancy.landlordEmail.toLowerCase().
-- Role segregation:
-  * Landlords never see tenant actions ('Upload Room Item', 'Pay Security Deposit', 'Upload Move-Out').
-  * Landlords see Owner actions ('Lock & Approve Move-In', '⚙️ Set/Upload Owner Deposit QR', '💸 Scan Guest QR / Pay Net Refund').
-  * Tenants see Guest actions ('Upload Room Item', '💳 Pay Security Deposit to Owner', '⚙️ Set My Refund QR').
-  * Dashboard cards display dynamic '{completedCount}/6 Sealed' badges and role-specific payment actions.
+2. REVISION LOOP & ALL-ITEMS MOVE-OUT FRAUD GUARD
+- Revision Flow (client/src/pages/TenancyDetail.tsx):
+  * When Landlord requests revision (`status === 'REVISION_REQUESTED'`), Tenant sees an interactive amber alert banner displaying Landlord's `revisionNotes` with a direct button `"🔄 Re-Submit Fixed Inventory to Owner"`.
+  * Baseline room fixture uploads are kept open during `PENDING` and `REVISION_REQUESTED`, locking only upon `APPROVED`, `LOCKED`, or `SETTLED`.
+- Move-Out Fraud Guard (client/src/pages/TenancyDetail.tsx, LandlordVerify.tsx & Dashboard.tsx):
+  * Enforces strict `auditedItemsCount === items.length` checking both `Boolean(i.moveOutPhotoUrl && i.aiVerdict)`.
+  * Live status tracker displays `${auditedItemsCount}/${items.length} Rooms Audited`.
+  * Step 05 Final Refund Settlement unlocks only when all fixtures are 100% inspected and verified by Gemini AI.
 
-3. PHONE-SCANNABLE QR CLARITY (client/src/components/PaymentModal.tsx)
-- Explicit visual badges and subtitles over the QR matrix:
-  * Deposit Stage: "Owner's Security Deposit Receiving QR" + "Guest: Scan to pay ₹X,XXX to Owner".
-  * Settlement Stage: "Tenant's Escrow Refund Receiving QR" + "Owner: Scan with UPI to refund ₹X,XXX to Tenant".
-  * Display payee VPA directly under QR code alongside standard NPCI URI copy button.
+3. SOCIETY MOVE-OUT GATE PASS & NO-DUES NOC (STEP 06 & SETTLED CARDS)
+- Printable Modal (client/src/components/SocietyGatePassModal.tsx):
+  * Official printable certificate compliant with Model Tenancy Act (MTA 2021 Section 13/19).
+  * Features emerald `"✅ CLEARED FOR SOCIETY EXIT • ZERO DUES PENDING"` stamp, Society name & address, Tenant & Landlord names, Agreement Ref, Security Deposit & Settlement UTR IDs, and Settled timestamp.
+  * Real phone-scannable QR matrix generated via `qrcode` encoding the permanent public verification URL (`/verify?id=${tenancy.id}`).
+  * Print-optimized layout with `@media print` rules for clean single-page printing.
+- Accessibility:
+  * Available via `"🛂 Society Gate Pass & NOC"` button in Step 06 on both Tenant (`TenancyDetail.tsx`) and Landlord (`LandlordVerify.tsx`) views.
+  * Prominent `"🛂 View / Print Society Gate Pass & NOC"` button embedded directly in every Settled History card on `Dashboard.tsx`.
 
-4. SEED COMPATIBILITY
-- demo-tenancy-indiranagar-001 seeded with depositPaid: true and status: 'APPROVED' in PostgreSQL.
-- Demo tenancy starts at Step 03 sealed (3/6 Sealed), allowing 1-click judge demo of Move-Out (Step 04) and Settlement (Step 05).
-- Newly created tenancies start with depositPaid: false, enforcing the full 01 -> 06 sequential flow.
+4. DUAL-TENANCY 1-CLICK JUDGE DEMO SEED
+- Seed Configuration (server/src/prisma/prisma.service.ts):
+  * Active Tenancy (`demo-tenancy-indiranagar-001`):
+    - Status: `APPROVED`, `depositPaid: true`, `depositPaymentId: 'pay_RS_DEMO_882910'`, Steps 01-03 sealed (3/6 Sealed).
+    - Positioned at Step 04 for immediate 1-click Judge testing of Move-Out photo upload and Gemini AI inspection.
+  * Settled Past Tenancy (`koramangala-settled-002`):
+    - Status: `SETTLED`, `depositPaymentId: 'pay_RS_DEMO_882910'`, `settlementPaymentId: 'pay_RS_REFUND_994102'`, `settledAt: 2026-11-20T14:30:00Z`.
+    - 2 audited room fixtures with SHA-256 hashes and Gemini AI verdicts.
+    - Chronologically sorted into Settled History stack with active `"🛂 View / Print Society Gate Pass & NOC"` access.
 
-5. VERIFICATION & QUALITY AUDIT
-- Prisma Generate: Passed (v6.19.3)
-- Server Build: nest build passed with 0 errors
-- Client Build: vite v6.4.6 transformed 1,704 modules, 0 TypeScript errors, 0 lint errors
-- Root Monorepo: pnpm build passed with exit code 0
+5. BUILD & COMPILATION VERIFICATION
+- Prisma Client: Generated v6.19.3 in 84ms.
+- Backend (`rentshield-server`): `nest build` passed with 0 errors.
+- Frontend (`rentshield-client`): `vite build` passed with 0 errors (1,705 modules transformed).
+- Monorepo: `pnpm build` exited with code 0.
 
 Verified by Antigravity Autonomous Agent.
 ================================================================================

@@ -128,6 +128,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "revisionNotes" TEXT;
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMP(3);
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "customQrUrl" TEXT;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "landlordQrUrl" TEXT;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantQrUrl" TEXT;
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantUpi" TEXT;
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaid" BOOLEAN DEFAULT false;
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaymentId" TEXT;
@@ -231,7 +233,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             landlordToken: 'demo-magic-token-2026',
             status: 'APPROVED',
             depositPaid: true,
-            depositPaymentId: 'pay_demo_escrow_deposit_001',
+            depositPaymentId: 'pay_RS_DEMO_882910',
             moveInHash: '58a9db3bdc324855635e803e45982f1603afd532eeb6dfa4f92a73332df269fe',
             estimatedRefund: 50000,
             userId: tenant.id,
@@ -279,7 +281,93 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           },
         });
       }
-      this.logger.log('🎯 RentShield demo seed data verified (2BHK Indiranagar, ₹50,000 Deposit)');
+
+      // 4. Seed Completed Past Tenancy (3BHK Garden Villa, Koramangala - Settled with NOC)
+      const settledTenancyId = 'koramangala-settled-002';
+      const existingSettled = await this.tenancyClient.findUnique({ where: { id: settledTenancyId } });
+
+      if (!existingSettled || force) {
+        if (this.isConnected && !force) {
+          try {
+            const ic = (this as any).item || (this as any).Item;
+            const tc = (this as any).tenancy || (this as any).Tenancy;
+            if (ic?.deleteMany) await ic.deleteMany({ where: { tenancyId: settledTenancyId } });
+            if (tc?.deleteMany) await tc.deleteMany({ where: { id: settledTenancyId } });
+          } catch {}
+        } else if (!force) {
+          this.memoryTenancies.delete(settledTenancyId);
+          for (const [k, v] of this.memoryItems.entries()) {
+            if (v.tenancyId === settledTenancyId) this.memoryItems.delete(k);
+          }
+        }
+
+        const settledTenancy = await this.tenancyClient.create({
+          data: {
+            id: settledTenancyId,
+            propertyTitle: '3BHK Garden Villa - Koramangala, Bangalore',
+            propertyAddress: '#18, 4th Block, 80 Feet Road, Koramangala, Bengaluru, KA 560034',
+            depositAmount: 75000,
+            depositAmountDecimal: 75000,
+            landlordName: 'Ramesh Malik',
+            landlordPhone: '+91 98765 43210',
+            landlordEmail: landlordEmail,
+            landlordUpi: 'ramesh.malik@okhdfcbank',
+            tenantUpi: 'aarav.sharma@okaxis',
+            agreementRef: 'BLR-KOR-2025-KA-9914',
+            signerAudit: JSON.stringify({
+              signerEmail: landlordEmail,
+              signerIp: '103.212.154.42 (Bangalore, KA)',
+              signedAt: '2025-04-10T11:00:00.000Z',
+              ownerConfirmed: true,
+              agreementRef: 'BLR-KOR-2025-KA-9914',
+            }),
+            landlordToken: 'demo-magic-token-koramangala-settled',
+            status: 'SETTLED',
+            depositPaid: true,
+            depositPaymentId: 'pay_RS_DEMO_882910',
+            settlementPaymentId: 'pay_RS_REFUND_994102',
+            settledAt: new Date('2026-10-15T14:30:00.000Z'),
+            moveInHash: '7a13bc54df65a782b12389fedc1432109845baef43210987654321abcdef0123',
+            estimatedRefund: 71500,
+            userId: tenant.id,
+          },
+        });
+
+        await this.itemClient.create({
+          data: {
+            id: 'item-settled-001',
+            roomName: 'Living Room',
+            itemName: 'Italian Marble Flooring',
+            moveInNotes: 'High-gloss Italian marble without chips or stains on move-in.',
+            moveInPhotoUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80',
+            moveInPhotoHash: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
+            moveOutPhotoUrl: 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=800&auto=format&fit=crop&q=80',
+            moveOutPhotoHash: 'b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3',
+            aiVerdict: 'NORMAL_WEAR_TEAR',
+            aiExplanation: 'Minor footwear scuffs consistent with standard residential use under Section 13 Model Tenancy Act 2021. Full deposit protected.',
+            suggestedCut: 0,
+            tenancyId: settledTenancy.id,
+          },
+        });
+
+        await this.itemClient.create({
+          data: {
+            id: 'item-settled-002',
+            roomName: 'Master Balcony',
+            itemName: 'Toughened Glass Balustrade',
+            moveInNotes: 'Seamless glass panels with stainless steel spigots.',
+            moveInPhotoUrl: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&auto=format&fit=crop&q=80',
+            moveInPhotoHash: 'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4',
+            moveOutPhotoUrl: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=800&auto=format&fit=crop&q=80',
+            moveOutPhotoHash: 'd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5',
+            aiVerdict: 'DAMAGE_DETECTED',
+            aiExplanation: 'Impact chip near bottom right mounting clamp detected on exit inspection. Local Bangalore glazier replacement quotation applied.',
+            suggestedCut: 3500,
+            tenancyId: settledTenancy.id,
+          },
+        });
+      }
+      this.logger.log('🎯 RentShield demo seed data verified (1 Active 2BHK Indiranagar + 1 Settled 3BHK Koramangala)');
     } catch (err: any) {
       this.logger.warn(`Could not seed demo data: ${err?.message}`);
     }
