@@ -78,6 +78,9 @@ export interface User {
   email: string;
   name: string;
   role: string;
+  avatarUrl?: string | null;
+  address?: string | null;
+  upiId?: string | null;
 }
 
 export interface Item {
@@ -174,6 +177,34 @@ export const authApi = {
   getCurrentUser: (): User | null => {
     const raw = sessionStorage.getItem('rentshield_user');
     return raw ? JSON.parse(raw) : null;
+  },
+  getMe: async (): Promise<User> => {
+    const res = await api.get<User>('/auth/me');
+    sessionStorage.setItem('rentshield_user', JSON.stringify(res.data));
+    return res.data;
+  },
+  updateProfile: async (data: {
+    name?: string;
+    email?: string;
+    address?: string;
+    avatarUrl?: string;
+    upiId?: string;
+    currentPassword?: string;
+    newPassword?: string;
+  }): Promise<{ user: User; access_token: string; message: string }> => {
+    const res = await api.patch<{ user: User; access_token: string; message: string }>('/auth/profile', data);
+    if (res.data.access_token) {
+      sessionStorage.setItem('rentshield_token', res.data.access_token);
+    }
+    if (res.data.user) {
+      sessionStorage.setItem('rentshield_user', JSON.stringify(res.data.user));
+    }
+    return res.data;
+  },
+  deleteAccount: async (): Promise<{ success: boolean; message: string }> => {
+    const res = await api.delete<{ success: boolean; message: string }>('/auth/account');
+    authApi.logout();
+    return res.data;
   },
 };
 

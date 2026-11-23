@@ -482,4 +482,130 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     const shaSection = page.locator('text=Cryptographic Seal Signature (SHA-256):').first();
     await expect(shaSection).toBeVisible();
   });
+
+  // --------------------------------------------------------------------------
+  // Scenario 11: User Profile Modal Portal & Responsiveness (1280x720 & 375x667)
+  // --------------------------------------------------------------------------
+  test('11. User Profile Modal renders in Portal, non-clipped on 1280x720 & 375x667, with no stuck dots', async ({ page }) => {
+    // 1. Desktop Viewport (1280x720)
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/login');
+    await page.keyboard.press('Escape');
+    await page.locator('button:has-text("Demo as Tenant")').click();
+    await page.waitForURL('/');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+
+    // Click User Pill in Navbar
+    const userPill = page.locator('button[title*="Open Profile"]').first();
+    await expect(userPill).toBeVisible();
+    await userPill.click();
+
+    // Verify modal is rendered via Portal as direct child of body
+    const modalBackdrop = page.locator('div[role="dialog"]').first();
+    await expect(modalBackdrop).toBeVisible();
+
+    // Verify modal panel bounding box is NOT clipped off top (y >= 0)
+    const modalBox = await modalBackdrop.locator('div.relative.w-full').first().boundingBox();
+    expect(modalBox).not.toBeNull();
+    if (modalBox) {
+      expect(modalBox.y).toBeGreaterThanOrEqual(0);
+      expect(modalBox.height).toBeLessThanOrEqual(720);
+    }
+
+    // Assert live stats do NOT display stuck '...' inside Activity & Vault tab
+    const statsTab = modalBackdrop.locator('button:has-text("Activity")').first();
+    await statsTab.click();
+    const activeStat = modalBackdrop.locator('text=Active Escrows').locator('..').locator('.text-2xl').first();
+    await expect(activeStat).toBeVisible();
+    const statText = await activeStat.textContent();
+    expect(statText).not.toBe('...');
+
+    // Test Security Tab & Password Eye Toggles
+    const securityTab = modalBackdrop.locator('button:has-text("Security")').first();
+    await securityTab.click();
+    const newPwdInput = modalBackdrop.locator('input[placeholder*="Min 6 characters"]').first();
+    await expect(newPwdInput).toBeVisible();
+    expect(await newPwdInput.getAttribute('type')).toBe('password');
+    // Toggle Eye
+    const eyeBtn = modalBackdrop.locator('button[title*="password"]').last();
+    await eyeBtn.click();
+    expect(await newPwdInput.getAttribute('type')).toBe('text');
+
+    // Test Danger Zone & Demo Protection
+    const dangerTab = modalBackdrop.locator('button:has-text("Danger Zone")').first();
+    await dangerTab.click();
+    const demoWarning = modalBackdrop.locator('text=Demo Account Protected').first();
+    await expect(demoWarning).toBeVisible();
+
+    // Close Modal via Escape or close button
+    await modalBackdrop.locator('button[title*="Close"]').first().click();
+    await expect(modalBackdrop).not.toBeVisible();
+
+    // 2. Mobile Viewport (375x667)
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.waitForTimeout(200);
+
+    // Reopen profile modal
+    await userPill.click();
+    await expect(modalBackdrop).toBeVisible();
+
+    const mobileModalBox = await modalBackdrop.locator('div.relative.w-full').first().boundingBox();
+    expect(mobileModalBox).not.toBeNull();
+    if (mobileModalBox) {
+      expect(mobileModalBox.y).toBeGreaterThanOrEqual(0);
+      expect(mobileModalBox.width).toBeLessThanOrEqual(375);
+    }
+
+    // Close Modal
+    await modalBackdrop.locator('button[title*="Close"]').first().click();
+    await expect(modalBackdrop).not.toBeVisible();
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 12: Backend Profile & Account Protection API Verification
+  // --------------------------------------------------------------------------
+  test('12. Backend Profile Endpoints: GET /api/auth/me, PATCH /profile, & DELETE demo protection', async ({ request }) => {
+    // 1. Login as Tenant to get token
+    const loginRes = await request.post('http://localhost:4000/api/auth/login', {
+      data: {
+        email: 'tenant.demo@rentshield.com',
+        password: 'password123',
+      },
+    });
+    expect(loginRes.ok()).toBeTruthy();
+    const loginData = await loginRes.json();
+    const token = loginData.access_token || loginData.token;
+    expect(token).toBeDefined();
+
+    // 2. GET /api/auth/me
+    const meRes = await request.get('http://localhost:4000/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(meRes.ok()).toBeTruthy();
+    const meData = await meRes.json();
+    expect(meData.email).toBe('tenant.demo@rentshield.com');
+    expect(meData.role).toBe('TENANT');
+
+    // 3. PATCH /api/auth/profile
+    const updateRes = await request.patch('http://localhost:4000/api/auth/profile', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        address: '100 Feet Rd, Indiranagar, Bengaluru',
+        upiId: 'tenant.demo@okhdfcbank',
+      },
+    });
+    expect(updateRes.ok()).toBeTruthy();
+    const updateData = await updateRes.json();
+    expect(updateData.user.address).toBe('100 Feet Rd, Indiranagar, Bengaluru');
+    expect(updateData.user.upiId).toBe('tenant.demo@okhdfcbank');
+
+    // 4. DELETE /api/auth/account (Must return 403 Forbidden for demo account)
+    const deleteRes = await request.delete('http://localhost:4000/api/auth/account', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(deleteRes.status()).toBe(403);
+    const deleteData = await deleteRes.json();
+    expect(deleteData.message).toContain('Judge Demo accounts are protected from deletion');
+  });
 });

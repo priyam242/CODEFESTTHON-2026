@@ -1,77 +1,90 @@
 ================================================================================
-RENTSHIELD 10-SCENARIO COMPREHENSIVE E2E VERIFICATION AUDIT
+RENTSHIELD 12-SCENARIO COMPREHENSIVE E2E VERIFICATION AUDIT
 ================================================================================
-Timestamp: 2026-11-24T01:26:00+05:30
+Timestamp: 2026-11-24T01:48:30+05:30
 Repository: https://github.com/priyam242/CODEFESTTHON-2026.git
 Branch: main
 Playwright Spec: client/e2e/rentshield-full-suite.spec.ts
 
-ALL 10 CRITICAL REAL-WORLD ESCROW SCENARIOS PASSED (10/10 PASS - 100%)
+ALL 12 CRITICAL REAL-WORLD ESCROW SCENARIOS PASSED (12/12 PASS - 100%)
 
 --------------------------------------------------------------------------------
 TEST RESULTS SUMMARY:
 --------------------------------------------------------------------------------
-✓ 01. IntroSplash renders & top-header "Sign In" button is interactive (4.6s)
+✓ 01. IntroSplash renders & top-header "Sign In" button is interactive (3.2s)
   - Asserted IntroSplash cyber-escrow logo and wordmark on SPA load.
   - Asserted header "Sign In" button is interactive and focuses email input smoothly on /login.
   - Verified navigation from /verify back to /login with zero click interception.
 
-✓ 02. 1-Click Judge Demo Accounts & Pre-Seeded History Stack with NOC (4.6s)
+✓ 02. 1-Click Judge Demo Accounts & Pre-Seeded History Stack with NOC (4.9s)
   - Demo as Tenant auto-login: active tenancy (Indiranagar) loads with 0 errors.
   - Settled History Stack: Koramangala settled card renders with "Society Gate Pass & NOC".
   - Gate Pass NOC Modal: verified statutory Model Tenancy Act 2021 exit clearance and QR.
   - Demo as Landlord auto-login: verified role badge and linked properties.
 
-✓ 03. Fresh Tenancy Creation & Anti-Collusion Anchor (4.2s)
+✓ 03. Fresh Tenancy Creation & Anti-Collusion Anchor (3.3s)
   - Tenant registration with fresh credentials.
   - Creation form: filled property title, address, deposit (₹25,000), landlord contact,
     receiving UPI VPA (anand.singhania@okhdfcbank), and agreement ref (BLR-IND-2026-KA-9912).
   - Protocol Progress tracker initializes at "0/6 Sealed", Step 03 marked Action Required.
 
-✓ 04. Step 01 & Step 02 — Move-In SHA-256 Upload, Revision Loop & Owner Lock (7.8s)
+✓ 04. Step 01 & Step 02 — Move-In SHA-256 Upload, Revision Loop & Owner Lock (6.7s)
   - Step 01: uploaded baseline room fixture (Italian Leather Recliner) with WebCrypto SHA-256 hash.
   - Step 04 (Move-Out Audit) verified strictly locked because deposit is unpaid.
   - Landlord magic link: extracted review URL and verified landlord portal access.
   - Revision Loop: landlord flagged missing angle; verified "Revision Requested" banner on tenant side.
   - Anti-collusion identity confirmation checkbox checked and baseline approved & sealed.
 
-✓ 05. Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner) (4.0s)
+✓ 05. Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner) (3.6s)
   - Payment Modal: verified Stage 1 deposit escrow modal with Owner's receiving VPA.
   - Real Phone-Scannable UPI QR verified generated as valid base64 PNG data URI.
   - Settled payment via simulated bank UTR (UTR_TEST_DEPOSIT_99812).
   - Step 03 marked "Deposit Escrow Locked", unlocking Step 04 Move-Out condition audit.
 
-✓ 06. Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit (6.3s)
+✓ 06. Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit (5.2s)
   - Anti-Fraud: uploaded identical byte-hash image as Move-In baseline.
   - Verified "ANTI-FRAUD TRIGGERED" alert and verified submit button is disabled.
   - Activated Judge Demonstration Bypass; configured tenant refund UPI.
   - Gemini AI arbitration executed: normal wear-and-tear assessed under MTA Sec 13.
   - Marked property vacated and AI audited.
 
-✓ 07. Step 05 — Stage 2 Final Refund Settlement with QR Isolation (2.7s)
-  - Landlord portal: "PROPERTY VACATED • FREE FOR NEXT TENANT" banner rendered.
-  - Pay Net Refund modal opened in Stage 2 settlement mode.
-  - Verified QR isolation: displays Tenant's receiving UPI/QR without landlord collision.
-  - Verified settlement via UTR confirmation -> "Refund Settled • Property Free for Next Tenant".
+✓ 07. Step 05 — Stage 2 Final Refund Settlement with QR Isolation (2.1s)
+  - Landlord opens Step 05 Refund Modal.
+  - Verified Guest's Refund UPI QR is displayed (strictly isolated; zero landlord QR collision).
+  - Settled net refund (₹24,000) with UTR_REFUND_SETTLE_11204.
+  - Tenancy status transitioned to SETTLED.
 
-✓ 08. Step 06 — Auto-Clear Active Workspace & Settled History Stack (3.0s)
-  - Verified tenancy automatically moved from active workspace to Settled History stack.
-  - Opened Society Gate Pass & No-Dues NOC certificate.
-  - Verified Model Tenancy Act statutory exit clearance stamp and guard-scannable QR.
+✓ 08. Step 06 — Auto-Clear Active Workspace & Settled History Stack (2.7s)
+  - Active workspace automatically cleared; settled property archived into history stack.
+  - Opened certified Society Gate Pass & No-Dues NOC.
+  - Asserted MTA 2021 statutory seal and phone-scannable gate clearance QR.
 
-✓ 09. Role-Guard Check on /tenancy/:id prevents Landlord tenant actions (2.1s)
-  - Verified logged-in Landlord cannot upload tenant room items or pay tenant deposits.
+✓ 09. Role-Guard Check on /tenancy/:id prevents Landlord tenant actions (1.8s)
+  - Landlord verified strictly prohibited from uploading tenant room items or paying deposit.
 
-✓ 10. Zero-Server Public Courtroom Verifier (/verify) (1.7s)
-  - Loaded public ledger certificate.
-  - Verified "Authentic Ledger Record" and WebCrypto SHA-256 baseline signature banner.
+✓ 10. Zero-Server Public Courtroom Verifier (/verify) (1.5s)
+  - Loaded sample offline certificate.
+  - Authenticated SHA-256 root cryptographic proof in zero-trust browser execution.
+
+✓ 11. User Profile Modal renders in Portal, non-clipped on 1280x720 & 375x667, with no stuck dots (3.3s)
+  - Modal rendered via ReactDOM.createPortal(..., document.body) escaping <nav> backdrop-filter containing block.
+  - Verified on 1280x720 (Laptop/Desktop): bounding box y >= 0 (no top clipping), fits within viewport.
+  - Verified live account summary statistics render real numbers immediately without stuck "..." dots.
+  - Tested Security Tab: password eye toggles switch input type between password and text.
+  - Tested Danger Zone: displays "Demo Account Protected" banner for demo accounts.
+  - Verified on 375x667 (Mobile): modal panel width <= 375px, bounding box y >= 0, fully accessible.
+  - Verified clean modal closure with no leftover backdrop.
+
+✓ 12. Backend Profile Endpoints: GET /api/auth/me, PATCH /profile, & DELETE demo protection (1.4s)
+  - GET /api/auth/me returns latest authenticated user profile with avatarUrl, address, upiId.
+  - PATCH /api/auth/profile updates profile fields (address, default receiving upiId) and issues updated JWT.
+  - DELETE /api/auth/account enforces DEMO PROTECTION (returns 403 Forbidden with "Judge Demo accounts are protected from deletion").
 
 --------------------------------------------------------------------------------
-PRODUCTION BUILD VERIFICATION:
+VERIFICATION GATES STATUS:
 --------------------------------------------------------------------------------
-- rentshield-server: Prisma generate & NestJS build passed with 0 errors.
-- rentshield-client: TypeScript check & Vite build passed with 0 errors (1,706 modules transformed).
-
-================================================================================
-TOTAL: 10/10 PASSED (57.2s) • ZERO REGRESSIONS • PRODUCTION READY
+- Gate 1 (Backend API & Seed Verification): 100% PASS (NestJS compile & Prisma generate 0 errors)
+- Gate 2 (Frontend Build): 100% PASS (Vite & TypeScript 0 errors, 1706 modules transformed)
+- Gate 3 (Full E2E Playwright Automation): 12/12 PASSED (0 failures, 54.2s runtime)
+- Gate 4 (Git Status & Integrity): Clean, ready for commit & push
 ================================================================================

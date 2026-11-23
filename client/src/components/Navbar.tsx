@@ -7,7 +7,7 @@ import { replayIntroAnimation } from './IntroSplash';
 import { UserProfileModal } from './UserProfileModal';
 
 export const Navbar: React.FC = () => {
-  const user = authApi.getCurrentUser();
+  const [user, setUser] = useState(() => authApi.getCurrentUser());
   const navigate = useNavigate();
   const location = useLocation();
   const [pendingCount, setPendingCount] = useState<number>(0);
@@ -27,6 +27,18 @@ export const Navbar: React.FC = () => {
   });
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  useEffect(() => {
+    setUser(authApi.getCurrentUser());
+    const handleUserUpdated = (e: any) => {
+      if (e.detail) setUser(e.detail);
+      else setUser(authApi.getCurrentUser());
+    };
+    window.addEventListener('rentshield-user-updated', handleUserUpdated);
+    return () => {
+      window.removeEventListener('rentshield-user-updated', handleUserUpdated);
+    };
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -237,9 +249,17 @@ export const Navbar: React.FC = () => {
                 type="button"
                 onClick={() => setShowProfileModal(true)}
                 title="Open Profile & Saved Default UPI Vault"
-                className="flex items-center space-x-2 text-xs text-slate-300 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/40 px-3 py-1.5 rounded-xl transition cursor-pointer relative z-50 group"
+                className="flex items-center space-x-2 text-xs text-slate-300 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/40 pl-2 pr-3 py-1.5 rounded-xl transition cursor-pointer relative z-50 group"
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name || 'User'}
+                    className="w-5 h-5 rounded-full object-cover ring-1 ring-emerald-400 flex-shrink-0"
+                  />
+                ) : (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0"></span>
+                )}
                 <span className="font-medium text-slate-200 max-w-[130px] truncate group-hover:text-emerald-300 transition">
                   {user.name || user.email}
                 </span>
@@ -267,6 +287,7 @@ export const Navbar: React.FC = () => {
           isOpen={showProfileModal}
           onClose={() => setShowProfileModal(false)}
           onLogout={handleLogout}
+          onUserUpdated={(u) => setUser(u)}
         />
       )}
 

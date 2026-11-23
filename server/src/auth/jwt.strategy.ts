@@ -18,6 +18,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException('User not found or token revoked');
     }
-    return { id: user.id, email: user.email, role: user.role, name: user.name };
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      avatarUrl: user.avatarUrl || null,
+      address: user.address || null,
+      upiId: user.upiId || null,
+    };
   }
 }

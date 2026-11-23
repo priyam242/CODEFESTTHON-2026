@@ -13,6 +13,9 @@ model User {
   password  String
   name      String   @default("")
   role      String   @default("TENANT")
+  avatarUrl String?
+  address   String?
+  upiId     String?
   tenancies Tenancy[]
   createdAt DateTime @default(now())
 }

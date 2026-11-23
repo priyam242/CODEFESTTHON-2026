@@ -124,6 +124,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
       // Ensure anti-fraud and audit columns exist in existing PostgreSQL databases
       const alterQueries = [
+        `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "avatarUrl" TEXT;`,
+        `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "address" TEXT;`,
+        `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "upiId" TEXT;`,
         `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "landlordUpi" TEXT;`,
         `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "agreementRef" TEXT;`,
         `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "signerAudit" TEXT;`,
@@ -401,6 +404,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           password: data.password,
           name: data.name || '',
           role: data.role || 'TENANT',
+          avatarUrl: data.avatarUrl || null,
+          address: data.address || null,
+          upiId: data.upiId || null,
           createdAt: new Date(),
         };
         this.memoryUsers.set(id, user);
@@ -416,6 +422,35 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         return null;
       },
       findMany: async () => Array.from(this.memoryUsers.values()),
+      update: async ({ where, data }: { where: { id?: string; email?: string }; data: any }) => {
+        let target: any = null;
+        if (where.id) target = this.memoryUsers.get(where.id);
+        else if (where.email) {
+          for (const u of this.memoryUsers.values()) {
+            if (u.email.toLowerCase() === where.email.toLowerCase()) {
+              target = u;
+              break;
+            }
+          }
+        }
+        if (!target) throw new Error('User not found in memory store');
+        Object.assign(target, data);
+        return target;
+      },
+      delete: async ({ where }: { where: { id?: string; email?: string } }) => {
+        let targetId: string | null = null;
+        if (where.id) targetId = where.id;
+        else if (where.email) {
+          for (const [k, u] of this.memoryUsers.entries()) {
+            if (u.email.toLowerCase() === where.email.toLowerCase()) {
+              targetId = k;
+              break;
+            }
+          }
+        }
+        if (targetId) this.memoryUsers.delete(targetId);
+        return { id: targetId };
+      },
     };
   }
 
