@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { tenancyApi, itemsApi, Tenancy, Item, authApi, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
+import { PaymentModal } from '../components/PaymentModal';
 
 export const TenancyDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -458,12 +459,19 @@ export const TenancyDetail: React.FC = () => {
                 <div className="flex items-center space-x-3 mb-2">
                   <span
                     className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
-                      tenancy.status === 'APPROVED'
+                      tenancy.status === 'SETTLED'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                        : tenancy.status === 'APPROVED'
                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                         : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                     }`}
                   >
-                    {tenancy.status === 'APPROVED' ? (
+                    {tenancy.status === 'SETTLED' ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>🎉 Settled &amp; Archived</span>
+                      </>
+                    ) : tenancy.status === 'APPROVED' ? (
                       <>
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         <span>Sealed &amp; Landlord Approved</span>
@@ -1100,159 +1108,16 @@ export const TenancyDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Instant Dynamic UPI Settlement QR Modal */}
+      {/* Real Phone-Scannable UPI Settlement Modal */}
       {showUpiModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-center">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
-              <div className="flex items-center space-x-2 text-emerald-400 font-mono text-xs font-bold uppercase tracking-wider">
-                <QrCode className="w-4 h-4" />
-                <span>Instant Dynamic UPI Settlement (NPCI)</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowUpiModal(false)}
-                className="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded hover:bg-slate-800"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* UPI Brand Header */}
-            <div className="mb-4">
-              <div className="text-2xl font-extrabold text-slate-100 font-mono">
-                ₹{estimatedRefund.toLocaleString('en-IN')}
-              </div>
-              <div className="text-xs text-emerald-400 font-mono font-semibold mt-0.5">
-                Net Escrow Refund Payable to Tenant
-              </div>
-            </div>
-
-            {/* Authentic SVG QR Code Container */}
-            <div className="p-4 rounded-2xl bg-white mx-auto inline-block shadow-xl border-4 border-emerald-500/30 mb-4">
-              <svg
-                width="180"
-                height="180"
-                viewBox="0 0 200 200"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="mx-auto"
-              >
-                <rect width="200" height="200" fill="#FFFFFF" />
-
-                {/* Finder Patterns */}
-                <rect x="16" y="16" width="48" height="48" rx="6" fill="#050811" />
-                <rect x="22" y="22" width="36" height="36" rx="4" fill="#FFFFFF" />
-                <rect x="30" y="30" width="20" height="20" rx="2" fill="#10B981" />
-
-                <rect x="136" y="16" width="48" height="48" rx="6" fill="#050811" />
-                <rect x="142" y="22" width="36" height="36" rx="4" fill="#FFFFFF" />
-                <rect x="150" y="30" width="20" height="20" rx="2" fill="#10B981" />
-
-                <rect x="16" y="136" width="48" height="48" rx="6" fill="#050811" />
-                <rect x="22" y="142" width="36" height="36" rx="4" fill="#FFFFFF" />
-                <rect x="30" y="150" width="20" height="20" rx="2" fill="#10B981" />
-
-                {/* Simulated QR Matrix Bits */}
-                <rect x="74" y="20" width="10" height="10" fill="#050811" />
-                <rect x="90" y="20" width="10" height="10" fill="#050811" />
-                <rect x="110" y="20" width="10" height="10" fill="#050811" />
-                <rect x="74" y="36" width="10" height="10" fill="#050811" />
-                <rect x="100" y="36" width="10" height="10" fill="#050811" />
-                <rect x="84" y="52" width="10" height="10" fill="#050811" />
-                <rect x="110" y="52" width="10" height="10" fill="#050811" />
-
-                <rect x="20" y="74" width="10" height="10" fill="#050811" />
-                <rect x="36" y="74" width="10" height="10" fill="#050811" />
-                <rect x="52" y="74" width="10" height="10" fill="#050811" />
-                <rect x="74" y="74" width="10" height="10" fill="#050811" />
-                <rect x="94" y="74" width="12" height="12" fill="#10B981" />
-                <rect x="116" y="74" width="10" height="10" fill="#050811" />
-                <rect x="136" y="74" width="10" height="10" fill="#050811" />
-                <rect x="156" y="74" width="10" height="10" fill="#050811" />
-                <rect x="172" y="74" width="10" height="10" fill="#050811" />
-
-                <rect x="20" y="90" width="10" height="10" fill="#050811" />
-                <rect x="44" y="90" width="10" height="10" fill="#050811" />
-                <rect x="68" y="90" width="10" height="10" fill="#050811" />
-                <rect x="124" y="90" width="10" height="10" fill="#050811" />
-                <rect x="148" y="90" width="10" height="10" fill="#050811" />
-                <rect x="168" y="90" width="10" height="10" fill="#050811" />
-
-                <rect x="74" y="106" width="10" height="10" fill="#050811" />
-                <rect x="100" y="106" width="10" height="10" fill="#050811" />
-                <rect x="136" y="106" width="10" height="10" fill="#050811" />
-                <rect x="160" y="106" width="10" height="10" fill="#050811" />
-
-                <rect x="20" y="120" width="10" height="10" fill="#050811" />
-                <rect x="52" y="120" width="10" height="10" fill="#050811" />
-                <rect x="84" y="120" width="10" height="10" fill="#050811" />
-                <rect x="110" y="120" width="10" height="10" fill="#050811" />
-                <rect x="144" y="120" width="10" height="10" fill="#050811" />
-                <rect x="170" y="120" width="10" height="10" fill="#050811" />
-
-                <rect x="74" y="136" width="10" height="10" fill="#050811" />
-                <rect x="94" y="136" width="10" height="10" fill="#050811" />
-                <rect x="116" y="136" width="10" height="10" fill="#050811" />
-                <rect x="140" y="136" width="10" height="10" fill="#050811" />
-                <rect x="168" y="136" width="10" height="10" fill="#050811" />
-
-                <rect x="74" y="152" width="10" height="10" fill="#050811" />
-                <rect x="104" y="152" width="10" height="10" fill="#050811" />
-                <rect x="124" y="152" width="10" height="10" fill="#050811" />
-                <rect x="152" y="152" width="10" height="10" fill="#050811" />
-
-                {/* Center Badge */}
-                <circle cx="100" cy="100" r="15" fill="#050811" />
-                <circle cx="100" cy="100" r="13" fill="#10B981" />
-                <text x="100" y="105" fill="#050811" fontSize="12" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
-                  ₹
-                </text>
-              </svg>
-            </div>
-
-            {/* Recipient Details */}
-            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs font-mono text-left space-y-1.5 mb-4">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Payee:</span>
-                <span className="text-slate-200 font-bold">Aarav Sharma (Tenant)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Tenant UPI VPA:</span>
-                <span className="text-emerald-400 font-bold select-all">
-                  {(tenancy as any).tenantUpi || (currentUser?.role === 'TENANT' && currentUser?.email ? currentUser.email.split('@')[0] + '@okaxis' : 'tenant.aarav@okhdfcbank')}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Reference:</span>
-                <span className="text-slate-300">RentShield Escrow Settlement</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const targetVpa = (tenancy as any).tenantUpi || (currentUser?.role === 'TENANT' && currentUser?.email ? currentUser.email.split('@')[0] + '@okaxis' : 'tenant.aarav@okhdfcbank');
-                  const upiUrl = `upi://pay?pa=${encodeURIComponent(targetVpa)}&pn=Aarav+Sharma&am=${estimatedRefund}&cu=INR&tn=RentShield+Escrow+Settlement+Refund`;
-                  navigator.clipboard.writeText(upiUrl);
-                  setCopiedUpi(true);
-                  setTimeout(() => setCopiedUpi(false), 2000);
-                }}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition"
-              >
-                {copiedUpi ? 'Copied UPI URI!' : 'Copy UPI Link'}
-              </button>
-              <a
-                href={`upi://pay?pa=${encodeURIComponent((tenancy as any).tenantUpi || 'tenant.aarav@okhdfcbank')}&pn=Aarav+Sharma&am=${estimatedRefund}&cu=INR&tn=RentShield+Escrow+Settlement+Refund`}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
-              >
-                {isLandlord ? 'Pay in App' : 'Open in UPI App'}
-              </a>
-            </div>
-          </div>
-        </div>
+        <PaymentModal
+          isOpen={true}
+          onClose={() => setShowUpiModal(false)}
+          tenancy={tenancy}
+          currentUserRole={isLandlord ? 'LANDLORD' : 'TENANT'}
+          defaultAmount={estimatedRefund}
+          onSettled={(updated) => setTenancy(updated)}
+        />
       )}
     </div>
   );

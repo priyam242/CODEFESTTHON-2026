@@ -234,6 +234,35 @@ export class TenancyService {
     return this.getPublicCertificate(selected.id);
   }
 
+  async settle(id: string, data?: { customQrUrl?: string; tenantUpi?: string; landlordUpi?: string }) {
+    const tenancy = await this.prisma.tenancyClient.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+    if (!tenancy) {
+      throw new NotFoundException('Tenancy not found');
+    }
+
+    const updatePayload: any = {
+      status: 'SETTLED',
+      settledAt: new Date(),
+    };
+    if (data?.customQrUrl) updatePayload.customQrUrl = data.customQrUrl;
+    if (data?.tenantUpi) updatePayload.tenantUpi = data.tenantUpi;
+    if (data?.landlordUpi) updatePayload.landlordUpi = data.landlordUpi;
+
+    return this.prisma.tenancyClient.update({
+      where: { id },
+      data: updatePayload,
+      include: { items: true },
+    });
+  }
+
+  async settleByToken(token: string, data?: { customQrUrl?: string; tenantUpi?: string; landlordUpi?: string }) {
+    const tenancy = await this.findByLandlordToken(token);
+    return this.settle(tenancy.id, data);
+  }
+
   async clearAllData() {
     return this.prisma.clearAllData();
   }

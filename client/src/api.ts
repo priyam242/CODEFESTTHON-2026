@@ -110,9 +110,12 @@ export interface Tenancy {
   signerAudit?: string | any;
   revisionNotes?: string | null;
   landlordToken: string;
-  status: 'ACTIVE' | 'APPROVED' | 'COMPLETED' | 'PENDING' | 'REVISION_REQUESTED' | 'VACATED' | 'LOCKED' | string;
+  status: 'ACTIVE' | 'APPROVED' | 'COMPLETED' | 'PENDING' | 'REVISION_REQUESTED' | 'VACATED' | 'LOCKED' | 'SETTLED' | string;
   moveInHash?: string | null;
   estimatedRefund?: number | string | null;
+  settledAt?: string | null;
+  customQrUrl?: string | null;
+  tenantUpi?: string | null;
   userId: string;
   createdAt: string;
   items?: Item[];
@@ -206,6 +209,14 @@ export const tenancyApi = {
   },
   requestRevision: async (token: string, notes: string) => {
     const res = await axios.post<Tenancy>(`${API_BASE}/tenancy/verify/${token}/revision`, { notes });
+    return res.data;
+  },
+  settle: async (id: string, data?: { customQrUrl?: string; tenantUpi?: string; landlordUpi?: string }) => {
+    const res = await api.patch<Tenancy>(`/tenancy/${id}/settle`, data);
+    return res.data;
+  },
+  settleByToken: async (token: string, data?: { customQrUrl?: string; tenantUpi?: string; landlordUpi?: string }) => {
+    const res = await axios.post<Tenancy>(`${API_BASE}/tenancy/verify/${token}/settle`, data);
     return res.data;
   },
   getCertificate: async (idOrToken: string) => {

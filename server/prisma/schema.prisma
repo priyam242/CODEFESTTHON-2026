@@ -34,6 +34,9 @@ model Tenancy {
   moveInHash      String?
   estimatedRefund Decimal? @db.Decimal
   depositAmountDecimal Decimal? @db.Decimal
+  settledAt       DateTime?
+  customQrUrl     String?
+  tenantUpi       String?
 
   userId          String
   user            User     @relation(fields: [userId], references: [id])

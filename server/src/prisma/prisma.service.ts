@@ -126,6 +126,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "agreementRef" TEXT;
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "signerAudit" TEXT;
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "revisionNotes" TEXT;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMP(3);
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "customQrUrl" TEXT;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantUpi" TEXT;
       `);
       this.logger.log(' Core database schema verified / created on PostgreSQL');
     } catch (e: any) {

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { TenancyService } from './tenancy.service';
 import { CreateTenancyDto } from './dto/create-tenancy.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -24,6 +24,17 @@ export class TenancyController {
   @Post(':id/notify-owner')
   async notifyOwner(@Request() req: any, @Param('id') id: string) {
     return this.tenancyService.notifyOwner(id, req.user);
+  }
+
+  // Settlement endpoints (supported via PATCH & POST for maximum compatibility)
+  @Patch(':id/settle')
+  async settleTenancyPatch(@Param('id') id: string, @Body() body: any) {
+    return this.tenancyService.settle(id, body);
+  }
+
+  @Post(':id/settle')
+  async settleTenancyPost(@Param('id') id: string, @Body() body: any) {
+    return this.tenancyService.settle(id, body);
   }
 
   // Public certificate & hash verification endpoints (NO auth needed)
@@ -61,6 +72,11 @@ export class TenancyController {
   @Post('verify/:token/revision')
   async requestRevision(@Param('token') token: string, @Body() body: { notes: string }) {
     return this.tenancyService.requestRevision(token, body?.notes || 'Revision requested by owner');
+  }
+
+  @Post('verify/:token/settle')
+  async settleByToken(@Param('token') token: string, @Body() body: any) {
+    return this.tenancyService.settleByToken(token, body);
   }
 
   @UseGuards(JwtAuthGuard)

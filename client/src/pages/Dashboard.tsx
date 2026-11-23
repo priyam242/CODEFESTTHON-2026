@@ -19,9 +19,12 @@ import {
   QrCode,
   Check,
   Copy,
+  Receipt,
+  RotateCcw,
 } from 'lucide-react';
 import { tenancyApi, Tenancy, authApi, api } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
+import { PaymentModal } from '../components/PaymentModal';
 
 export const Dashboard: React.FC = () => {
   const [tenancies, setTenancies] = useState<Tenancy[]>([]);
@@ -32,21 +35,19 @@ export const Dashboard: React.FC = () => {
   const [claimMsg, setClaimMsg] = useState<string | null>(null);
   const [resettingDemo, setResettingDemo] = useState(false);
 
-  // Owner Payout UPI Modal & Settlement State
-  const [payoutTenancy, setPayoutTenancy] = useState<Tenancy | null>(null);
-  const [tenantVpa, setTenantVpa] = useState('tenant.aarav@okhdfcbank');
-  const [copiedUpi, setCopiedUpi] = useState(false);
+  // Real Phone-Scannable Payment & Settlement Modal State
+  const [selectedPaymentTenancy, setSelectedPaymentTenancy] = useState<Tenancy | null>(null);
   const [settledMap, setSettledMap] = useState<Record<string, boolean>>({});
 
   const navigate = useNavigate();
   const user = authApi.getCurrentUser();
   const isInitialLoad = useRef(true);
 
-  // Hydrate settlement states from localStorage
+  // Hydrate settlement states from localStorage and backend status
   useEffect(() => {
     const map: Record<string, boolean> = {};
     tenancies.forEach((t) => {
-      if (localStorage.getItem(`rentshield_settled_${t.id}`) === 'true') {
+      if (t.status === 'SETTLED' || localStorage.getItem(`rentshield_settled_${t.id}`) === 'true') {
         map[t.id] = true;
       }
     });
@@ -83,7 +84,7 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   // Multi-tab real-time sync + 4-second polling with modal pause shield (zero layout flicker)
-  const isModalOpen = payoutTenancy !== null || resettingDemo;
+  const isModalOpen = selectedPaymentTenancy !== null || resettingDemo;
   const { isLiveSynced } = useLiveSync(loadTenancies, 4000, isModalOpen);
 
   useEffect(() => {
@@ -114,19 +115,30 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const totalDeposit = tenancies.reduce((acc, t) => acc + Number(t.depositAmount || 0), 0);
-  const totalApproved = tenancies.filter((t) => t.status === 'APPROVED').length;
   const isLandlord = user?.role === 'LANDLORD';
-  const pendingApprovals = isLandlord ? tenancies.filter((t) => t.status === 'PENDING') : [];
-  const vacatedCount = tenancies.filter((t) => {
-    const isSettled = settledMap[t.id] || (typeof window !== 'undefined' && localStorage.getItem(`rentshield_settled_${t.id}`) === 'true');
-    return (
-      (t.items && t.items.length > 0 && t.items.every((i) => Boolean(i.moveOutPhotoUrl || i.aiVerdict))) ||
-      t.status === 'COMPLETED' ||
-      t.status === 'VACATED' ||
-      isSettled
-    );
-  }).length;
+
+  // Helper to determine if tenancy is settled
+  const isSettledTenancy = (t: Tenancy) => {
+    return t.status === 'SETTLED' || settledMap[t.id] || (typeof window !== 'undefined' && localStorage.getItem(`rentshield_settled_${t.id}`) === 'true');
+  };
+
+  // Sort Active tenancies strictly newest-first (createdAt descending)
+  const activeTenancies = tenancies
+    .filter((t) => !isSettledTenancy(t))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Sort Settled History tenancies strictly newest-first (settledAt / createdAt descending)
+  const settledTenancies = tenancies
+    .filter((t) => isSettledTenancy(t))
+    .sort((a, b) => {
+      const timeA = new Date(a.settledAt || a.createdAt).getTime();
+      const timeB = new Date(b.settledAt || b.createdAt).getTime();
+      return timeB - timeA;
+    });
+
+  const totalActiveDeposit = activeTenancies.reduce((acc, t) => acc + Number(t.depositAmount || 0), 0);
+  const totalActiveApproved = activeTenancies.filter((t) => t.status === 'APPROVED').length;
+  const pendingApprovals = isLandlord ? activeTenancies.filter((t) => t.status === 'PENDING') : [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -156,7 +168,7 @@ export const Dashboard: React.FC = () => {
                         <span>🔔 Action Required: Pending Move-In Approval Requests</span>
                       </div>
                       <h3 className="text-lg sm:text-xl font-bold text-slate-100 flex items-center space-x-2">
-                        <span>Review & Cryptographically Seal Tenancy</span>
+                        <span>Review &amp; Cryptographically Seal Tenancy</span>
                       </h3>
                       <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
                         Tenant <strong className="text-emerald-300 font-semibold">{tenantName}</strong> ({tenantEmail}) has sealed the baseline room inventory hashes and requested your counter-signature.
@@ -184,7 +196,7 @@ export const Dashboard: React.FC = () => {
                       to={`/verify/${pending.landlordToken}`}
                       className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-400 hover:from-amber-400 hover:to-emerald-300 text-slate-950 font-bold text-xs uppercase tracking-wider shadow-lg shadow-amber-500/25 transition-all hover:scale-[1.02] active:scale-95"
                     >
-                      <span>Review & Sign Inventory</span>
+                      <span>Review &amp; Sign Inventory</span>
                       <ArrowRight className="w-4 h-4" />
                     </Link>
                   </div>
@@ -264,121 +276,146 @@ export const Dashboard: React.FC = () => {
 
       {/* FinTech Telemetry Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        {/* Card 1: Total Protected Deposits */}
+        {/* Card 1: Active Escrow Deposits */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800/80 backdrop-blur-xl shadow-xl relative overflow-hidden group hover:border-emerald-500/30 transition">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
           <div className="flex items-center justify-between text-slate-400 text-xs uppercase tracking-wider font-medium mb-2">
-            <span>{isLandlord ? 'Total Managed Deposits' : 'Total Protected Deposits'}</span>
+            <span>{isLandlord ? 'Active Managed Deposits' : 'Active Protected Deposits'}</span>
             <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
               <IndianRupee className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-slate-100 font-mono tracking-tight">
-            ₹{totalDeposit.toLocaleString('en-IN')}
+            ₹{totalActiveDeposit.toLocaleString('en-IN')}
           </div>
           <div className="mt-2 text-xs text-emerald-400 flex items-center space-x-1.5 font-mono">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span className="text-[11px]">Cryptographically Sealed</span>
+            <span className="text-[11px]">{activeTenancies.length} Active Escrow Contract{activeTenancies.length === 1 ? '' : 's'}</span>
           </div>
         </div>
 
-        {/* Card 2: Active Tenancies */}
+        {/* Card 2: Active Properties */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800/80 backdrop-blur-xl shadow-xl relative overflow-hidden group hover:border-emerald-500/30 transition">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent"></div>
           <div className="flex items-center justify-between text-slate-400 text-xs uppercase tracking-wider font-medium mb-2">
-            <span>{isLandlord ? 'Linked Properties' : 'Active Tenancies'}</span>
+            <span>{isLandlord ? 'Active Properties' : 'Active Tenancies'}</span>
             <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
               <Building className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-slate-100 font-mono tracking-tight">
-            {tenancies.length}
+            {activeTenancies.length}
           </div>
           <div className="mt-2 text-xs text-slate-400 flex items-center space-x-1.5 font-mono">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            <span className="text-[11px]">{isLandlord ? 'Properties matching owner email' : 'SHA-256 Ledger Registered'}</span>
+            <span className="text-[11px]">{isLandlord ? 'Pending or locked tenancies' : 'Current living addresses'}</span>
           </div>
         </div>
 
-        {/* Card 3: Landlord Approved */}
+        {/* Card 3: Settled History */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800/80 backdrop-blur-xl shadow-xl relative overflow-hidden group hover:border-emerald-500/30 transition">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
           <div className="flex items-center justify-between text-slate-400 text-xs uppercase tracking-wider font-medium mb-2">
-            <span>{isLandlord ? 'Sealed by You' : 'Landlord Approved'}</span>
+            <span>{isLandlord ? 'Settled & Free Units' : 'Settled Past Homes'}</span>
             <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
               <CheckCircle2 className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-100 font-mono tracking-tight">
-            {totalApproved} / {tenancies.length}
+          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-300 font-mono tracking-tight">
+            {settledTenancies.length}
           </div>
           <div className="mt-2 text-xs text-emerald-400 flex items-center space-x-1.5 font-mono">
             <span className="text-[11px]">
-              {isLandlord && vacatedCount > 0
-                ? `${vacatedCount} Property Vacated & Free`
-                : totalApproved === tenancies.length && tenancies.length > 0
-                ? 'All Inventories Dual-Locked'
-                : 'Pending Sign-offs'}
+              {settledTenancies.length > 0 ? 'Archived in Past History stack' : 'None settled yet'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Tenancies List Header */}
+      {/* ACTIVE TENANCIES SECTION */}
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-slate-100">
-          {isLandlord ? 'Properties Linked to Your Owner Account' : 'Your Tenancy Agreements'}
-        </h2>
-        <span className="text-xs font-mono text-slate-500">
-          {tenancies.length} Escrow Contract{tenancies.length === 1 ? '' : 's'}
+        <div className="flex items-center space-x-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <h2 className="text-lg font-bold text-slate-100">
+            {isLandlord ? 'Active Properties & Escrow Obligations' : 'Active Tenancies & Current Obligations'}
+          </h2>
+        </div>
+        <span className="text-xs font-mono text-slate-400">
+          {activeTenancies.length} Active • Sorted Newest → Oldest
         </span>
       </div>
 
-      {/* Tenancies List */}
       {loading ? (
-        <div className="text-center py-16 text-slate-400 text-sm">
+        <div className="text-center py-16 text-slate-400 text-sm font-mono">
           Loading protected tenancies...
         </div>
       ) : error ? (
         <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm">
           {error}
         </div>
-      ) : tenancies.length === 0 ? (
-        <div className="text-center py-16 px-4 rounded-2xl bg-slate-900/40 border border-slate-800 border-dashed">
-          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 inline-flex mb-4">
-            <Building className="w-8 h-8" />
-          </div>
-          <h3 className="text-lg font-bold text-slate-100">
-            {isLandlord ? 'No Properties Linked Yet' : 'No Protected Tenancies Yet'}
-          </h3>
-          <p className="mt-1 text-sm text-slate-400 max-w-sm mx-auto">
-            {isLandlord
-              ? 'Enter a Landlord Token above or ask your tenant to enter your email when protecting their deposit.'
-              : 'Create your first tenancy to lock in your security deposit with a sealed move-in photo inventory.'}
-          </p>
-          {!isLandlord && (
-            <div className="mt-6">
-              <Link
-                to="/tenancy/new"
-                className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition shadow-lg shadow-emerald-500/20"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Initialize Tenancy</span>
-              </Link>
+      ) : activeTenancies.length === 0 ? (
+        // When active is 0, check if settled tenancies exist
+        settledTenancies.length > 0 ? (
+          <div className="text-center py-12 px-6 rounded-2xl bg-gradient-to-br from-slate-900/90 via-emerald-950/20 to-slate-900/90 border border-emerald-500/30 shadow-xl mb-6">
+            <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 inline-flex mb-3 shadow-lg shadow-emerald-500/10">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
-          )}
-        </div>
+            <h3 className="text-lg font-bold text-slate-100">
+              {isLandlord ? 'All Managed Properties Settled & Free!' : 'All Escrow Obligations Settled & Cleared!'}
+            </h3>
+            <p className="mt-1 text-xs text-slate-400 max-w-md mx-auto">
+              {isLandlord
+                ? 'All your past units have completed move-out audits, deposits are refunded, and units are ready for your next tenants.'
+                : 'Zero active deductions or disputes pending. Your past deposit records are cryptographically archived in the Past History stack below, and you are 100% free for your next home.'}
+            </p>
+            {!isLandlord && (
+              <div className="mt-5">
+                <Link
+                  to="/tenancy/new"
+                  className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-500/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Protect New Home Deposit</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-16 px-4 rounded-2xl bg-slate-900/40 border border-slate-800 border-dashed">
+            <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 inline-flex mb-4">
+              <Building className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-100">
+              {isLandlord ? 'No Properties Linked Yet' : 'No Protected Tenancies Yet'}
+            </h3>
+            <p className="mt-1 text-sm text-slate-400 max-w-sm mx-auto">
+              {isLandlord
+                ? 'Enter a Landlord Token above or ask your tenant to enter your email when protecting their deposit.'
+                : 'Create your first tenancy to lock in your security deposit with a sealed move-in photo inventory.'}
+            </p>
+            {!isLandlord && (
+              <div className="mt-6">
+                <Link
+                  to="/tenancy/new"
+                  className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition shadow-lg shadow-emerald-500/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Initialize Tenancy</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tenancies.map((tenancy) => {
+          {activeTenancies.map((tenancy) => {
             const hasMoveIn = (tenancy.items?.length || 0) > 0;
             const isApproved = tenancy.status === 'APPROVED';
             const hasAiAudit = tenancy.items?.some((i) => i.aiVerdict);
             const totalDeductions = (tenancy.items || []).reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
             const originalDeposit = Number(tenancy.depositAmount || 0);
             const netRefund = Math.max(0, originalDeposit - totalDeductions);
-            const isSettled = settledMap[tenancy.id] || (typeof window !== 'undefined' && localStorage.getItem(`rentshield_settled_${tenancy.id}`) === 'true');
-            const isVacated = (tenancy.items && tenancy.items.length > 0 && tenancy.items.every((item) => Boolean(item.moveOutPhotoUrl || item.aiVerdict))) || tenancy.status === 'COMPLETED' || tenancy.status === 'VACATED' || isSettled;
+            const isVacated = (tenancy.items && tenancy.items.length > 0 && tenancy.items.every((item) => Boolean(item.moveOutPhotoUrl || item.aiVerdict))) || tenancy.status === 'COMPLETED' || tenancy.status === 'VACATED';
 
             return (
               <div
@@ -392,13 +429,7 @@ export const Dashboard: React.FC = () => {
                   {/* Vacated & Free for Next Tenant Badge */}
                   {isVacated && (
                     <div className="mb-2.5 inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-bold font-mono uppercase tracking-wider bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 shadow-sm animate-pulse">
-                      <span>🏠 PROPERTY VACATED • FREE FOR NEXT TENANT</span>
-                    </div>
-                  )}
-
-                  {isSettled && (
-                    <div className="mb-2.5 inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-bold font-mono uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm">
-                      <span>🎉 Refund Settled • Property Free for Next Tenant</span>
+                      <span>🏠 PROPERTY VACATED • READY TO SETTLE</span>
                     </div>
                   )}
 
@@ -406,21 +437,14 @@ export const Dashboard: React.FC = () => {
                   <div className="flex items-start justify-between mb-3">
                     <span
                       className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider ${
-                        isSettled
-                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
-                          : isApproved
+                        isApproved
                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
                           : tenancy.status === 'PENDING'
                           ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 animate-pulse'
                           : 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
                       }`}
                     >
-                      {isSettled ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Settled &amp; Free</span>
-                        </>
-                      ) : isApproved ? (
+                      {isApproved ? (
                         <>
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                           <span>Sealed Escrow</span>
@@ -482,19 +506,19 @@ export const Dashboard: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Owner Immediate UPI Payout CTA Button */}
-                  {isLandlord && (hasAiAudit || isVacated) && (
+                  {/* Real Phone-Scannable UPI QR Payout CTA Button */}
+                  {(hasAiAudit || isVacated) && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setPayoutTenancy(tenancy);
-                        const defaultVpa = (tenancy as any).tenantUpi || ((tenancy as any).user?.email ? (tenancy as any).user.email.split('@')[0] + '@okaxis' : 'tenant.aarav@okhdfcbank');
-                        setTenantVpa(defaultVpa);
-                      }}
+                      onClick={() => setSelectedPaymentTenancy(tenancy)}
                       className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95"
                     >
-                      <IndianRupee className="w-3.5 h-3.5" />
-                      <span>💸 Pay Net Refund via UPI QR (₹{netRefund.toLocaleString('en-IN')})</span>
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>
+                        {isLandlord
+                          ? `💸 Pay Net Refund via UPI QR (₹${netRefund.toLocaleString('en-IN')})`
+                          : `💰 Settle / Receive Refund via UPI QR (₹${netRefund.toLocaleString('en-IN')})`}
+                      </span>
                     </button>
                   )}
 
@@ -512,7 +536,7 @@ export const Dashboard: React.FC = () => {
                     <div className="flex items-center justify-between text-[9px] text-slate-500 mt-1 font-mono">
                       <span>Move-In Sealed</span>
                       <span>Owner Locked</span>
-                      <span>{isVacated ? 'Vacated & Settled' : 'AI Ready'}</span>
+                      <span>{isVacated ? 'Vacated • Ready to Settle' : 'AI Ready'}</span>
                     </div>
                   </div>
 
@@ -540,200 +564,146 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Owner Instant Refund Payout UPI Modal */}
-      {payoutTenancy && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-center">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
-              <div className="flex items-center space-x-2 text-emerald-400 font-mono text-xs font-bold uppercase tracking-wider">
-                <QrCode className="w-4 h-4" />
-                <span>Owner Payout: Security Deposit Refund</span>
+      {/* CHRONOLOGICAL SETTLED HISTORY & PAST LOCATIONS STACK (NEWEST -> OLDEST) */}
+      {settledTenancies.length > 0 && (
+        <div className="mt-12 pt-8 border-t border-slate-800/80">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400">
+                <ShieldCheck className="w-5 h-5" />
               </div>
-              <button
-                type="button"
-                onClick={() => setPayoutTenancy(null)}
-                className="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded hover:bg-slate-800"
-              >
-                ✕
-              </button>
+              <div>
+                <h2 className="text-xl font-bold text-slate-100 flex items-center space-x-2.5">
+                  <span>📜 Settled History &amp; Past Locations</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                    {settledTenancies.length} Settled
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {isLandlord
+                    ? 'Historical tenancies with complete AI damage settlements, return payouts, and archived certificates.'
+                    : 'Your past rental homes with verified refund payouts, courtroom certificates, and zero lingering liability.'}
+                </p>
+              </div>
             </div>
+            <span className="text-[11px] font-mono text-slate-500 self-start sm:self-center">
+              Stack Order: Newest → Oldest
+            </span>
+          </div>
 
-            {(() => {
-              const pDeposit = Number(payoutTenancy.depositAmount || 0);
-              const pCuts = (payoutTenancy.items || []).reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
-              const pRefund = Math.max(0, pDeposit - pCuts);
-              const payeeName = (payoutTenancy as any).user?.name || 'Aarav Sharma (Tenant)';
-              const note = `RentShield Escrow Refund - ${payoutTenancy.propertyTitle}`;
-              const isPaid = settledMap[payoutTenancy.id] || (typeof window !== 'undefined' && localStorage.getItem(`rentshield_settled_${payoutTenancy.id}`) === 'true');
-              const upiUri = `upi://pay?pa=${encodeURIComponent(tenantVpa)}&pn=${encodeURIComponent(payeeName)}&am=${pRefund}&cu=INR&tn=${encodeURIComponent(note)}`;
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {settledTenancies.map((tenancy) => {
+              const originalDeposit = Number(tenancy.depositAmount || 0);
+              const totalDeductions = (tenancy.items || []).reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
+              const netSettledRefund = Math.max(0, originalDeposit - totalDeductions);
+              const settledDateStr = tenancy.settledAt
+                ? new Date(tenancy.settledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                : new Date(tenancy.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+              const otherPartyName = isLandlord
+                ? (tenancy.user?.name || (tenancy as any).userName || 'Aarav Sharma (Tenant)')
+                : tenancy.landlordName;
 
               return (
-                <div>
-                  <div className="mb-4">
-                    <div className="text-2xl font-extrabold text-slate-100 font-mono">
-                      ₹{pRefund.toLocaleString('en-IN')}
-                    </div>
-                    <div className="text-xs text-emerald-400 font-mono font-semibold mt-0.5">
-                      Net Deposit Refund Payable to {payeeName}
-                    </div>
-                  </div>
+                <div
+                  key={tenancy.id}
+                  className="rounded-2xl bg-slate-900/80 border border-emerald-500/25 hover:border-emerald-500/40 p-6 backdrop-blur-xl flex flex-col justify-between shadow-xl shadow-black/20 glass-vault-card relative overflow-hidden group transition duration-300"
+                >
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500"></div>
 
-                  {/* Authentic SVG QR Code Container */}
-                  <div className="p-4 rounded-2xl bg-white mx-auto inline-block shadow-xl border-4 border-emerald-500/30 mb-4">
-                    <svg
-                      width="180"
-                      height="180"
-                      viewBox="0 0 200 200"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="mx-auto"
-                    >
-                      <rect width="200" height="200" fill="#FFFFFF" />
-
-                      {/* Finder Patterns */}
-                      <rect x="16" y="16" width="48" height="48" rx="6" fill="#050811" />
-                      <rect x="22" y="22" width="36" height="36" rx="4" fill="#FFFFFF" />
-                      <rect x="30" y="30" width="20" height="20" rx="2" fill="#10B981" />
-
-                      <rect x="136" y="16" width="48" height="48" rx="6" fill="#050811" />
-                      <rect x="142" y="22" width="36" height="36" rx="4" fill="#FFFFFF" />
-                      <rect x="150" y="30" width="20" height="20" rx="2" fill="#10B981" />
-
-                      <rect x="16" y="136" width="48" height="48" rx="6" fill="#050811" />
-                      <rect x="22" y="142" width="36" height="36" rx="4" fill="#FFFFFF" />
-                      <rect x="30" y="150" width="20" height="20" rx="2" fill="#10B981" />
-
-                      {/* Simulated QR Matrix Bits */}
-                      <rect x="74" y="20" width="10" height="10" fill="#050811" />
-                      <rect x="90" y="20" width="10" height="10" fill="#050811" />
-                      <rect x="110" y="20" width="10" height="10" fill="#050811" />
-                      <rect x="74" y="36" width="10" height="10" fill="#050811" />
-                      <rect x="100" y="36" width="10" height="10" fill="#050811" />
-                      <rect x="84" y="52" width="10" height="10" fill="#050811" />
-                      <rect x="110" y="52" width="10" height="10" fill="#050811" />
-
-                      <rect x="20" y="74" width="10" height="10" fill="#050811" />
-                      <rect x="36" y="74" width="10" height="10" fill="#050811" />
-                      <rect x="52" y="74" width="10" height="10" fill="#050811" />
-                      <rect x="74" y="74" width="10" height="10" fill="#050811" />
-                      <rect x="94" y="74" width="12" height="12" fill="#10B981" />
-                      <rect x="116" y="74" width="10" height="10" fill="#050811" />
-                      <rect x="136" y="74" width="10" height="10" fill="#050811" />
-                      <rect x="156" y="74" width="10" height="10" fill="#050811" />
-                      <rect x="172" y="74" width="10" height="10" fill="#050811" />
-
-                      <rect x="20" y="90" width="10" height="10" fill="#050811" />
-                      <rect x="44" y="90" width="10" height="10" fill="#050811" />
-                      <rect x="68" y="90" width="10" height="10" fill="#050811" />
-                      <rect x="124" y="90" width="10" height="10" fill="#050811" />
-                      <rect x="148" y="90" width="10" height="10" fill="#050811" />
-                      <rect x="168" y="90" width="10" height="10" fill="#050811" />
-
-                      <rect x="74" y="106" width="10" height="10" fill="#050811" />
-                      <rect x="100" y="106" width="10" height="10" fill="#050811" />
-                      <rect x="136" y="106" width="10" height="10" fill="#050811" />
-                      <rect x="160" y="106" width="10" height="10" fill="#050811" />
-
-                      <rect x="20" y="120" width="10" height="10" fill="#050811" />
-                      <rect x="52" y="120" width="10" height="10" fill="#050811" />
-                      <rect x="84" y="120" width="10" height="10" fill="#050811" />
-                      <rect x="110" y="120" width="10" height="10" fill="#050811" />
-                      <rect x="144" y="120" width="10" height="10" fill="#050811" />
-                      <rect x="170" y="120" width="10" height="10" fill="#050811" />
-
-                      <rect x="74" y="136" width="10" height="10" fill="#050811" />
-                      <rect x="94" y="136" width="10" height="10" fill="#050811" />
-                      <rect x="116" y="136" width="10" height="10" fill="#050811" />
-                      <rect x="140" y="136" width="10" height="10" fill="#050811" />
-                      <rect x="168" y="136" width="10" height="10" fill="#050811" />
-
-                      <rect x="74" y="152" width="10" height="10" fill="#050811" />
-                      <rect x="104" y="152" width="10" height="10" fill="#050811" />
-                      <rect x="124" y="152" width="10" height="10" fill="#050811" />
-                      <rect x="152" y="152" width="10" height="10" fill="#050811" />
-
-                      {/* Center Badge */}
-                      <circle cx="100" cy="100" r="15" fill="#050811" />
-                      <circle cx="100" cy="100" r="13" fill="#10B981" />
-                      <text x="100" y="105" fill="#050811" fontSize="12" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
-                        ₹
-                      </text>
-                    </svg>
-                  </div>
-
-                  {/* Editable Tenant VPA & Details */}
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs font-mono text-left space-y-2 mb-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400">Recipient Payee:</span>
-                      <span className="text-slate-200 font-bold">{payeeName}</span>
-                    </div>
-                    <div>
-                      <label className="text-slate-400 block mb-1">Tenant UPI VPA:</label>
-                      <input
-                        type="text"
-                        value={tenantVpa}
-                        onChange={(e) => setTenantVpa(e.target.value)}
-                        placeholder="tenant.aarav@okhdfcbank"
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-emerald-400 text-xs font-mono focus:outline-none focus:border-emerald-500"
-                      />
-                    </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-800/80">
-                      <span className="text-slate-400">Payment Note:</span>
-                      <span className="text-slate-300 text-[11px] truncate max-w-[200px]">{note}</span>
-                    </div>
-                  </div>
-
-                  {/* Settlement Confirmation Toggle */}
-                  <div className="mb-4 p-3 rounded-xl bg-slate-950/80 border border-emerald-500/30 text-left">
-                    <label className="flex items-center space-x-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isPaid}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          localStorage.setItem(`rentshield_settled_${payoutTenancy.id}`, checked ? 'true' : 'false');
-                          setSettledMap((prev) => ({ ...prev, [payoutTenancy.id]: checked }));
-                        }}
-                        className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-400"
-                      />
-                      <span className="text-xs text-slate-200 font-semibold font-mono">
-                        ✅ Mark Refund Paid / Tenancy Settled
+                  <div>
+                    {/* Settled Badge & Date */}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold font-mono uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>🎉 SETTLED &amp; ARCHIVED</span>
                       </span>
-                    </label>
-                    {isPaid && (
-                      <div className="mt-2 text-[11px] font-mono text-emerald-300 flex items-center space-x-1">
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>🎉 Refund Settled • Property Free for Next Tenant</span>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        {settledDateStr}
+                      </span>
+                    </div>
+
+                    {/* Title & Address */}
+                    <h3 className="text-base font-bold text-slate-100 group-hover:text-emerald-300 transition line-clamp-1">
+                      {tenancy.propertyTitle}
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-400 line-clamp-2">
+                      {tenancy.propertyAddress}
+                    </p>
+
+                    {/* Counterparty info */}
+                    <div className="mt-3 py-2 px-3 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs font-mono flex items-center justify-between">
+                      <span className="text-slate-400 text-[11px]">
+                        {isLandlord ? 'Tenant:' : 'Landlord:'}
+                      </span>
+                      <span className="text-slate-200 font-semibold truncate max-w-[170px]">
+                        {otherPartyName}
+                      </span>
+                    </div>
+
+                    {/* Full Financial Breakdown */}
+                    <div className="mt-3.5 p-3 rounded-xl bg-slate-950 border border-slate-800/90 text-[11px] font-mono grid grid-cols-3 gap-1 text-center shadow-inner">
+                      <div>
+                        <span className="text-slate-500 block text-[9px] uppercase">Original Deposit</span>
+                        <span className="text-slate-200 font-semibold">₹{originalDeposit.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[9px] uppercase">AI Damage Cut</span>
+                        <span className={totalDeductions > 0 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                          -₹{totalDeductions.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[9px] uppercase">Net Refund Paid</span>
+                        <span className="text-emerald-400 font-bold">₹{netSettledRefund.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+
+                    {/* Sealed Cryptographic Fingerprint */}
+                    {tenancy.moveInHash && (
+                      <div className="mt-3 p-2 rounded-lg bg-slate-950/60 border border-slate-800 text-[10px] font-mono text-slate-400 truncate" title={tenancy.moveInHash}>
+                        SHA-256: {tenancy.moveInHash.substring(0, 16)}...
                       </div>
                     )}
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(upiUri);
-                        setCopiedUpi(true);
-                        setTimeout(() => setCopiedUpi(false), 2000);
-                      }}
-                      className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition"
+                  <div className="mt-5 pt-3.5 border-t border-slate-800/80 flex items-center space-x-2">
+                    <Link
+                      to={`/verify?id=${tenancy.id}`}
+                      className="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-semibold font-mono transition text-center flex items-center justify-center space-x-1 shadow-sm"
                     >
-                      {copiedUpi ? 'Copied UPI URI!' : 'Copy UPI Link'}
-                    </button>
-                    <a
-                      href={upiUri}
-                      className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
+                      <FileCheck className="w-3.5 h-3.5" />
+                      <span>Court Certificate</span>
+                    </Link>
+                    <Link
+                      to={`/tenancy/${tenancy.id}`}
+                      className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition text-center"
                     >
-                      Pay in App
-                    </a>
+                      Details
+                    </Link>
                   </div>
                 </div>
               );
-            })()}
+            })}
           </div>
         </div>
+      )}
+
+      {/* Real Phone-Scannable UPI QR Payment & Settlement Modal */}
+      {selectedPaymentTenancy && (
+        <PaymentModal
+          isOpen={true}
+          onClose={() => setSelectedPaymentTenancy(null)}
+          tenancy={selectedPaymentTenancy}
+          currentUserRole={isLandlord ? 'LANDLORD' : 'TENANT'}
+          onSettled={(updated) => {
+            setTenancies((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+            setSettledMap((prev) => ({ ...prev, [updated.id]: true }));
+            setSelectedPaymentTenancy(null);
+          }}
+        />
       )}
     </div>
   );
 };
+export default Dashboard;
