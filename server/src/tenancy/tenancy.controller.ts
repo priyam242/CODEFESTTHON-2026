@@ -20,6 +20,12 @@ export class TenancyController {
     return this.tenancyService.findAllForUser(req.user);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/notify-owner')
+  async notifyOwner(@Request() req: any, @Param('id') id: string) {
+    return this.tenancyService.notifyOwner(id, req.user);
+  }
+
   // Public certificate & hash verification endpoints (NO auth needed)
   @Post('demo/reset')
   async resetDemo() {

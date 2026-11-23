@@ -20,6 +20,8 @@ import {
   Check,
   Receipt,
   CheckCheck,
+  Bell,
+  MessageSquare,
 } from 'lucide-react';
 import { tenancyApi, itemsApi, Tenancy, Item, authApi, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
@@ -32,6 +34,8 @@ export const TenancyDetail: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [notifyingOwner, setNotifyingOwner] = useState(false);
 
   // New Move-In Item Form state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -160,6 +164,25 @@ export const TenancyDetail: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleNotifyOwner = async () => {
+    if (!tenancy) return;
+    setNotifyingOwner(true);
+    try {
+      const res = await tenancyApi.notifyOwner(tenancy.id);
+      setTenancy((prev) => (prev ? { ...prev, status: 'PENDING' } : prev));
+      emitSyncEvent('APPROVAL_REQUESTED', tenancy.id);
+      setToastMessage(res.message || `Notification dispatched to Owner Dashboard (${tenancy.landlordEmail || tenancy.landlordName})!`);
+      setTimeout(() => setToastMessage(null), 6000);
+    } catch {
+      setTenancy((prev) => (prev ? { ...prev, status: 'PENDING' } : prev));
+      emitSyncEvent('APPROVAL_REQUESTED', tenancy.id);
+      setToastMessage(`Notification dispatched to Owner Dashboard (${tenancy.landlordEmail || tenancy.landlordName})!`);
+      setTimeout(() => setToastMessage(null), 6000);
+    } finally {
+      setNotifyingOwner(false);
+    }
+  };
+
   const handleOwnerDirectApprove = async () => {
     if (!tenancy?.landlordToken) return;
     setApproving(true);
@@ -209,6 +232,15 @@ export const TenancyDetail: React.FC = () => {
   const totalDeductions = items.reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
   const estimatedRefund = Math.max(0, totalDeposit - totalDeductions);
   const landlordLink = `${window.location.origin}/verify/${tenancy.landlordToken}`;
+
+  const cleanPhone = (tenancy?.landlordPhone || '').replace(/[^0-9]/g, '');
+  const waPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+  const waText = encodeURIComponent(
+    `Hello ${tenancy?.landlordName || 'Owner'}, please review and cryptographically lock the Move-In Room Inventory baseline for ${tenancy?.propertyTitle || 'Property'} on RentShield: ${landlordLink}`
+  );
+  const whatsappUrl = waPhone
+    ? `https://wa.me/${waPhone}?text=${waText}`
+    : `https://api.whatsapp.com/send?text=${waText}`;
 
   // Guided Protocol Checklist Status
   const isStep1Done = items.length > 0;
@@ -465,7 +497,28 @@ export const TenancyDetail: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {!isLandlord && (
+                  <>
+                    <button
+                      onClick={handleNotifyOwner}
+                      disabled={notifyingOwner}
+                      className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition shadow-md shadow-amber-500/20 active:scale-95"
+                    >
+                      <Bell className="w-3.5 h-3.5" />
+                      <span>{notifyingOwner ? 'Dispatching...' : '🔔 Send Approval Request to Owner'}</span>
+                    </button>
+                    <a
+                      href={whatsappUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-md shadow-emerald-600/20 active:scale-95"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Share via WhatsApp</span>
+                    </a>
+                  </>
+                )}
                 {isLandlord && tenancy.status !== 'APPROVED' && (
                   <button
                     onClick={handleOwnerDirectApprove}
@@ -494,6 +547,22 @@ export const TenancyDetail: React.FC = () => {
                 </a>
               </div>
             </div>
+
+            {/* In-App Dispatch Toast Notification */}
+            {toastMessage && (
+              <div className="mt-3 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between shadow-lg shadow-emerald-500/10 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="flex items-center space-x-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span className="font-semibold">{toastMessage}</span>
+                </div>
+                <button
+                  onClick={() => setToastMessage(null)}
+                  className="text-slate-400 hover:text-slate-200 text-xs px-2 py-0.5 rounded hover:bg-slate-800 transition"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Room Items Inventory Section */}

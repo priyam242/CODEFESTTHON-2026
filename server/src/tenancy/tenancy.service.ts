@@ -28,15 +28,42 @@ export class TenancyService {
 
   async findAllForUser(user: { id: string; email: string; role: string }) {
     if (user.role === 'LANDLORD') {
-      return this.prisma.tenancyClient.findMany({
-        where: { landlordEmail: user.email },
-        include: { items: true },
-      });
+      const email = user.email || '';
+      try {
+        return await this.prisma.tenancyClient.findMany({
+          where: {
+            OR: [
+              { landlordEmail: { equals: email, mode: 'insensitive' } },
+              { landlordEmail: email.toLowerCase() },
+              { landlordEmail: email },
+            ],
+          },
+          include: { items: true, user: true },
+        });
+      } catch {
+        return this.prisma.tenancyClient.findMany({
+          where: { landlordEmail: email.toLowerCase() },
+          include: { items: true, user: true },
+        });
+      }
     }
     return this.prisma.tenancyClient.findMany({
       where: { userId: user.id },
-      include: { items: true },
+      include: { items: true, user: true },
     });
+  }
+
+  async notifyOwner(id: string, user: any) {
+    const tenancy = await this.findOne(id, user);
+    const updated = await this.prisma.tenancyClient.update({
+      where: { id },
+      data: { status: 'PENDING' },
+    });
+    return {
+      success: true,
+      message: `Notification dispatched to Owner Dashboard (${tenancy.landlordEmail || tenancy.landlordName})!`,
+      tenancy: updated,
+    };
   }
 
   async findOne(id: string, user?: { id: string; email?: string; role?: string } | string) {

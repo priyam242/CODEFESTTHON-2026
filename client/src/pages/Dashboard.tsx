@@ -15,6 +15,7 @@ import {
   Sparkles,
   ShieldCheck,
   ExternalLink,
+  Bell,
 } from 'lucide-react';
 import { tenancyApi, Tenancy, authApi, api } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
@@ -55,8 +56,8 @@ export const Dashboard: React.FC = () => {
     }
   }, []);
 
-  // Multi-tab real-time sync (updates automatically without page refresh when Tab 1 mutates)
-  const { isLiveSynced } = useLiveSync(loadTenancies, 4000);
+  // Multi-tab real-time sync + 5-second polling (updates automatically across windows/devices without page refresh)
+  const { isLiveSynced } = useLiveSync(loadTenancies, 5000);
 
   useEffect(() => {
     if (!user) {
@@ -87,9 +88,75 @@ export const Dashboard: React.FC = () => {
   const totalDeposit = tenancies.reduce((acc, t) => acc + Number(t.depositAmount || 0), 0);
   const totalApproved = tenancies.filter((t) => t.status === 'APPROVED').length;
   const isLandlord = user?.role === 'LANDLORD';
+  const pendingApprovals = isLandlord ? tenancies.filter((t) => t.status === 'PENDING') : [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* High-Priority Owner Action Banner for Pending Move-In Approvals */}
+      {isLandlord && pendingApprovals.length > 0 && (
+        <div id="pending-approval-banner" className="mb-8 space-y-4">
+          {pendingApprovals.map((pending) => {
+            const tenantName = (pending as any).user?.name || 'Aarav Sharma (Tenant)';
+            const tenantEmail = (pending as any).user?.email || 'tenant.demo@rentshield.com';
+            const depositFormatted = Number(pending.depositAmount || 0).toLocaleString('en-IN');
+            const itemCount = pending.items?.length || 0;
+
+            return (
+              <div
+                key={pending.id}
+                className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-amber-500/15 via-red-500/10 to-amber-500/5 border border-amber-500/40 shadow-xl shadow-amber-500/10 relative overflow-hidden backdrop-blur-xl animate-in fade-in slide-in-from-top-4 duration-500"
+              >
+                <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+                  <div className="flex items-start space-x-4">
+                    <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 shadow-md shadow-amber-500/20 flex-shrink-0 animate-pulse">
+                      <Bell className="w-6 h-6 text-amber-400" />
+                    </div>
+                    <div>
+                      <div className="inline-flex items-center space-x-2 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-mono font-bold uppercase tracking-wider mb-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                        <span>🔔 Action Required: Pending Move-In Approval Requests</span>
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-bold text-slate-100 flex items-center space-x-2">
+                        <span>Review & Cryptographically Seal Tenancy</span>
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                        Tenant <strong className="text-emerald-300 font-semibold">{tenantName}</strong> ({tenantEmail}) has sealed the baseline room inventory hashes and requested your counter-signature.
+                      </p>
+                      <div className="flex flex-wrap items-center gap-4 mt-2.5 text-xs font-mono text-slate-300">
+                        <span className="flex items-center space-x-1.5">
+                          <Building className="w-3.5 h-3.5 text-amber-400" />
+                          <span className="text-slate-200 font-semibold">{pending.propertyTitle}</span>
+                        </span>
+                        <span className="text-slate-600">•</span>
+                        <span className="flex items-center space-x-1.5 text-emerald-400 font-bold">
+                          <IndianRupee className="w-3.5 h-3.5" />
+                          <span>₹{depositFormatted} Escrow Deposit</span>
+                        </span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-400">
+                          {itemCount} Fixture{itemCount !== 1 ? 's' : ''} Documented
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <Link
+                      to={`/verify/${pending.landlordToken}`}
+                      className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-400 hover:from-amber-400 hover:to-emerald-300 text-slate-950 font-bold text-xs uppercase tracking-wider shadow-lg shadow-amber-500/25 transition-all hover:scale-[1.02] active:scale-95"
+                    >
+                      <span>Review & Sign Inventory</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Top Banner / Hero */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 pb-6 border-b border-slate-800/80">
         <div>
@@ -283,18 +350,25 @@ export const Dashboard: React.FC = () => {
                       className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider ${
                         isApproved
                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
+                          : tenancy.status === 'PENDING'
+                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 animate-pulse'
                           : 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
                       }`}
                     >
                       {isApproved ? (
                         <>
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Sealed &amp; Approved</span>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Sealed Escrow</span>
+                        </>
+                      ) : tenancy.status === 'PENDING' ? (
+                        <>
+                          <Bell className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                          <span>Awaiting Owner Signature</span>
                         </>
                       ) : (
                         <>
                           <Clock className="w-3.5 h-3.5" />
-                          <span>Pending Approval</span>
+                          <span>Move-In Open</span>
                         </>
                       )}
                     </span>

@@ -106,12 +106,13 @@ export interface Tenancy {
   landlordPhone: string;
   landlordEmail?: string | null;
   landlordToken: string;
-  status: 'ACTIVE' | 'APPROVED' | 'COMPLETED';
+  status: 'ACTIVE' | 'APPROVED' | 'COMPLETED' | 'PENDING';
   moveInHash?: string | null;
   estimatedRefund?: number | string | null;
   userId: string;
   createdAt: string;
   items?: Item[];
+  user?: User;
 }
 
 export interface PublicCertificate {
@@ -175,6 +176,10 @@ export const tenancyApi = {
   },
   getOne: async (id: string) => {
     const res = await api.get<Tenancy>(`/tenancy/${id}`);
+    return res.data;
+  },
+  notifyOwner: async (id: string) => {
+    const res = await api.post<{ success: boolean; message: string; tenancy: Tenancy }>(`/tenancy/${id}/notify-owner`);
     return res.data;
   },
   getLandlordReview: async (token: string) => {

@@ -1,15 +1,39 @@
-import React from 'react';
-import { Shield, LogOut, Plus, CheckCircle2, Cpu } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Shield, LogOut, Plus, CheckCircle2, Cpu, Bell } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { authApi } from '../api';
+import { authApi, tenancyApi } from '../api';
+import { useLiveSync } from '../realtimeSync';
 
 export const Navbar: React.FC = () => {
   const user = authApi.getCurrentUser();
   const navigate = useNavigate();
   const location = useLocation();
+  const [pendingCount, setPendingCount] = useState<number>(0);
 
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
   const isDashboard = location.pathname === '/';
+  const isLandlord = user?.role === 'LANDLORD';
+
+  const checkPending = useCallback(async () => {
+    if (!user || user.role !== 'LANDLORD') {
+      setPendingCount(0);
+      return;
+    }
+    try {
+      const data = await tenancyApi.getAll();
+      const count = data.filter((t) => t.status === 'PENDING').length;
+      setPendingCount(count);
+    } catch {
+      // Graceful offline/silent handling
+    }
+  }, [user]);
+
+  // Real-time synchronization + 5-second polling for live notification popup
+  useLiveSync(checkPending, 5000);
+
+  useEffect(() => {
+    checkPending();
+  }, [checkPending]);
 
   const handleLogout = () => {
     authApi.logout();
@@ -72,6 +96,37 @@ export const Navbar: React.FC = () => {
                   <Plus className="w-3.5 h-3.5" />
                   <span>Protect New Deposit</span>
                 </Link>
+              )}
+
+              {/* Landlord Notification Bell */}
+              {isLandlord && (
+                <button
+                  onClick={() => {
+                    if (location.pathname !== '/') {
+                      navigate('/');
+                    } else {
+                      const el = document.getElementById('pending-approval-banner');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  title={
+                    pendingCount > 0
+                      ? `${pendingCount} Pending Move-In Approval Request${pendingCount > 1 ? 's' : ''}`
+                      : 'No pending approvals'
+                  }
+                  className={`relative p-2 rounded-xl transition border ${
+                    pendingCount > 0
+                      ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/40 shadow-sm shadow-amber-500/20'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border-slate-800/60'
+                  }`}
+                >
+                  <Bell className={`w-4 h-4 ${pendingCount > 0 ? 'animate-bounce' : ''}`} />
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white shadow-sm shadow-red-500/50 animate-pulse">
+                      {pendingCount}
+                    </span>
+                  )}
+                </button>
               )}
 
               {/* User Identity Chip */}

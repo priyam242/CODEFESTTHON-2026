@@ -324,17 +324,21 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         const items = Array.from(this.memoryItems.values()).filter(item => item.tenancyId === found.id);
         return { ...found, items };
       },
-      findMany: async ({ where, include }: { where?: { userId?: string; landlordEmail?: string }; include?: any } = {}) => {
+      findMany: async ({ where, include }: { where?: { userId?: string; landlordEmail?: any; OR?: any[] }; include?: any } = {}) => {
         let results = Array.from(this.memoryTenancies.values());
         if (where?.userId) {
           results = results.filter(t => t.userId === where.userId);
         } else if (where?.landlordEmail) {
-          const lEmail = where.landlordEmail.toLowerCase();
+          const lEmail = (typeof where.landlordEmail === 'string' ? where.landlordEmail : where.landlordEmail?.equals || '').toLowerCase();
           results = results.filter(t => t.landlordEmail && t.landlordEmail.toLowerCase() === lEmail);
+        } else if (where?.OR && Array.isArray(where.OR)) {
+          const orEmails = where.OR.map((o: any) => (o.landlordEmail?.equals || o.landlordEmail || '').toLowerCase()).filter(Boolean);
+          results = results.filter(t => t.landlordEmail && orEmails.includes(t.landlordEmail.toLowerCase()));
         }
         return results.map(t => {
           const items = Array.from(this.memoryItems.values()).filter(item => item.tenancyId === t.id);
-          return { ...t, items };
+          const user = this.memoryUsers.get(t.userId) || { name: 'Aarav Sharma (Tenant)', email: 'tenant.demo@rentshield.com' };
+          return { ...t, items, user };
         });
       },
       update: async ({ where, data }: { where: { id?: string; landlordToken?: string }; data: any }) => {
