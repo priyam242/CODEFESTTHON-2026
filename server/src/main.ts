@@ -9,14 +9,22 @@ async function bootstrap() {
   
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // Allow localhost, 127.0.0.1, Vercel deployments, or mobile/curl with no origin
-      if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.endsWith('.vercel.app')) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Permissive in hackathon/demo mode to prevent CORS blockers
-      }
+      // Fully permissive for hackathon evaluation: cleanly accepts localhost, Vercel previews & production
+      callback(null, true);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'Cache-Control',
+      'Pragma',
+      'Expires',
+    ],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
   });
   
   app.useGlobalPipes(new ValidationPipe({
@@ -24,10 +32,11 @@ async function bootstrap() {
     transform: true,
   }));
   
-  // Redirect root / to client frontend (http://localhost:5173) so browser visits to :4000 don't 404
+  // Redirect root / to client frontend (Vercel or localhost) so visits to backend port don't 404
   app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.path === '/' || req.path === '') {
-      return res.redirect('http://localhost:5173');
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      return res.redirect(frontendUrl);
     }
     next();
   });

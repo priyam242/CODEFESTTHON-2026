@@ -29,16 +29,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       const tenantEmail = 'tenant.demo@rentshield.com';
       const landlordEmail = 'landlord.demo@rentshield.com';
-
-      const existingTenant = await this.userClient.findUnique({ where: { email: tenantEmail } });
-      if (existingTenant && !force) {
-        return;
-      }
-
       const hashedPassword = await bcrypt.hash('password123', 10);
 
       // 1. Seed or retrieve Tenant
-      let tenant = existingTenant;
+      let tenant = await this.userClient.findUnique({ where: { email: tenantEmail } });
       if (!tenant) {
         tenant = await this.userClient.create({
           data: {
@@ -52,9 +46,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       }
 
       // 2. Seed or retrieve Landlord
-      const existingLandlord = await this.userClient.findUnique({ where: { email: landlordEmail } });
-      if (!existingLandlord) {
-        await this.userClient.create({
+      let landlord = await this.userClient.findUnique({ where: { email: landlordEmail } });
+      if (!landlord) {
+        landlord = await this.userClient.create({
           data: {
             id: 'landlord-demo-uuid-002',
             email: landlordEmail,
@@ -65,7 +59,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         });
       }
 
-      // 3. Seed Realistic Indian Rental Tenancy
+      // 3. Seed Realistic Indian Rental Tenancy (2BHK Indiranagar, Bangalore)
       const tenancyId = 'demo-tenancy-indiranagar-001';
       const existingTenancy = await this.tenancyClient.findUnique({ where: { id: tenancyId } });
 

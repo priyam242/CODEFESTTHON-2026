@@ -50,15 +50,21 @@ Respond ONLY with a JSON object in this exact schema, with no additional markdow
   "suggestedCut": number
 }`;
 
-      const response = await ai.models.generateContent({
+      // 8-second timeout shield against API network hanging or rate-limit delays
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Gemini API call timed out after 8s')), 8000),
+      );
+
+      const generatePromise = ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
       });
 
+      const response = await Promise.race([generatePromise, timeoutPromise]);
       const text = response?.text?.trim() || '';
       return this.safeParseAiJson(text, itemName, moveInNotes, moveOutNotes);
     } catch (err: any) {
-      this.logger.warn(`Gemini AI service error or rate-limit encountered (${err?.message || 'Error'}). Falling back to safe deterministic audit.`);
+      this.logger.warn(`Gemini AI service error, rate-limit, or quota shield activated (${err?.message || 'Error'}). Executing safe deterministic audit.`);
       return this.generateFallbackResult(itemName, moveInNotes, moveOutNotes);
     }
   }
