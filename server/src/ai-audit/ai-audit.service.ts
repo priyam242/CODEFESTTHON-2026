@@ -32,7 +32,7 @@ export class AiAuditService {
 
     try {
       const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-      const prompt = `You are a certified, objective property inventory arbitrator reviewing rental wear-and-tear vs damage.
+      const prompt = `You are a certified, objective property inventory arbitrator reviewing rental wear-and-tear vs damage under Section 13 and 15 of the Indian Model Tenancy Act (MTA) 2021.
 Analyze the following item at move-out:
 Item: "${itemName}" in Room: "${roomName}"
 Move-in notes: "${moveInNotes || 'Condition noted as pristine / standard on check-in'}"
@@ -40,13 +40,14 @@ Move-out notes: "${moveOutNotes || 'Tenant completed move-out inspection'}"
 Move-in Photo: ${moveInPhotoUrl || 'Recorded on file'}
 Move-out Photo: ${moveOutPhotoUrl || 'Recorded on file'}
 
-Determine whether any new issue is NORMAL_WEAR_TEAR (minor scuffs, aging, standard usage) or DAMAGE_DETECTED (broken fixtures, deep burns, stained fabrics, negligent destruction).
-Suggest a reasonable rupee deduction (₹0 for normal wear, or estimated repair cost between ₹500 and ₹5000 for verified damages).
+Statutory Guidelines (Model Tenancy Act 2021):
+- NORMAL_WEAR_TEAR: Natural deterioration from regular usage, surface scuffs, minor paint wear, micro-scratches, age depreciation. Deduction must be ₹0.
+- DAMAGE_DETECTED: Tenant negligence, cracks, severe burns, broken parts, intentional or accidental destruction. Propose equitable repair cut (₹500 to ₹5000).
 
 Respond ONLY with a JSON object in this exact schema, with no additional markdown:
 {
   "verdict": "NORMAL_WEAR_TEAR" or "DAMAGE_DETECTED",
-  "explanation": "Clear, professional explanation under 40 words",
+  "explanation": "Clear, professional explanation citing condition under MTA 2021 under 45 words",
   "suggestedCut": number
 }`;
 
@@ -114,14 +115,14 @@ Respond ONLY with a JSON object in this exact schema, with no additional markdow
     if (isDamageKeyword) {
       return {
         verdict: 'DAMAGE_DETECTED',
-        explanation: `Move-out inspection logged notable physical impairment on ${itemName}. Assessed reasonable repair deduction.`,
+        explanation: `Under Model Tenancy Act (MTA) 2021 Sec 15: move-out inspection logged tenant-induced impairment on ${itemName}. Assessed fair repair deduction.`,
         suggestedCut: 1500,
       };
     }
 
     return {
       verdict: 'NORMAL_WEAR_TEAR',
-      explanation: `Inspection verified: ${itemName} demonstrates standard, acceptable wear consistent with residential tenancy duration.`,
+      explanation: `Under Model Tenancy Act (MTA) 2021 Sec 13: ${itemName} exhibits standard fair wear-and-tear consistent with residential tenancy duration. ₹0 deduction.`,
       suggestedCut: 0,
     };
   }

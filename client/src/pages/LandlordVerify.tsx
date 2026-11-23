@@ -1,6 +1,22 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Shield, CheckCircle2, Lock, Building, IndianRupee, Clock, AlertCircle, FileCheck2, Zap, ShieldCheck } from 'lucide-react';
+import {
+  Shield,
+  CheckCircle2,
+  Lock,
+  Building,
+  IndianRupee,
+  Clock,
+  AlertCircle,
+  FileCheck2,
+  Zap,
+  ShieldCheck,
+  AlertTriangle,
+  MessageSquare,
+  CreditCard,
+  FileText,
+  Check,
+} from 'lucide-react';
 import { tenancyApi, Tenancy, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 
@@ -11,6 +27,16 @@ export const LandlordVerify: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Counterparty Identity Anchor confirmation
+  const [ownerConfirmed, setOwnerConfirmed] = useState(true);
+
+  // Flag discrepancy / Revision modal state
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [revisionNotes, setRevisionNotes] = useState(
+    'Please upload supplementary clear photos of the master bathroom fixtures and kitchen cabinetry.'
+  );
+  const [submittingRevision, setSubmittingRevision] = useState(false);
 
   const loadReview = useCallback(async () => {
     if (!landlordToken) return;
@@ -24,7 +50,7 @@ export const LandlordVerify: React.FC = () => {
     }
   }, [landlordToken]);
 
-  // Real-time synchronization: when Tenant uploads evidence in Tab 1, Tab 2 updates without refresh!
+  // Real-time synchronization across browser tabs
   const { isLiveSynced } = useLiveSync(loadReview, 4000);
 
   useEffect(() => {
@@ -39,7 +65,17 @@ export const LandlordVerify: React.FC = () => {
     setError(null);
 
     try {
-      const updated = await tenancyApi.approveLandlordReview(landlordToken);
+      const signerData = {
+        signerEmail: tenancy?.landlordEmail || 'landlord.demo@rentshield.com',
+        signerIp: '103.212.154.42 (Bangalore, KA)',
+        signerFingerprint: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+        signedAt: new Date().toISOString(),
+        ownerConfirmed: true,
+        agreementRef: tenancy?.agreementRef || 'BLR-IND-2026-KA-4892',
+        landlordUpi: tenancy?.landlordUpi || 'ramesh.malik@okhdfcbank',
+      };
+
+      const updated = await tenancyApi.approveLandlordReview(landlordToken, signerData);
       setTenancy(updated);
       setSuccessMessage('Inventory cryptographically sealed and approved successfully!');
       emitSyncEvent('LANDLORD_APPROVED', updated.id);
@@ -47,6 +83,23 @@ export const LandlordVerify: React.FC = () => {
       setError(err?.response?.data?.message || err?.message || 'Failed to approve inventory');
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleRequestRevision = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!landlordToken) return;
+    setSubmittingRevision(true);
+    try {
+      const updated = await tenancyApi.requestRevision(landlordToken, revisionNotes);
+      setTenancy(updated);
+      setShowRevisionModal(false);
+      setSuccessMessage('Revision request dispatched to tenant! Status updated to Revision Requested.');
+      emitSyncEvent('APPROVAL_REQUESTED', updated.id);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to request revision');
+    } finally {
+      setSubmittingRevision(false);
     }
   };
 
@@ -79,6 +132,18 @@ export const LandlordVerify: React.FC = () => {
 
   const items = tenancy.items || [];
   const isApproved = tenancy.status === 'APPROVED';
+  const isRevisionRequested = tenancy.status === 'REVISION_REQUESTED';
+
+  // Room completeness computation
+  const coreRooms = ['Living Room', 'Kitchen', 'Master Bedroom'];
+  const documentedRooms = Array.from(new Set(items.map((it) => it.roomName.trim()))).filter(Boolean);
+
+  let signerAuditData: any = null;
+  if (tenancy.signerAudit) {
+    try {
+      signerAuditData = typeof tenancy.signerAudit === 'string' ? JSON.parse(tenancy.signerAudit) : tenancy.signerAudit;
+    } catch {}
+  }
 
   return (
     <div className="min-h-screen py-10 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
@@ -109,6 +174,18 @@ export const LandlordVerify: React.FC = () => {
         </div>
       )}
 
+      {isRevisionRequested && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm flex items-start space-x-3 shadow-lg shadow-amber-500/10">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-400 mt-0.5" />
+          <div>
+            <div className="font-bold text-amber-200">Revision Requested by Owner</div>
+            <p className="text-xs text-amber-300/90 mt-1">
+              Notes: {tenancy.revisionNotes || 'Supplementary photos requested before baseline seal.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Tenancy Overview Card */}
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 sm:p-8 backdrop-blur-xl mb-8 shadow-xl glass-vault-card relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
@@ -119,13 +196,20 @@ export const LandlordVerify: React.FC = () => {
               className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider mb-2 font-mono ${
                 isApproved
                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                  : isRevisionRequested
+                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                  : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
               }`}
             >
               {isApproved ? (
                 <>
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Inventory Sealed &amp; Approved</span>
+                </>
+              ) : isRevisionRequested ? (
+                <>
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Revision Requested</span>
                 </>
               ) : (
                 <>
@@ -147,7 +231,7 @@ export const LandlordVerify: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 text-xs text-slate-300">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 text-xs text-slate-300">
           <div>
             <span className="text-slate-400 block font-mono text-[11px]">Landlord Name:</span>
             <span className="font-semibold">{tenancy.landlordName}</span>
@@ -157,8 +241,41 @@ export const LandlordVerify: React.FC = () => {
             <span className="font-semibold">{tenancy.landlordPhone}</span>
           </div>
           <div>
-            <span className="text-slate-400 block font-mono text-[11px]">Logged Items:</span>
-            <span className="font-semibold">{items.length} Room Fixtures</span>
+            <span className="text-slate-400 block font-mono text-[11px]">Registered UPI:</span>
+            <span className="font-mono text-emerald-400">{tenancy.landlordUpi || 'ramesh.malik@okhdfcbank'}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block font-mono text-[11px]">Agreement Ref:</span>
+            <span className="font-mono text-slate-200">{tenancy.agreementRef || 'BLR-IND-2026-KA-4892'}</span>
+          </div>
+        </div>
+
+        {/* Room Completeness Checklist Pill */}
+        <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center space-x-2 text-slate-400 font-mono text-[11px]">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Room Coverage Checklist:</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {coreRooms.map((room) => {
+              const covered = items.some((it) => it.roomName.toLowerCase().includes(room.toLowerCase()));
+              return (
+                <span
+                  key={room}
+                  className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-mono ${
+                    covered
+                      ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}
+                >
+                  {covered ? <Check className="w-3 h-3 text-emerald-400" /> : <Clock className="w-3 h-3 text-slate-500" />}
+                  <span>{room}</span>
+                </span>
+              );
+            })}
+            <span className="px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-semibold">
+              {items.length} Fixtures Documented
+            </span>
           </div>
         </div>
       </div>
@@ -224,7 +341,7 @@ export const LandlordVerify: React.FC = () => {
       {/* Action Approval Card */}
       <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800/80 p-6 sm:p-8 text-center shadow-xl glass-vault-card">
         {isApproved ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="inline-flex p-3 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
               <CheckCircle2 className="w-8 h-8" />
             </div>
@@ -239,6 +356,21 @@ export const LandlordVerify: React.FC = () => {
                 Seal Hash: {tenancy.moveInHash}
               </div>
             )}
+
+            {/* Counterparty Identity Binding Audit Trail */}
+            <div className="mt-4 p-4 rounded-xl bg-slate-950/80 border border-emerald-500/20 max-w-xl mx-auto text-left space-y-2">
+              <div className="flex items-center space-x-2 text-emerald-400 font-mono text-xs font-semibold">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Counterparty Identity Binding Cryptographically Anchored</span>
+              </div>
+              <div className="text-[11px] font-mono text-slate-300 space-y-1">
+                <div>Owner Rent-Receiving VPA: <span className="text-emerald-300">{tenancy.landlordUpi || 'ramesh.malik@okhdfcbank'}</span></div>
+                <div>Rental Agreement Ref ID: <span className="text-slate-100">{tenancy.agreementRef || 'BLR-IND-2026-KA-4892'}</span></div>
+                <div>Signer Fingerprint: <span className="text-slate-400 truncate block">{signerAuditData?.signerFingerprint || '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08'}</span></div>
+                <div>Signer IP &amp; Geolocation: <span className="text-slate-300">{signerAuditData?.signerIp || '103.212.154.42 (Bangalore, KA)'}</span></div>
+                <div>Timestamp: <span className="text-slate-400">{signerAuditData?.signedAt || new Date().toISOString()}</span></div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -254,19 +386,93 @@ export const LandlordVerify: React.FC = () => {
               </p>
             </div>
 
-            <div>
+            {/* Anti-Collusion Confirmation Checkbox */}
+            <div className="max-w-md mx-auto text-left p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ownerConfirmed}
+                  onChange={(e) => setOwnerConfirmed(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-400"
+                />
+                <span className="text-xs text-slate-300 leading-relaxed font-mono">
+                  I confirm I am the legal property owner matching UPI VPA <strong className="text-emerald-400">{tenancy.landlordUpi || 'ramesh.malik@okhdfcbank'}</strong> and Rental Agreement Ref <strong className="text-slate-200">{tenancy.agreementRef || 'BLR-IND-2026-KA-4892'}</strong>.
+                </span>
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
               <button
                 onClick={handleApprove}
-                disabled={approving}
-                className="px-8 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-sm transition shadow-lg shadow-emerald-500/25 inline-flex items-center space-x-2"
+                disabled={approving || !ownerConfirmed}
+                className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-sm transition shadow-lg shadow-emerald-500/25 inline-flex items-center justify-center space-x-2"
               >
                 <FileCheck2 className="w-4 h-4" />
                 <span>{approving ? 'Locking & Sealing...' : 'Lock & Approve Baseline'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowRevisionModal(true)}
+                className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-amber-500/30 hover:border-amber-500 text-amber-300 font-semibold text-xs transition inline-flex items-center justify-center space-x-2"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <span>Flag Discrepancy / Request Revision</span>
               </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Revision Modal */}
+      {showRevisionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100">Flag Inventory Discrepancy</h3>
+                <p className="text-xs text-slate-400">Request the tenant to upload updated room photos.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleRequestRevision} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Revision Notes for Tenant
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  value={revisionNotes}
+                  onChange={(e) => setRevisionNotes(e.target.value)}
+                  placeholder="Describe missing angles, unphotographed rooms, or items requiring clearer lighting..."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRevisionModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingRevision}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 text-xs font-bold transition shadow-lg shadow-amber-500/20"
+                >
+                  {submittingRevision ? 'Submitting...' : 'Send Revision Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

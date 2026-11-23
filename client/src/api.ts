@@ -105,8 +105,12 @@ export interface Tenancy {
   landlordName: string;
   landlordPhone: string;
   landlordEmail?: string | null;
+  landlordUpi?: string | null;
+  agreementRef?: string | null;
+  signerAudit?: string | any;
+  revisionNotes?: string | null;
   landlordToken: string;
-  status: 'ACTIVE' | 'APPROVED' | 'COMPLETED' | 'PENDING';
+  status: 'ACTIVE' | 'APPROVED' | 'COMPLETED' | 'PENDING' | 'REVISION_REQUESTED';
   moveInHash?: string | null;
   estimatedRefund?: number | string | null;
   userId: string;
@@ -121,6 +125,10 @@ export interface PublicCertificate {
   propertyAddress: string;
   depositAmount: number | string;
   landlordName: string;
+  landlordUpi?: string | null;
+  agreementRef?: string | null;
+  signerAudit?: string | any;
+  revisionNotes?: string | null;
   status: string;
   moveInHash: string;
   estimatedRefund?: number | string | null;
@@ -166,6 +174,8 @@ export const tenancyApi = {
     landlordName: string;
     landlordPhone: string;
     landlordEmail?: string;
+    landlordUpi?: string;
+    agreementRef?: string;
   }) => {
     const res = await api.post<Tenancy>('/tenancy', data);
     return res.data;
@@ -189,9 +199,13 @@ export const tenancyApi = {
     });
     return res.data;
   },
-  approveLandlordReview: async (token: string) => {
+  approveLandlordReview: async (token: string, signerData?: any) => {
     // Unauthenticated call targeting normalized API_BASE
-    const res = await axios.post<Tenancy>(`${API_BASE}/tenancy/verify/${token}/approve`);
+    const res = await axios.post<Tenancy>(`${API_BASE}/tenancy/verify/${token}/approve`, { signerData });
+    return res.data;
+  },
+  requestRevision: async (token: string, notes: string) => {
+    const res = await axios.post<Tenancy>(`${API_BASE}/tenancy/verify/${token}/revision`, { notes });
     return res.data;
   },
   getCertificate: async (idOrToken: string) => {

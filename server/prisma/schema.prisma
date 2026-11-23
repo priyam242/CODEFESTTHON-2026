@@ -25,6 +25,10 @@ model Tenancy {
   landlordName    String
   landlordPhone   String
   landlordEmail   String?
+  landlordUpi     String?
+  agreementRef    String?
+  signerAudit     String?
+  revisionNotes   String?
   landlordToken   String   @unique
   status          String   @default("ACTIVE")
   moveInHash      String?

@@ -27,4 +27,12 @@ export class CreateTenancyDto {
   @IsOptional()
   @IsEmail()
   landlordEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  landlordUpi?: string;
+
+  @IsOptional()
+  @IsString()
+  agreementRef?: string;
 }

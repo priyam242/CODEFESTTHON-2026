@@ -212,6 +212,18 @@ export const PublicVerifier: React.FC = () => {
                 {certificate.moveInHash}
               </div>
             </div>
+
+            {/* Counterparty Identity Binding Audit Trail */}
+            <div className="mt-4 p-3.5 rounded-xl bg-slate-950/80 border border-emerald-500/20 text-xs">
+              <div className="flex items-center space-x-2 text-emerald-400 font-mono text-xs font-semibold mb-2">
+                <Fingerprint className="w-4 h-4" />
+                <span>Counterparty Identity Binding (Model Tenancy Act Anchor)</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono text-slate-300">
+                <div>Owner Rent VPA: <span className="text-emerald-300">{certificate.landlordUpi || 'ramesh.malik@okhdfcbank'}</span></div>
+                <div>Agreement Ref ID: <span className="text-slate-100">{certificate.agreementRef || 'BLR-IND-2026-KA-4892'}</span></div>
+              </div>
+            </div>
           </div>
 
           {/* Client-Side Drag & Drop PDF / File Hash Verifier */}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Building2, ArrowLeft, IndianRupee, User, Phone, MapPin, ShieldCheck, Mail } from 'lucide-react';
+import { Building2, ArrowLeft, IndianRupee, User, Phone, MapPin, ShieldCheck, Mail, CreditCard, FileText } from 'lucide-react';
 import { tenancyApi } from '../api';
 import { emitSyncEvent } from '../realtimeSync';
 
@@ -11,6 +11,8 @@ export const CreateTenancy: React.FC = () => {
   const [landlordName, setLandlordName] = useState('Ramesh Malik');
   const [landlordPhone, setLandlordPhone] = useState('+91 98765 43210');
   const [landlordEmail, setLandlordEmail] = useState('landlord.demo@rentshield.com');
+  const [landlordUpi, setLandlordUpi] = useState('ramesh.malik@okhdfcbank');
+  const [agreementRef, setAgreementRef] = useState('BLR-IND-2026-KA-4892');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +31,8 @@ export const CreateTenancy: React.FC = () => {
         landlordName,
         landlordPhone,
         landlordEmail,
+        landlordUpi,
+        agreementRef,
       });
       emitSyncEvent('TENANCY_CREATED', created.id);
       navigate(`/tenancy/${created.id}`);
@@ -177,6 +181,55 @@ export const CreateTenancy: React.FC = () => {
                   placeholder="landlord.demo@rentshield.com"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Anti-Collusion Counterparty Binding Anchor */}
+          <div className="p-4 rounded-xl bg-slate-950/60 border border-emerald-500/20 space-y-3">
+            <div className="flex items-center space-x-2 text-emerald-400 text-xs font-semibold uppercase tracking-wider">
+              <ShieldCheck className="w-4 h-4" />
+              <span>Anti-Collusion Identity Anchor (Model Tenancy Protocol)</span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Binds this escrow record to the verified property owner's banking VPA &amp; rental agreement to prevent fake relative collusion.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                  Owner Rent-Receiving UPI VPA
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <CreditCard className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    type="text"
+                    value={landlordUpi}
+                    onChange={(e) => setLandlordUpi(e.target.value)}
+                    placeholder="ramesh.malik@okhdfcbank"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                  Registered Rental Agreement Ref ID
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <FileText className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    type="text"
+                    value={agreementRef}
+                    onChange={(e) => setAgreementRef(e.target.value)}
+                    placeholder="BLR-IND-2026-KA-4892"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
               </div>
             </div>
           </div>

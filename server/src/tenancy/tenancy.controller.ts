@@ -49,8 +49,13 @@ export class TenancyController {
   }
 
   @Post('verify/:token/approve')
-  async approveLandlord(@Param('token') token: string) {
-    return this.tenancyService.approveByLandlordToken(token);
+  async approveLandlord(@Param('token') token: string, @Body() body?: any) {
+    return this.tenancyService.approveByLandlordToken(token, body?.signerData);
+  }
+
+  @Post('verify/:token/revision')
+  async requestRevision(@Param('token') token: string, @Body() body: { notes: string }) {
+    return this.tenancyService.requestRevision(token, body?.notes || 'Revision requested by owner');
   }
 
   @UseGuards(JwtAuthGuard)

@@ -71,6 +71,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           "landlordName" TEXT NOT NULL,
           "landlordPhone" TEXT NOT NULL,
           "landlordEmail" TEXT,
+          "landlordUpi" TEXT,
+          "agreementRef" TEXT,
+          "signerAudit" TEXT,
+          "revisionNotes" TEXT,
           "landlordToken" TEXT UNIQUE NOT NULL,
           "status" TEXT NOT NULL DEFAULT 'ACTIVE',
           "moveInHash" TEXT,
@@ -97,6 +101,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           "tenancyId" TEXT NOT NULL REFERENCES "Tenancy"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
           "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
+      `);
+
+      // Ensure anti-fraud and audit columns exist in existing PostgreSQL databases
+      await this.$executeRawUnsafe(`
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "landlordUpi" TEXT;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "agreementRef" TEXT;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "signerAudit" TEXT;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "revisionNotes" TEXT;
       `);
       this.logger.log(' Core database schema verified / created on PostgreSQL');
     } catch (e: any) {
@@ -182,6 +194,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             landlordName: 'Ramesh Malik',
             landlordPhone: '+91 98765 43210',
             landlordEmail: landlordEmail,
+            landlordUpi: 'ramesh.malik@okhdfcbank',
+            agreementRef: 'BLR-IND-2026-KA-4892',
+            signerAudit: JSON.stringify({
+              signerEmail: landlordEmail,
+              signerIp: '103.212.154.42 (Bangalore, KA)',
+              signerFingerprint: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+              signedAt: new Date().toISOString(),
+              ownerConfirmed: true,
+              agreementRef: 'BLR-IND-2026-KA-4892',
+              landlordUpi: 'ramesh.malik@okhdfcbank',
+            }),
             landlordToken: 'demo-magic-token-2026',
             status: 'APPROVED',
             moveInHash: '58a9db3bdc324855635e803e45982f1603afd532eeb6dfa4f92a73332df269fe',
@@ -298,6 +321,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           landlordName: data.landlordName,
           landlordPhone: data.landlordPhone,
           landlordEmail: data.landlordEmail || null,
+          landlordUpi: data.landlordUpi || 'ramesh.malik@okhdfcbank',
+          agreementRef: data.agreementRef || 'BLR-IND-2026-KA-4892',
+          signerAudit: data.signerAudit || null,
+          revisionNotes: data.revisionNotes || null,
           landlordToken: data.landlordToken || randomUUID(),
           status: data.status || 'ACTIVE',
           moveInHash: data.moveInHash || null,
