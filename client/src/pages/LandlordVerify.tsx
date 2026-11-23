@@ -1,23 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Shield, CheckCircle2, Lock, Building, IndianRupee, Clock, AlertCircle, FileCheck2, Zap, ShieldCheck } from 'lucide-react';
-import { tenancyApi, Tenancy } from '../api';
+import { tenancyApi, Tenancy, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
-
-const fallbackFixtureSvg =
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" fill="%230f172a"/><rect x="16" y="16" width="568" height="368" rx="16" fill="%23020617" stroke="%23334155" stroke-width="2"/><circle cx="300" cy="170" r="42" fill="%2310b981" fill-opacity="0.15" stroke="%2310b981" stroke-width="2.5"/><path d="M285 170l10 10 20-20" stroke="%2310b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><text x="300" y="245" fill="%23f1f5f9" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">CRYPTOGRAPHIC BASELINE EVIDENCE</text><text x="300" y="270" fill="%2310b981" font-family="monospace" font-size="11" font-weight="bold" text-anchor="middle">SHA-256 VERIFIED RECORD</text></svg>';
-
-const getAssetUrl = (url: string | null | undefined): string => {
-  if (!url) return fallbackFixtureSvg;
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
-    return url;
-  }
-  const apiUrl = (import.meta as any).env?.VITE_API_URL;
-  if (apiUrl && url.startsWith('/')) {
-    return `${apiUrl.replace(/\/$/, '')}${url}`;
-  }
-  return url;
-};
 
 export const LandlordVerify: React.FC = () => {
   const { landlordToken } = useParams<{ landlordToken: string }>();

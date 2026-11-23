@@ -10,7 +10,7 @@
     "dev": "pnpm -r --parallel dev",
     "dev:server": "pnpm --filter rentshield-server dev",
     "dev:client": "pnpm --filter rentshield-client dev",
-    "build": "pnpm --filter rentshield-server build && pnpm --filter rentshield-client build",
+    "build": "pnpm prisma:generate && pnpm --filter rentshield-server build && pnpm --filter rentshield-client build",
     "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
     "prisma:validate": "prisma validate --schema=prisma/schema.prisma"
   },

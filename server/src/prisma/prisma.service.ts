@@ -13,6 +13,26 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private memoryTenancies: Map<string, any> = new Map();
   private memoryItems: Map<string, any> = new Map();
 
+  constructor() {
+    super();
+    // Neutralize PrismaClient internal property assignment shadowing getters
+    Object.defineProperty(this, 'userClient', {
+      get: () => this.getUserClient(),
+      configurable: true,
+      enumerable: true,
+    });
+    Object.defineProperty(this, 'tenancyClient', {
+      get: () => this.getTenancyClient(),
+      configurable: true,
+      enumerable: true,
+    });
+    Object.defineProperty(this, 'itemClient', {
+      get: () => this.getItemClient(),
+      configurable: true,
+      enumerable: true,
+    });
+  }
+
   async onModuleInit() {
     try {
       await this.$connect();
@@ -65,8 +85,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       if (force) {
         if (this.isConnected) {
           try {
-            await (this as any).item.deleteMany({});
-            await (this as any).tenancy.deleteMany({});
+            const ic = (this as any).item || (this as any).Item;
+            const tc = (this as any).tenancy || (this as any).Tenancy;
+            if (ic?.deleteMany) await ic.deleteMany({});
+            if (tc?.deleteMany) await tc.deleteMany({});
           } catch {}
         } else {
           this.memoryTenancies.clear();
@@ -79,8 +101,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       if (!existingTenancy || force) {
         if (this.isConnected && !force) {
           try {
-            await (this as any).item.deleteMany({ where: { tenancyId } });
-            await (this as any).tenancy.deleteMany({ where: { id: tenancyId } });
+            const ic = (this as any).item || (this as any).Item;
+            const tc = (this as any).tenancy || (this as any).Tenancy;
+            if (ic?.deleteMany) await ic.deleteMany({ where: { tenancyId } });
+            if (tc?.deleteMany) await tc.deleteMany({ where: { id: tenancyId } });
           } catch {}
         } else if (!force) {
           this.memoryTenancies.delete(tenancyId);
@@ -160,10 +184,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     }
   }
 
-  // Fallback-aware proxy for User operations
-  get userClient() {
-    if (this.isConnected) {
-      return this.user;
+  // Safe resolver for User model delegate
+  getUserClient() {
+    const delegate = (this as any).user || (this as any).User || (this as any)._originalClient?.user;
+    if (this.isConnected && delegate && typeof delegate.findUnique === 'function') {
+      return delegate;
     }
     return {
       create: async ({ data }: { data: any }) => {
@@ -192,10 +217,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     };
   }
 
-  // Fallback-aware proxy for Tenancy operations
-  get tenancyClient() {
-    if (this.isConnected) {
-      return this.tenancy;
+  get userClient() {
+    return this.getUserClient();
+  }
+
+  // Safe resolver for Tenancy model delegate
+  getTenancyClient() {
+    const delegate = (this as any).tenancy || (this as any).Tenancy || (this as any)._originalClient?.tenancy;
+    if (this.isConnected && delegate && typeof delegate.findUnique === 'function') {
+      return delegate;
     }
     return {
       create: async ({ data }: { data: any }) => {
@@ -270,10 +300,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     };
   }
 
-  // Fallback-aware proxy for Item operations
-  get itemClient() {
-    if (this.isConnected) {
-      return this.item;
+  get tenancyClient() {
+    return this.getTenancyClient();
+  }
+
+  // Safe resolver for Item model delegate
+  getItemClient() {
+    const delegate = (this as any).item || (this as any).Item || (this as any)._originalClient?.item;
+    if (this.isConnected && delegate && typeof delegate.findUnique === 'function') {
+      return delegate;
     }
     return {
       create: async ({ data }: { data: any }) => {
@@ -314,5 +349,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         return updated;
       },
     };
+  }
+
+  get itemClient() {
+    return this.getItemClient();
   }
 }

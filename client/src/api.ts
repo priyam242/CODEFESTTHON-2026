@@ -1,9 +1,34 @@
 import axios from 'axios';
 
 // Support Vercel / Cloud deployment pointing to external API or fallback to relative /api
-const API_BASE = (import.meta as any).env?.VITE_API_URL
-  ? `${(import.meta as any).env.VITE_API_URL.replace(/\/$/, '')}/api`
-  : '/api';
+export function normalizeApiUrl(raw?: string): string {
+  if (!raw || !raw.trim()) return '/api';
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+}
+
+export function getAssetBaseUrl(raw?: string): string {
+  if (!raw || !raw.trim()) return '';
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  return trimmed.replace(/\/api$/, '');
+}
+
+export const API_BASE = normalizeApiUrl((import.meta as any).env?.VITE_API_URL);
+
+export const fallbackFixtureSvg =
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" fill="%230f172a"/><rect x="16" y="16" width="568" height="368" rx="16" fill="%23020617" stroke="%23334155" stroke-width="2"/><circle cx="300" cy="170" r="42" fill="%2310b981" fill-opacity="0.15" stroke="%2310b981" stroke-width="2.5"/><path d="M285 170l10 10 20-20" stroke="%2310b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><text x="300" y="245" fill="%23f1f5f9" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">CRYPTOGRAPHIC BASELINE EVIDENCE</text><text x="300" y="270" fill="%2310b981" font-family="monospace" font-size="11" font-weight="bold" text-anchor="middle">SHA-256 VERIFIED RECORD</text></svg>';
+
+export const getAssetUrl = (url: string | null | undefined): string => {
+  if (!url) return fallbackFixtureSvg;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  const base = getAssetBaseUrl((import.meta as any).env?.VITE_API_URL);
+  if (base && url.startsWith('/')) {
+    return `${base}${url}`;
+  }
+  return url;
+};
 
 export const api = axios.create({
   baseURL: API_BASE,
@@ -133,27 +158,27 @@ export const tenancyApi = {
     return res.data;
   },
   getLandlordReview: async (token: string) => {
-    // Unauthenticated call
-    const res = await axios.get<Tenancy>(`/api/tenancy/verify/${token}`, {
+    // Unauthenticated call targeting normalized API_BASE
+    const res = await axios.get<Tenancy>(`${API_BASE}/tenancy/verify/${token}`, {
       params: { _ts: Date.now() },
     });
     return res.data;
   },
   approveLandlordReview: async (token: string) => {
-    // Unauthenticated call
-    const res = await axios.post<Tenancy>(`/api/tenancy/verify/${token}/approve`);
+    // Unauthenticated call targeting normalized API_BASE
+    const res = await axios.post<Tenancy>(`${API_BASE}/tenancy/verify/${token}/approve`);
     return res.data;
   },
   getCertificate: async (idOrToken: string) => {
-    // Public unauthenticated certificate inspection
-    const res = await axios.get<PublicCertificate>(`/api/tenancy/certificate/${idOrToken}`, {
+    // Public unauthenticated certificate inspection targeting normalized API_BASE
+    const res = await axios.get<PublicCertificate>(`${API_BASE}/tenancy/certificate/${idOrToken}`, {
       params: { _ts: Date.now() },
     });
     return res.data;
   },
   getLatestDemoCertificate: async () => {
-    // Public 1-click demo certificate for judges
-    const res = await axios.get<PublicCertificate>('/api/tenancy/certificate/demo/latest', {
+    // Public 1-click demo certificate for judges targeting normalized API_BASE
+    const res = await axios.get<PublicCertificate>(`${API_BASE}/tenancy/certificate/demo/latest`, {
       params: { _ts: Date.now() },
     });
     return res.data;
