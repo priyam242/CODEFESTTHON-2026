@@ -49,6 +49,9 @@ importers:
       '@rollup/wasm-node':
         specifier: ^4.68.7
         version: 4.68.7
+      '@tailwindcss/oxide-win32-x64-msvc':
+        specifier: 4.3.5
+        version: 4.3.5
       '@tailwindcss/postcss':
         specifier: ^4.3.5
         version: 4.3.5
@@ -3601,8 +3604,7 @@ snapshots:
   '@tailwindcss/oxide-win32-arm64-msvc@4.3.5':
     optional: true
 
-  '@tailwindcss/oxide-win32-x64-msvc@4.3.5':
-    optional: true
+  '@tailwindcss/oxide-win32-x64-msvc@4.3.5': {}
 
   '@tailwindcss/oxide@4.3.5':
     optionalDependencies:
