@@ -123,6 +123,11 @@ export const PublicVerifier: React.FC = () => {
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span>100% In-Browser Web Crypto • 0 Bytes Uploaded to Server</span>
         </div>
+
+        {/* Judge Courtroom Explainer Banner */}
+        <div className="mt-3.5 max-w-2xl mx-auto px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono leading-relaxed shadow-sm">
+          <span className="font-bold text-emerald-400">Zero-Trust Courtroom Proof:</span> Drop any original room photo here to mathematically verify in-browser (via SHA-256 WebCrypto, zero server upload) that zero pixels were altered since Move-In.
+        </div>
       </div>
 
       {/* Lookup Bar + Judge 1-Click Demo */}

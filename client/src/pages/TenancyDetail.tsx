@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   Shield,
@@ -82,20 +82,28 @@ export const TenancyDetail: React.FC = () => {
     };
   }, [uploadingMoveOut]);
 
+  const isInitialLoad = useRef(true);
+
   const loadData = useCallback(async () => {
     if (!id) return;
     try {
       const data = await tenancyApi.getOne(id);
       setTenancy(data);
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Failed to load tenancy details');
+      if (isInitialLoad.current) {
+        setError(err?.response?.data?.message || err?.message || 'Failed to load tenancy details');
+      }
     } finally {
-      setLoading(false);
+      if (isInitialLoad.current) {
+        setLoading(false);
+        isInitialLoad.current = false;
+      }
     }
   }, [id]);
 
-  // Real-time synchronization across browser tabs (BroadcastChannel + polling fallback)
-  const { isLiveSynced } = useLiveSync(loadData, 4000);
+  // Real-time synchronization across browser tabs (BroadcastChannel + polling fallback with modal pause shield)
+  const isModalOpen = showAddModal || activeMoveOutItem !== null || showUpiModal || uploadingMoveIn || uploadingMoveOut || approving;
+  const { isLiveSynced } = useLiveSync(loadData, 4000, isModalOpen);
 
   useEffect(() => {
     loadData();
@@ -507,7 +515,11 @@ export const TenancyDetail: React.FC = () => {
                   className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold font-mono transition shadow-sm"
                 >
                   <IndianRupee className="w-3.5 h-3.5" />
-                  <span>Instant Dynamic UPI Settlement (₹{estimatedRefund.toLocaleString('en-IN')})</span>
+                  <span>
+                    {isLandlord
+                      ? `💸 Pay Net Refund via UPI QR (₹${estimatedRefund.toLocaleString('en-IN')})`
+                      : `💰 Expected UPI Refund from Owner (₹${estimatedRefund.toLocaleString('en-IN')})`}
+                  </span>
                 </button>
               </div>
             </div>
@@ -579,23 +591,32 @@ export const TenancyDetail: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2">
                 {!isLandlord && (
                   <>
-                    <button
-                      onClick={handleNotifyOwner}
-                      disabled={notifyingOwner}
-                      className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition shadow-md shadow-amber-500/20 active:scale-95"
-                    >
-                      <Bell className="w-3.5 h-3.5" />
-                      <span>{notifyingOwner ? 'Dispatching...' : '🔔 Send Approval Request to Owner'}</span>
-                    </button>
-                    <a
-                      href={whatsappUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-md shadow-emerald-600/20 active:scale-95"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>Share via WhatsApp</span>
-                    </a>
+                    {tenancy.status === 'APPROVED' || tenancy.status === 'LOCKED' || tenancy.status === 'COMPLETED' ? (
+                      <span className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>✅ Counterparty Signed &amp; Cryptographically Sealed</span>
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleNotifyOwner}
+                          disabled={notifyingOwner}
+                          className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition shadow-md shadow-amber-500/20 active:scale-95"
+                        >
+                          <Bell className="w-3.5 h-3.5" />
+                          <span>{notifyingOwner ? 'Dispatching...' : '🔔 Send Approval Request to Owner'}</span>
+                        </button>
+                        <a
+                          href={whatsappUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-md shadow-emerald-600/20 active:scale-95"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Share via WhatsApp</span>
+                        </a>
+                      </>
+                    )}
                   </>
                 )}
                 {isLandlord && tenancy.status !== 'APPROVED' && (
@@ -621,7 +642,7 @@ export const TenancyDetail: React.FC = () => {
                   rel="noreferrer"
                   className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
                 >
-                  <span>Open Portal</span>
+                  <span>{tenancy.status === 'APPROVED' ? 'View Signed Portal' : 'Open Portal'}</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
@@ -645,22 +666,36 @@ export const TenancyDetail: React.FC = () => {
           </div>
 
           {/* Room Items Inventory Section */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
             <div>
               <h2 className="text-xl font-bold text-slate-100">Move-In Room Inventory</h2>
               <p className="text-xs text-slate-400">
                 Each item is timestamped and cryptographically fingerprinted using SHA-256 hashing.
               </p>
             </div>
-            {!isLandlord && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-lg shadow-emerald-500/20"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Upload Room Item</span>
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {(tenancy.status === 'APPROVED' || tenancy.status === 'LOCKED' || tenancy.status === 'COMPLETED') && (
+                <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-mono font-semibold">
+                  <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>🔒 Baseline Inventory Sealed</span>
+                </span>
+              )}
+              {items.length > 0 && items.every((i) => Boolean(i.moveOutPhotoUrl || i.aiVerdict)) && (
+                <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/25 text-cyan-300 text-xs font-mono font-semibold">
+                  <CheckCheck className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>🏁 Property Vacated &amp; AI Audited</span>
+                </span>
+              )}
+              {!isLandlord && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-lg shadow-emerald-500/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Upload Room Item</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {items.length === 0 ? (
@@ -1184,7 +1219,9 @@ export const TenancyDetail: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Tenant UPI VPA:</span>
-                <span className="text-emerald-400 font-bold select-all">tenant.aarav@okhdfcbank</span>
+                <span className="text-emerald-400 font-bold select-all">
+                  {(tenancy as any).tenantUpi || (currentUser?.role === 'TENANT' && currentUser?.email ? currentUser.email.split('@')[0] + '@okaxis' : 'tenant.aarav@okhdfcbank')}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Reference:</span>
@@ -1197,7 +1234,8 @@ export const TenancyDetail: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  const upiUrl = `upi://pay?pa=tenant.aarav@okhdfcbank&pn=Aarav+Sharma&am=${estimatedRefund}&cu=INR&tn=RentShield+Escrow+Settlement+Refund`;
+                  const targetVpa = (tenancy as any).tenantUpi || (currentUser?.role === 'TENANT' && currentUser?.email ? currentUser.email.split('@')[0] + '@okaxis' : 'tenant.aarav@okhdfcbank');
+                  const upiUrl = `upi://pay?pa=${encodeURIComponent(targetVpa)}&pn=Aarav+Sharma&am=${estimatedRefund}&cu=INR&tn=RentShield+Escrow+Settlement+Refund`;
                   navigator.clipboard.writeText(upiUrl);
                   setCopiedUpi(true);
                   setTimeout(() => setCopiedUpi(false), 2000);
@@ -1207,10 +1245,10 @@ export const TenancyDetail: React.FC = () => {
                 {copiedUpi ? 'Copied UPI URI!' : 'Copy UPI Link'}
               </button>
               <a
-                href={`upi://pay?pa=tenant.aarav@okhdfcbank&pn=Aarav+Sharma&am=${estimatedRefund}&cu=INR&tn=RentShield+Escrow+Settlement+Refund`}
+                href={`upi://pay?pa=${encodeURIComponent((tenancy as any).tenantUpi || 'tenant.aarav@okhdfcbank')}&pn=Aarav+Sharma&am=${estimatedRefund}&cu=INR&tn=RentShield+Escrow+Settlement+Refund`}
                 className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
               >
-                Pay in App
+                {isLandlord ? 'Pay in App' : 'Open in UPI App'}
               </a>
             </div>
           </div>

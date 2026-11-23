@@ -110,7 +110,7 @@ export interface Tenancy {
   signerAudit?: string | any;
   revisionNotes?: string | null;
   landlordToken: string;
-  status: 'ACTIVE' | 'APPROVED' | 'COMPLETED' | 'PENDING' | 'REVISION_REQUESTED';
+  status: 'ACTIVE' | 'APPROVED' | 'COMPLETED' | 'PENDING' | 'REVISION_REQUESTED' | 'VACATED' | 'LOCKED' | string;
   moveInHash?: string | null;
   estimatedRefund?: number | string | null;
   userId: string;

@@ -28,8 +28,8 @@ export const Navbar: React.FC = () => {
     }
   }, [user]);
 
-  // Real-time synchronization + 5-second polling for live notification popup
-  useLiveSync(checkPending, 5000);
+  // Real-time synchronization + 4-second polling for live notification popup
+  useLiveSync(checkPending, 4000);
 
   useEffect(() => {
     checkPending();

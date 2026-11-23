@@ -43,17 +43,27 @@ export const emitSyncEvent = (type: string, tenancyId?: string) => {
  * Hook to listen for cross-tab broadcast events AND background visibility polling.
  * Automatically triggers onSync callback without page reloads.
  */
-export const useLiveSync = (onSync: () => void | Promise<void>, intervalMs = 4000) => {
+export const useLiveSync = (
+  onSync: () => void | Promise<void>,
+  intervalMs = 4000,
+  isPaused = false
+) => {
   const [isLiveSynced, setIsLiveSynced] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const syncTimeoutRef = useRef<any>(null);
   const onSyncRef = useRef(onSync);
+  const isPausedRef = useRef(isPaused);
 
   useEffect(() => {
     onSyncRef.current = onSync;
   }, [onSync]);
 
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
   const triggerSync = useCallback(() => {
+    if (isPausedRef.current) return;
     try {
       const res = onSyncRef.current();
       if (res instanceof Promise) {
@@ -91,16 +101,16 @@ export const useLiveSync = (onSync: () => void | Promise<void>, intervalMs = 400
 
     // 3. Tab focus & visibility re-sync
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !isPausedRef.current) {
         triggerSync();
       }
     };
     window.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', handleVisibility);
 
-    // 4. Background lightweight visibility-aware polling timer
+    // 4. Background lightweight visibility-aware polling timer (4s)
     const intervalId = setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !isPausedRef.current) {
         // Silent background refresh
         try {
           const res = onSyncRef.current();
