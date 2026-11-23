@@ -32,6 +32,11 @@ export class TenancyController {
     return this.tenancyService.resetDemoData();
   }
 
+  @Post('demo/clear')
+  async clearAll() {
+    return this.tenancyService.clearAllData();
+  }
+
   @Get('certificate/demo/latest')
   async getLatestDemoCertificate() {
     return this.tenancyService.getLatestDemoCertificate();

@@ -234,6 +234,10 @@ export class TenancyService {
     return this.getPublicCertificate(selected.id);
   }
 
+  async clearAllData() {
+    return this.prisma.clearAllData();
+  }
+
   async resetDemoData() {
     await this.prisma.seedDemoData(true);
     return {

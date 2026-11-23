@@ -45,7 +45,24 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       this.isConnected = false;
       this.logger.warn(` PostgreSQL not reachable (${err?.message || 'Offline'}). Operating with in-memory fallback store for offline continuity.`);
     }
-    await this.seedDemoData();
+    // Clean startup: Do not automatically re-seed demo data on boot so DB remains empty
+  }
+
+  async clearAllData() {
+    this.memoryItems.clear();
+    this.memoryTenancies.clear();
+    this.memoryUsers.clear();
+    if (this.isConnected) {
+      try {
+        await this.$executeRawUnsafe(`TRUNCATE TABLE "Item", "Tenancy", "User" CASCADE;`);
+      } catch {
+        try { await this.$executeRawUnsafe(`DELETE FROM "Item";`); } catch {}
+        try { await this.$executeRawUnsafe(`DELETE FROM "Tenancy";`); } catch {}
+        try { await this.$executeRawUnsafe(`DELETE FROM "User";`); } catch {}
+      }
+    }
+    this.logger.log(' All database and in-memory tables wiped clean.');
+    return { success: true, message: 'All database and in-memory tables wiped clean.' };
   }
 
   async ensureTablesExist() {
