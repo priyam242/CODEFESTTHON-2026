@@ -41,6 +41,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
       // Auto-ensure core tables exist on Neon PostgreSQL even on fresh blank database
       await this.ensureTablesExist();
+      // Ensure 1-click Judge demo data exists if not already present
+      await this.seedDemoData(false);
     } catch (err: any) {
       this.isConnected = false;
       this.logger.warn(` PostgreSQL not reachable (${err?.message || 'Offline'}). Operating with in-memory fallback store for offline continuity.`);
@@ -121,20 +123,25 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       `);
 
       // Ensure anti-fraud and audit columns exist in existing PostgreSQL databases
-      await this.$executeRawUnsafe(`
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "landlordUpi" TEXT;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "agreementRef" TEXT;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "signerAudit" TEXT;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "revisionNotes" TEXT;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMP(3);
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "customQrUrl" TEXT;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "landlordQrUrl" TEXT;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantQrUrl" TEXT;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantUpi" TEXT;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaid" BOOLEAN DEFAULT false;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaymentId" TEXT;
-        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "settlementPaymentId" TEXT;
-      `);
+      const alterQueries = [
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "landlordUpi" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "agreementRef" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "signerAudit" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "revisionNotes" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMP(3);`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "customQrUrl" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "landlordQrUrl" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantQrUrl" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantUpi" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaid" BOOLEAN DEFAULT false;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaymentId" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "settlementPaymentId" TEXT;`,
+      ];
+      for (const q of alterQueries) {
+        try {
+          await this.$executeRawUnsafe(q);
+        } catch {}
+      }
       this.logger.log(' Core database schema verified / created on PostgreSQL');
     } catch (e: any) {
       this.logger.warn(` Schema ensure note: ${e?.message}`);

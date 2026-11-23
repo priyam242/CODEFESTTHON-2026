@@ -30,4 +30,6 @@ Thumbs.db
 *.njsproj
 
 # Hackathon Temporary Artifacts
-output.txt
+test-results/
+playwright-report/
+
