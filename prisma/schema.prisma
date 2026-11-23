@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String   @default("")
+  role      String   @default("TENANT")
+  tenancies Tenancy[]
+  createdAt DateTime @default(now())
+}
+
+model Tenancy {
+  id              String   @id @default(uuid())
+  propertyTitle   String
+  propertyAddress String
+  depositAmount   Decimal  @db.Decimal
+  landlordName    String
+  landlordPhone   String
+  landlordEmail   String?
+  landlordToken   String   @unique
+  status          String   @default("ACTIVE")
+  moveInHash      String?
+  estimatedRefund Decimal? @db.Decimal
+  depositAmountDecimal Decimal? @db.Decimal
+
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  items           Item[]
+  createdAt       DateTime @default(now())
+}
+
+model Item {
+  id              String   @id @default(uuid())
+  roomName        String
+  itemName        String
+  moveInNotes     String?
+  moveInPhotoUrl  String
+  moveInPhotoHash String?
+  moveOutPhotoUrl String?
+  moveOutPhotoHash String?
+  aiVerdict       String?  
+  aiExplanation   String?
+  suggestedCut    Decimal? @db.Decimal
+
+  tenancyId       String
+  tenancy         Tenancy  @relation(fields: [tenancyId], references: [id])
+  createdAt       DateTime @default(now())
+}
