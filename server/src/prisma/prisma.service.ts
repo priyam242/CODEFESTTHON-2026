@@ -61,15 +61,28 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
       // 3. Seed Realistic Indian Rental Tenancy (2BHK Indiranagar, Bangalore)
       const tenancyId = 'demo-tenancy-indiranagar-001';
+
+      if (force) {
+        if (this.isConnected) {
+          try {
+            await (this as any).item.deleteMany({});
+            await (this as any).tenancy.deleteMany({});
+          } catch {}
+        } else {
+          this.memoryTenancies.clear();
+          this.memoryItems.clear();
+        }
+      }
+
       const existingTenancy = await this.tenancyClient.findUnique({ where: { id: tenancyId } });
 
       if (!existingTenancy || force) {
-        if (this.isConnected) {
+        if (this.isConnected && !force) {
           try {
             await (this as any).item.deleteMany({ where: { tenancyId } });
             await (this as any).tenancy.deleteMany({ where: { id: tenancyId } });
           } catch {}
-        } else {
+        } else if (!force) {
           this.memoryTenancies.delete(tenancyId);
           for (const [k, v] of this.memoryItems.entries()) {
             if (v.tenancyId === tenancyId) this.memoryItems.delete(k);
@@ -88,16 +101,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             landlordEmail: landlordEmail,
             landlordToken: 'demo-magic-token-2026',
             status: 'APPROVED',
-            moveInHash: 'a7b8c9d0e1f234567890abcdef1234567890abcdef1234567890abcdef123456',
+            moveInHash: '58a9db3bdc324855635e803e45982f1603afd532eeb6dfa4f92a73332df269fe',
             estimatedRefund: 50000,
             userId: tenant.id,
           },
         });
 
-        // Seed 3 realistic pre-hashed inventory fixtures
-        const samplePhoto1 = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&auto=format&fit=crop&q=80';
-        const samplePhoto2 = 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=600&auto=format&fit=crop&q=80';
-        const samplePhoto3 = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=600&auto=format&fit=crop&q=80';
+        // Seed 3 realistic pre-hashed inventory fixtures with high-res interior thumbnails
+        const samplePhoto1 = 'https://images.unsplash.com/photo-1595428774223-ef52624120d2?w=800&auto=format&fit=crop&q=80';
+        const samplePhoto2 = 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=800&auto=format&fit=crop&q=80';
+        const samplePhoto3 = 'https://images.unsplash.com/photo-1615874959474-d609969a20ed?w=800&auto=format&fit=crop&q=80';
 
         await this.itemClient.create({
           data: {
@@ -106,7 +119,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             itemName: 'Teak Wood Double Wardrobe',
             moveInNotes: 'Pristine polished teak finish, all 4 internal shelves and hinges intact with keys.',
             moveInPhotoUrl: samplePhoto1,
-            moveInPhotoHash: '7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
+            moveInPhotoHash: '45210e409329f475e91241b6f60c28f6da45acab8639d3bf6f3a4c70c100d17b',
             tenancyId: demoTenancy.id,
           },
         });
@@ -118,7 +131,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             itemName: 'Granite Countertop & 3-Burner Hob',
             moveInNotes: 'Jet black polished granite without any hairline cracks; gas burners operational.',
             moveInPhotoUrl: samplePhoto2,
-            moveInPhotoHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+            moveInPhotoHash: 'f1a0fa58d46547f7131791b4fe579506011c5bc3f4d203d30202bf2e5aedec72',
             tenancyId: demoTenancy.id,
           },
         });
@@ -130,7 +143,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             itemName: 'Daikin 1.5 Ton Inverter AC',
             moveInNotes: 'Brand new condition, cooling tested at 18C, remote controller operational.',
             moveInPhotoUrl: samplePhoto3,
-            moveInPhotoHash: 'ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb',
+            moveInPhotoHash: '96387f60937f6fb9dc418675ee7b14df6be3ffd231a8616f1bd506475bc95854',
             tenancyId: demoTenancy.id,
           },
         });

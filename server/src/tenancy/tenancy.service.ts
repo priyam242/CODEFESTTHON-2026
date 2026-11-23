@@ -102,7 +102,7 @@ export class TenancyService {
       where: { landlordToken: token },
       data: {
         status: 'APPROVED',
-        moveInHash: moveInHash || 'SEALED_HASH_APPROVED',
+        moveInHash: moveInHash || createHash('sha256').update(tenancy.id + ':sealed-baseline').digest('hex'),
       },
     });
   }
@@ -148,7 +148,7 @@ export class TenancyService {
       depositAmount: tenancy.depositAmount,
       landlordName: tenancy.landlordName,
       status: tenancy.status,
-      moveInHash: tenancy.moveInHash || 'SEALED_HASH_ACTIVE',
+      moveInHash: tenancy.moveInHash || createHash('sha256').update(tenancy.id + ':sealed-baseline').digest('hex'),
       estimatedRefund: tenancy.estimatedRefund,
       createdAt: tenancy.createdAt,
       totalItems: tenancy.items?.length || 0,
