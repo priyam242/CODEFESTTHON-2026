@@ -21,6 +21,7 @@ import {
   Copy,
   Receipt,
   RotateCcw,
+  CreditCard,
 } from 'lucide-react';
 import { tenancyApi, Tenancy, authApi, api } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
@@ -37,6 +38,8 @@ export const Dashboard: React.FC = () => {
 
   // Real Phone-Scannable Payment & Settlement Modal State
   const [selectedPaymentTenancy, setSelectedPaymentTenancy] = useState<Tenancy | null>(null);
+  const [paymentModalStage, setPaymentModalStage] = useState<'DEPOSIT' | 'SETTLEMENT'>('SETTLEMENT');
+  const [isRecipientSettingsOnly, setIsRecipientSettingsOnly] = useState(false);
   const [settledMap, setSettledMap] = useState<Record<string, boolean>>({});
 
   const navigate = useNavigate();
@@ -474,6 +477,22 @@ export const Dashboard: React.FC = () => {
                     {tenancy.propertyAddress}
                   </p>
 
+                  {/* STAGE 1: Move-In Escrow Deposit Pay Button for Unfunded Tenancy */}
+                  {!tenancy.depositPaid && !isLandlord && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentModalStage('DEPOSIT');
+                        setIsRecipientSettingsOnly(false);
+                        setSelectedPaymentTenancy(tenancy);
+                      }}
+                      className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>💳 Pay &amp; Lock Deposit (₹{originalDeposit.toLocaleString('en-IN')})</span>
+                    </button>
+                  )}
+
                   {/* Cryptographic SHA-256 Escrow Seal Strip */}
                   {tenancy.moveInHash && (
                     <div className="mt-3.5 p-2 rounded-lg bg-slate-950/80 border border-slate-800/90 font-mono text-[11px] text-emerald-400 flex items-center justify-between">
@@ -506,20 +525,61 @@ export const Dashboard: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Real Phone-Scannable UPI QR Payout CTA Button */}
+                  {/* STAGE 2: Real Razorpay / Phone-Scannable UPI Settlement CTA */}
                   {(hasAiAudit || isVacated) && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPaymentTenancy(tenancy)}
-                      className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95"
-                    >
-                      <QrCode className="w-3.5 h-3.5" />
-                      <span>
-                        {isLandlord
-                          ? `💸 Pay Net Refund via UPI QR (₹${netRefund.toLocaleString('en-IN')})`
-                          : `💰 Settle / Receive Refund via UPI QR (₹${netRefund.toLocaleString('en-IN')})`}
-                      </span>
-                    </button>
+                    totalDeductions < originalDeposit ? (
+                      isLandlord ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('SETTLEMENT');
+                            setIsRecipientSettingsOnly(false);
+                            setSelectedPaymentTenancy(tenancy);
+                          }}
+                          className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95"
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          <span>💸 Pay Net Refund to Tenant (₹{netRefund.toLocaleString('en-IN')})</span>
+                        </button>
+                      ) : (
+                        <div className="mt-3 flex items-center space-x-2">
+                          <div className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-400 text-center font-bold">
+                            ⏳ Awaiting Refund: ₹{netRefund.toLocaleString('en-IN')}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentModalStage('SETTLEMENT');
+                              setIsRecipientSettingsOnly(true);
+                              setSelectedPaymentTenancy(tenancy);
+                            }}
+                            title="Set receiving UPI ID / QR"
+                            className="py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition"
+                          >
+                            ⚙️ QR
+                          </button>
+                        </div>
+                      )
+                    ) : totalDeductions > originalDeposit ? (
+                      !isLandlord ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('SETTLEMENT');
+                            setIsRecipientSettingsOnly(false);
+                            setSelectedPaymentTenancy(tenancy);
+                          }}
+                          className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs font-mono shadow-md shadow-rose-500/20 transition active:scale-95"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>💳 Pay Excess Damage Due (₹{(totalDeductions - originalDeposit).toLocaleString('en-IN')})</span>
+                        </button>
+                      ) : (
+                        <div className="mt-3 py-1.5 px-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-amber-400 text-center font-bold">
+                          ⏳ Awaiting Damage Payment: ₹{(totalDeductions - originalDeposit).toLocaleString('en-IN')}
+                        </div>
+                      )
+                    ) : null
                   )}
 
                   {/* Protocol Stage Mini Progress Bar */}
@@ -658,12 +718,20 @@ export const Dashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Sealed Cryptographic Fingerprint */}
-                    {tenancy.moveInHash && (
-                      <div className="mt-3 p-2 rounded-lg bg-slate-950/60 border border-slate-800 text-[10px] font-mono text-slate-400 truncate" title={tenancy.moveInHash}>
-                        SHA-256: {tenancy.moveInHash.substring(0, 16)}...
-                      </div>
-                    )}
+                    {/* Verified Payment Ref / UTR ID & Sealed Hash */}
+                    <div className="mt-3 space-y-1.5">
+                      {(tenancy.settlementPaymentId || tenancy.depositPaymentId) && (
+                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-[10px] font-mono text-emerald-300 flex items-center justify-between">
+                          <span className="text-slate-400">Payment Ref / UTR:</span>
+                          <span className="font-bold">{tenancy.settlementPaymentId || tenancy.depositPaymentId}</span>
+                        </div>
+                      )}
+                      {tenancy.moveInHash && (
+                        <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800 text-[10px] font-mono text-slate-400 truncate" title={tenancy.moveInHash}>
+                          SHA-256: {tenancy.moveInHash.substring(0, 16)}...
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Actions */}
@@ -689,13 +757,15 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Real Phone-Scannable UPI QR Payment & Settlement Modal */}
+      {/* Real Razorpay / Phone-Scannable UPI QR Payment & Settlement Modal */}
       {selectedPaymentTenancy && (
         <PaymentModal
           isOpen={true}
           onClose={() => setSelectedPaymentTenancy(null)}
           tenancy={selectedPaymentTenancy}
+          stage={paymentModalStage}
           currentUserRole={isLandlord ? 'LANDLORD' : 'TENANT'}
+          isRecipientSettingsOnly={isRecipientSettingsOnly}
           onSettled={(updated) => {
             setTenancies((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
             setSettledMap((prev) => ({ ...prev, [updated.id]: true }));

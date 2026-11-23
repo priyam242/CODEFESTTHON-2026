@@ -652,14 +652,14 @@ export const LandlordVerify: React.FC = () => {
         </div>
       )}
 
-      {/* Real Phone-Scannable UPI Refund Payout & Settlement Modal */}
+      {/* Real Razorpay / Phone-Scannable UPI Refund Payout & Settlement Modal */}
       {showPayoutModal && (
         <PaymentModal
           isOpen={true}
           onClose={() => setShowPayoutModal(false)}
           tenancy={tenancy}
           currentUserRole="LANDLORD"
-          mode="REFUND"
+          stage="SETTLEMENT"
           landlordToken={landlordToken}
           defaultAmount={netRefund}
           onSettled={(updated) => {

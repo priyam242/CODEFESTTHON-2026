@@ -138,9 +138,8 @@ export const IntroSplash: React.FC = () => {
   return (
     <div
       onClick={isMorphing ? undefined : handleSkip}
-      className={`fixed inset-0 select-none overflow-hidden flex items-center justify-center ${
-        isMorphing ? 'pointer-events-none' : 'cursor-pointer'
-      }`}
+      className={`fixed inset-0 select-none overflow-hidden flex items-center justify-center ${isMorphing ? 'pointer-events-none' : 'cursor-pointer'
+        }`}
       style={{
         zIndex: 99999,
         backgroundColor: isMorphing ? 'rgba(5, 9, 18, 0)' : '#050912',
@@ -192,9 +191,8 @@ export const IntroSplash: React.FC = () => {
 
       {/* Cyber Ambient Radial Glow */}
       <div
-        className={`absolute inset-0 pointer-events-none transition-opacity duration-700 ${
-          isMorphing ? 'opacity-0' : 'opacity-100'
-        }`}
+        className={`absolute inset-0 pointer-events-none transition-opacity duration-700 ${isMorphing ? 'opacity-0' : 'opacity-100'
+          }`}
         style={{
           background: 'radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.20) 0%, rgba(5, 9, 18, 0.94) 75%)',
         }}
@@ -202,9 +200,8 @@ export const IntroSplash: React.FC = () => {
 
       {/* Fine Background Grid Accent */}
       <div
-        className={`absolute inset-0 pointer-events-none transition-opacity duration-700 ${
-          isMorphing ? 'opacity-0' : 'opacity-35'
-        }`}
+        className={`absolute inset-0 pointer-events-none transition-opacity duration-700 ${isMorphing ? 'opacity-0' : 'opacity-35'
+          }`}
         style={{
           backgroundImage:
             'linear-gradient(rgba(16, 185, 129, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(16, 185, 129, 0.1) 1px, transparent 1px)',
@@ -331,9 +328,8 @@ export const IntroSplash: React.FC = () => {
 
         {/* Skip Tip */}
         <div
-          className={`mt-4 text-[11px] font-mono text-slate-500 transition-opacity duration-300 ${
-            isMorphing ? 'opacity-0' : 'opacity-75'
-          }`}
+          className={`mt-4 text-[11px] font-mono text-slate-500 transition-opacity duration-300 ${isMorphing ? 'opacity-0' : 'opacity-75'
+            }`}
         >
           Click anywhere or press Esc to skip
         </div>

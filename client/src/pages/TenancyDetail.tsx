@@ -23,6 +23,7 @@ import {
   Bell,
   MessageSquare,
   QrCode,
+  CreditCard,
 } from 'lucide-react';
 import { tenancyApi, itemsApi, Tenancy, Item, authApi, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
@@ -59,6 +60,8 @@ export const TenancyDetail: React.FC = () => {
   const [bypassDuplicateCheck, setBypassDuplicateCheck] = useState(false);
   const [computedMoveOutHash, setComputedMoveOutHash] = useState<string | null>(null);
   const [showUpiModal, setShowUpiModal] = useState(false);
+  const [paymentModalStage, setPaymentModalStage] = useState<'DEPOSIT' | 'SETTLEMENT'>('SETTLEMENT');
+  const [isRecipientSettingsOnly, setIsRecipientSettingsOnly] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
 
   const currentUser = authApi.getCurrentUser();
@@ -492,6 +495,43 @@ export const TenancyDetail: React.FC = () => {
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100">{tenancy.propertyTitle}</h1>
                 <p className="mt-1 text-xs sm:text-sm text-slate-400">{tenancy.propertyAddress}</p>
+
+                {/* STAGE 1: Move-In Security Deposit Escrow Alert & Pay Button */}
+                {!tenancy.depositPaid && !isLandlord && (
+                  <div className="mt-3.5 p-3.5 rounded-xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent border border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300">
+                        <CreditCard className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold font-mono text-emerald-300 uppercase tracking-wider">
+                          Stage 1 Required: Move-In Deposit Unfunded
+                        </div>
+                        <p className="text-[11px] text-slate-300 mt-0.5">
+                          Deposit of ₹{totalDeposit.toLocaleString('en-IN')} must be locked into cryptographic escrow to seal your tenancy.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentModalStage('DEPOSIT');
+                        setIsRecipientSettingsOnly(false);
+                        setShowUpiModal(true);
+                      }}
+                      className="py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap flex items-center justify-center space-x-1.5"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>💳 Pay &amp; Lock Deposit (₹{totalDeposit.toLocaleString('en-IN')})</span>
+                    </button>
+                  </div>
+                )}
+                {tenancy.depositPaid && (
+                  <div className="mt-2.5 inline-flex items-center space-x-1.5 text-[11px] font-mono px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-300">
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Deposit Escrow Locked: ₹{totalDeposit.toLocaleString('en-IN')} {tenancy.depositPaymentId ? `(Ref: ${tenancy.depositPaymentId})` : ''}</span>
+                  </div>
+                )}
               </div>
 
               {/* Deposit Breakdown Meter - JetBrains Mono */}
@@ -517,18 +557,94 @@ export const TenancyDetail: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowUpiModal(true)}
-                  className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold font-mono transition shadow-sm"
-                >
-                  <IndianRupee className="w-3.5 h-3.5" />
-                  <span>
-                    {isLandlord
-                      ? `💸 Pay Net Refund via UPI QR (₹${estimatedRefund.toLocaleString('en-IN')})`
-                      : `💰 Expected UPI Refund from Owner (₹${estimatedRefund.toLocaleString('en-IN')})`}
-                  </span>
-                </button>
+                {/* STAGE 2: Correct Payer & Action Button based on AI Audit */}
+                {items.some((it) => it.aiVerdict) ? (
+                  totalDeductions < totalDeposit ? (
+                    // Case A: Landlord Refunds Tenant
+                    isLandlord ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalStage('SETTLEMENT');
+                          setIsRecipientSettingsOnly(false);
+                          setShowUpiModal(true);
+                        }}
+                        className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold font-mono transition shadow-md shadow-emerald-500/20"
+                      >
+                        <IndianRupee className="w-3.5 h-3.5" />
+                        <span>💸 Pay Net Refund to Tenant (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
+                      </button>
+                    ) : (
+                      <div className="w-full flex items-center space-x-2">
+                        <div className="flex-1 px-3 py-2 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] font-mono text-emerald-400 text-center font-bold">
+                          ⏳ Awaiting Refund from Owner: ₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('SETTLEMENT');
+                            setIsRecipientSettingsOnly(true);
+                            setShowUpiModal(true);
+                          }}
+                          title="Upload or edit your receiving UPI ID / QR"
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-semibold transition whitespace-nowrap"
+                        >
+                          ⚙️ Receiving QR
+                        </button>
+                      </div>
+                    )
+                  ) : totalDeductions > totalDeposit ? (
+                    // Case B: Tenant Pays Excess Damage
+                    !isLandlord ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalStage('SETTLEMENT');
+                          setIsRecipientSettingsOnly(false);
+                          setShowUpiModal(true);
+                        }}
+                        className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white text-xs font-extrabold font-mono transition shadow-md shadow-rose-500/20"
+                      >
+                        <IndianRupee className="w-3.5 h-3.5" />
+                        <span>💳 Pay Excess Damage Due (₹{(totalDeductions - totalDeposit).toLocaleString('en-IN')})</span>
+                      </button>
+                    ) : (
+                      <div className="w-full px-3 py-2 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] font-mono text-amber-400 text-center font-bold">
+                        ⏳ Awaiting Excess Damage from Tenant: ₹{(totalDeductions - totalDeposit).toLocaleString('en-IN')}
+                      </div>
+                    )
+                  ) : (
+                    // Case C: Zero Balance
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentModalStage('SETTLEMENT');
+                        setIsRecipientSettingsOnly(false);
+                        setShowUpiModal(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold text-center"
+                    >
+                      ✅ Close Tenancy (₹0 Balance)
+                    </button>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentModalStage('SETTLEMENT');
+                      setIsRecipientSettingsOnly(false);
+                      setShowUpiModal(true);
+                    }}
+                    className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold font-mono transition shadow-sm"
+                  >
+                    <IndianRupee className="w-3.5 h-3.5" />
+                    <span>
+                      {isLandlord
+                        ? `💸 Pay Net Refund via UPI QR (₹${estimatedRefund.toLocaleString('en-IN')})`
+                        : `💰 Expected UPI Refund from Owner (₹${estimatedRefund.toLocaleString('en-IN')})`}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1114,9 +1230,13 @@ export const TenancyDetail: React.FC = () => {
           isOpen={true}
           onClose={() => setShowUpiModal(false)}
           tenancy={tenancy}
+          stage={paymentModalStage}
           currentUserRole={isLandlord ? 'LANDLORD' : 'TENANT'}
-          defaultAmount={estimatedRefund}
-          onSettled={(updated) => setTenancy(updated)}
+          isRecipientSettingsOnly={isRecipientSettingsOnly}
+          onSettled={(updated) => {
+            setTenancy(updated);
+            loadData();
+          }}
         />
       )}
     </div>

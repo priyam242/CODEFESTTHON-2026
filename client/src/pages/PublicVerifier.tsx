@@ -228,6 +228,12 @@ export const PublicVerifier: React.FC = () => {
                 <div>Owner Rent VPA: <span className="text-emerald-300">{certificate.landlordUpi || 'ramesh.malik@okhdfcbank'}</span></div>
                 <div>Agreement Ref ID: <span className="text-slate-100">{certificate.agreementRef || 'BLR-IND-2026-KA-4892'}</span></div>
               </div>
+              {(certificate.settlementPaymentId || certificate.depositPaymentId) && (
+                <div className="mt-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono text-emerald-300 flex items-center justify-between">
+                  <span className="text-slate-400">Escrow Payment Ref / Bank UTR:</span>
+                  <span className="font-bold text-emerald-400">{certificate.settlementPaymentId || certificate.depositPaymentId}</span>
+                </div>
+              )}
             </div>
           </div>
 

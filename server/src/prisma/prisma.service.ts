@@ -129,6 +129,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMP(3);
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "customQrUrl" TEXT;
         ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantUpi" TEXT;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaid" BOOLEAN DEFAULT false;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaymentId" TEXT;
+        ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "settlementPaymentId" TEXT;
       `);
       this.logger.log(' Core database schema verified / created on PostgreSQL');
     } catch (e: any) {
@@ -227,6 +230,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             }),
             landlordToken: 'demo-magic-token-2026',
             status: 'APPROVED',
+            depositPaid: true,
+            depositPaymentId: 'pay_demo_escrow_deposit_001',
             moveInHash: '58a9db3bdc324855635e803e45982f1603afd532eeb6dfa4f92a73332df269fe',
             estimatedRefund: 50000,
             userId: tenant.id,

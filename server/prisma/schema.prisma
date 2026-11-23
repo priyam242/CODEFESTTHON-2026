@@ -37,6 +37,9 @@ model Tenancy {
   settledAt       DateTime?
   customQrUrl     String?
   tenantUpi       String?
+  depositPaid     Boolean  @default(false)
+  depositPaymentId String?
+  settlementPaymentId String?
 
   userId          String
   user            User     @relation(fields: [userId], references: [id])

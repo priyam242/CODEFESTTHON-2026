@@ -116,6 +116,9 @@ export interface Tenancy {
   settledAt?: string | null;
   customQrUrl?: string | null;
   tenantUpi?: string | null;
+  depositPaid?: boolean | null;
+  depositPaymentId?: string | null;
+  settlementPaymentId?: string | null;
   userId: string;
   createdAt: string;
   items?: Item[];
@@ -133,6 +136,9 @@ export interface PublicCertificate {
   signerAudit?: string | any;
   revisionNotes?: string | null;
   status: string;
+  depositPaid?: boolean | null;
+  depositPaymentId?: string | null;
+  settlementPaymentId?: string | null;
   moveInHash: string;
   estimatedRefund?: number | string | null;
   createdAt: string;
@@ -246,6 +252,48 @@ export const itemsApi = {
     const res = await api.post<Item>(`/items/${itemId}/move-out`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return res.data;
+  },
+};
+
+export const paymentsApi = {
+  createOrder: async (data: {
+    tenancyId: string;
+    stage: 'DEPOSIT' | 'SETTLEMENT';
+    amount: number;
+    landlordToken?: string;
+  }) => {
+    const res = await axios.post(`${API_BASE}/payments/create-order`, data);
+    return res.data;
+  },
+  verify: async (data: {
+    tenancyId: string;
+    stage: 'DEPOSIT' | 'SETTLEMENT';
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    razorpaySignature?: string;
+    utrNumber?: string;
+    landlordToken?: string;
+    customQrUrl?: string;
+    tenantUpi?: string;
+    landlordUpi?: string;
+  }) => {
+    const res = await axios.post<{
+      success: boolean;
+      stage: string;
+      paymentId: string;
+      tenancy: Tenancy;
+    }>(`${API_BASE}/payments/verify`, data);
+    return res.data;
+  },
+  updateRecipient: async (data: {
+    tenancyId?: string;
+    landlordToken?: string;
+    tenantUpi?: string;
+    landlordUpi?: string;
+    customQrUrl?: string;
+  }) => {
+    const res = await axios.post<Tenancy>(`${API_BASE}/payments/update-recipient`, data);
     return res.data;
   },
 };
