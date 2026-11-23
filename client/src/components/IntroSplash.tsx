@@ -1,39 +1,47 @@
 import React, { useEffect, useState, useRef } from 'react';
 
 /**
+ * In-memory module flag.
+ * - Resets to false on every page open, refresh (F5), or URL paste.
+ * - Remains true during client-side React Router navigation (/login -> /dashboard etc.)
+ * - Guaranteed to play on every page boot!
+ */
+let hasPlayedInCurrentSpaBoot = false;
+
+export const replayIntroAnimation = () => {
+  hasPlayedInCurrentSpaBoot = false;
+  window.dispatchEvent(new CustomEvent('replay-rentshield-intro'));
+};
+
+/**
  * IntroSplash:
  * Cinematic Cyber-Escrow Splash Intro that morphs smoothly into the top-left Navbar logo.
- * Triggers on fresh session or when ?intro=1 query param is set.
+ * Guaranteed to play on reload/fresh visit, with zero sessionStorage lockouts.
  */
 export const IntroSplash: React.FC = () => {
   const [phase, setPhase] = useState<'init' | 'center' | 'morph' | 'done'>('init');
   const [morphTransform, setMorphTransform] = useState<string>('translate3d(0, 0, 0) scale(1)');
   const [morphOpacity, setMorphOpacity] = useState<number>(1);
-  const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const activeTimersRef = useRef<{ morphTimer?: number; unmountTimer?: number }>({});
 
-  useEffect(() => {
-    // Check if animation should run
-    const searchParams = new URLSearchParams(window.location.search);
-    const forceIntro = searchParams.get('intro') === '1';
-    const seen = sessionStorage.getItem('rentshield_intro_seen');
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (!forceIntro && (seen || prefersReducedMotion)) {
-      setPhase('done');
-      return;
+  const clearExistingTimers = () => {
+    if (activeTimersRef.current.morphTimer) {
+      window.clearTimeout(activeTimersRef.current.morphTimer);
     }
+    if (activeTimersRef.current.unmountTimer) {
+      window.clearTimeout(activeTimersRef.current.unmountTimer);
+    }
+  };
 
-    // Start Phase 1: Center stage
+  const startAnimation = () => {
+    clearExistingTimers();
     setPhase('center');
+    setMorphTransform('translate3d(0, 0, 0) scale(1)');
+    setMorphOpacity(1);
 
-    // Timer for Phase 2: Morph to Navbar at 1.3s
-    const morphTimer = setTimeout(() => {
-      if (!contentRef.current) return;
-
+    // Stage 2 (1.8s): Morph and glide into Navbar brand position
+    const morphTimer = window.setTimeout(() => {
       const targetEl = document.getElementById('navbar-brand-logo');
       const targetRect = targetEl?.getBoundingClientRect() || {
         left: 24,
@@ -42,45 +50,82 @@ export const IntroSplash: React.FC = () => {
         height: 40,
       };
 
-      const windowW = window.innerWidth;
-      const windowH = window.innerHeight;
-      const centerX = windowW / 2;
-      const centerY = windowH / 2;
-      const targetCenterX = targetRect.left + (targetRect.width / 2);
-      const targetCenterY = targetRect.top + (targetRect.height / 2);
+      let currentCenterX = window.innerWidth / 2;
+      let currentCenterY = window.innerHeight / 2;
+      let currentH = 140;
 
-      const dx = targetCenterX - centerX;
-      const dy = targetCenterY - centerY;
-      const scale = Math.min(0.42, Math.max(0.28, targetRect.height / 115));
+      if (contentRef.current) {
+        const rect = contentRef.current.getBoundingClientRect();
+        currentCenterX = rect.left + rect.width / 2;
+        currentCenterY = rect.top + rect.height / 2;
+        currentH = rect.height || 140;
+      }
+
+      const targetCenterX = targetRect.left + targetRect.width / 2;
+      const targetCenterY = targetRect.top + targetRect.height / 2;
+
+      const dx = targetCenterX - currentCenterX;
+      const dy = targetCenterY - currentCenterY;
+      const scale = Math.min(0.42, Math.max(0.26, (targetRect.height || 40) / currentH));
 
       setPhase('morph');
       setMorphTransform(`translate3d(${dx.toFixed(1)}px, ${dy.toFixed(1)}px, 0) scale(${scale.toFixed(3)})`);
-      setMorphOpacity(0.15); // Fade smoothly as it lands over real navbar brand
-    }, 1300);
+      setMorphOpacity(0.08);
+    }, 1800);
 
-    // Timer for Phase 3: Unmount and persist session at 2.1s
-    const unmountTimer = setTimeout(() => {
-      sessionStorage.setItem('rentshield_intro_seen', 'true');
+    // Stage 3 (2.8s): Clean unmount
+    const unmountTimer = window.setTimeout(() => {
       setPhase('done');
-    }, 2150);
+    }, 2800);
+
+    activeTimersRef.current = { morphTimer, unmountTimer };
+  };
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const forceIntro = searchParams.get('intro') === '1';
+
+    // Play if first time in current SPA session boot OR forced via ?intro=1
+    if (!hasPlayedInCurrentSpaBoot || forceIntro) {
+      hasPlayedInCurrentSpaBoot = true;
+      startAnimation();
+    } else {
+      setPhase('done');
+    }
+
+    const handleReplayEvent = () => {
+      startAnimation();
+    };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        sessionStorage.setItem('rentshield_intro_seen', 'true');
+        clearExistingTimers();
         setPhase('done');
       }
     };
+
+    // Delegated click listener: Clicking top-left #navbar-brand-logo re-triggers intro
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('#navbar-brand-logo')) {
+        startAnimation();
+      }
+    };
+
+    window.addEventListener('replay-rentshield-intro', handleReplayEvent);
     window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('click', handleDocumentClick);
 
     return () => {
-      clearTimeout(morphTimer);
-      clearTimeout(unmountTimer);
+      clearExistingTimers();
+      window.removeEventListener('replay-rentshield-intro', handleReplayEvent);
       window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('click', handleDocumentClick);
     };
   }, []);
 
   const handleSkip = () => {
-    sessionStorage.setItem('rentshield_intro_seen', 'true');
+    clearExistingTimers();
     setPhase('done');
   };
 
@@ -92,14 +137,14 @@ export const IntroSplash: React.FC = () => {
 
   return (
     <div
-      ref={containerRef}
-      onClick={handleSkip}
-      className={`fixed inset-0 z-[9999] flex items-center justify-center transition-all duration-700 ease-out select-none ${
-        isMorphing ? 'bg-transparent pointer-events-none' : 'bg-[#050912] cursor-pointer'
+      onClick={isMorphing ? undefined : handleSkip}
+      className={`fixed inset-0 select-none overflow-hidden flex items-center justify-center ${
+        isMorphing ? 'pointer-events-none' : 'cursor-pointer'
       }`}
       style={{
+        zIndex: 99999,
         backgroundColor: isMorphing ? 'rgba(5, 9, 18, 0)' : '#050912',
-        transition: 'background-color 800ms cubic-bezier(0.22, 1, 0.36, 1)',
+        transition: 'background-color 850ms cubic-bezier(0.22, 1, 0.36, 1)',
       }}
     >
       <style>{`
@@ -112,22 +157,22 @@ export const IntroSplash: React.FC = () => {
           100% { transform: rotate(0deg); }
         }
         @keyframes rsLaserSweep {
-          0% { transform: translateY(-38px); opacity: 0; }
-          25% { opacity: 0.9; }
-          75% { opacity: 0.9; }
-          100% { transform: translateY(38px); opacity: 0; }
+          0% { transform: translateY(-44px); opacity: 0; }
+          20% { opacity: 0.95; }
+          80% { opacity: 0.95; }
+          100% { transform: translateY(44px); opacity: 0; }
         }
         @keyframes rsDrawShield {
           0% { stroke-dashoffset: 420; }
           100% { stroke-dashoffset: 0; }
         }
         @keyframes rsGlowPulse {
-          0%, 100% { filter: drop-shadow(0 0 16px rgba(16, 185, 129, 0.45)); }
-          50% { filter: drop-shadow(0 0 32px rgba(16, 185, 129, 0.85)); }
+          0%, 100% { filter: drop-shadow(0 0 18px rgba(16, 185, 129, 0.5)); }
+          50% { filter: drop-shadow(0 0 36px rgba(16, 185, 129, 0.9)); }
         }
         .rs-draw {
           stroke-dasharray: 420;
-          animation: rsDrawShield 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation: rsDrawShield 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
         .rs-hex-spin {
           transform-origin: center center;
@@ -138,7 +183,7 @@ export const IntroSplash: React.FC = () => {
           animation: rsReverseSpin 18s linear infinite;
         }
         .rs-laser {
-          animation: rsLaserSweep 1.1s ease-in-out infinite;
+          animation: rsLaserSweep 1.2s ease-in-out infinite;
         }
         .rs-pulse-glow {
           animation: rsGlowPulse 2s ease-in-out infinite;
@@ -151,19 +196,19 @@ export const IntroSplash: React.FC = () => {
           isMorphing ? 'opacity-0' : 'opacity-100'
         }`}
         style={{
-          background: 'radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.16) 0%, rgba(5, 9, 18, 0.92) 75%)',
+          background: 'radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.20) 0%, rgba(5, 9, 18, 0.94) 75%)',
         }}
       />
 
       {/* Fine Background Grid Accent */}
       <div
         className={`absolute inset-0 pointer-events-none transition-opacity duration-700 ${
-          isMorphing ? 'opacity-0' : 'opacity-30'
+          isMorphing ? 'opacity-0' : 'opacity-35'
         }`}
         style={{
           backgroundImage:
-            'linear-gradient(rgba(16, 185, 129, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(16, 185, 129, 0.08) 1px, transparent 1px)',
-          backgroundSize: '32px 32px',
+            'linear-gradient(rgba(16, 185, 129, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(16, 185, 129, 0.1) 1px, transparent 1px)',
+          backgroundSize: '36px 36px',
         }}
       />
 
@@ -175,14 +220,14 @@ export const IntroSplash: React.FC = () => {
           opacity: morphOpacity,
           transformOrigin: 'center center',
           transition: isMorphing
-            ? 'transform 820ms cubic-bezier(0.22, 1, 0.36, 1), opacity 750ms ease-out'
+            ? 'transform 850ms cubic-bezier(0.22, 1, 0.36, 1), opacity 800ms ease-out'
             : 'none',
         }}
         className="relative z-10 flex flex-col items-center justify-center"
       >
         {/* Holographic Shield Container */}
-        <div className="relative w-28 h-28 flex items-center justify-center rs-pulse-glow">
-          {/* Rotating Cryptographic Outer Ring */}
+        <div className="relative w-32 h-32 flex items-center justify-center rs-pulse-glow">
+          {/* Rotating Cryptographic Outer Hex Ring */}
           <svg className="absolute inset-0 w-full h-full rs-hex-spin" viewBox="0 0 100 100">
             <circle
               cx="50"
@@ -190,15 +235,15 @@ export const IntroSplash: React.FC = () => {
               r="46"
               fill="none"
               stroke="#10b981"
-              strokeWidth="1.2"
-              strokeDasharray="5 5"
-              strokeOpacity="0.45"
+              strokeWidth="1.4"
+              strokeDasharray="6 6"
+              strokeOpacity="0.5"
             />
             {/* Cardinal Circuit Nodes */}
-            <circle cx="50" cy="4" r="2" fill="#34d399" />
-            <circle cx="96" cy="50" r="2" fill="#34d399" />
-            <circle cx="50" cy="96" r="2" fill="#34d399" />
-            <circle cx="4" cy="50" r="2" fill="#34d399" />
+            <circle cx="50" cy="4" r="2.2" fill="#34d399" />
+            <circle cx="96" cy="50" r="2.2" fill="#34d399" />
+            <circle cx="50" cy="96" r="2.2" fill="#34d399" />
+            <circle cx="4" cy="50" r="2.2" fill="#34d399" />
           </svg>
 
           {/* Counter-rotating Inner Hex Ring */}
@@ -207,15 +252,15 @@ export const IntroSplash: React.FC = () => {
               points="50,10 85,28 85,72 50,90 15,72 15,28"
               fill="none"
               stroke="#06b6d4"
-              strokeWidth="0.8"
-              strokeDasharray="3 4"
-              strokeOpacity="0.3"
+              strokeWidth="1"
+              strokeDasharray="4 4"
+              strokeOpacity="0.35"
             />
           </svg>
 
           {/* Primary RentShield Vector Emblem */}
           <svg
-            className="w-20 h-20 relative z-10"
+            className="w-24 h-24 relative z-10"
             viewBox="0 0 64 64"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
@@ -239,7 +284,7 @@ export const IntroSplash: React.FC = () => {
               fill="url(#rsShieldGrad)"
               fillOpacity="0.25"
               stroke="url(#rsStrokeGrad)"
-              strokeWidth="2.5"
+              strokeWidth="2.6"
               strokeLinejoin="round"
               className="rs-draw"
             />
@@ -248,7 +293,7 @@ export const IntroSplash: React.FC = () => {
             <path
               d="M26 28 V22 C26 18.686 28.686 16 32 16 C35.314 16 38 18.686 38 22 V28"
               stroke="#a7f3d0"
-              strokeWidth="2.2"
+              strokeWidth="2.4"
               strokeLinecap="round"
             />
             {/* Lock Body */}
@@ -268,17 +313,17 @@ export const IntroSplash: React.FC = () => {
           </svg>
 
           {/* Sweeping Laser Beam */}
-          <div className="absolute w-24 h-[2px] bg-gradient-to-r from-transparent via-emerald-300 to-transparent shadow-[0_0_12px_#34d399] rs-laser pointer-events-none" />
+          <div className="absolute w-28 h-[2.5px] bg-gradient-to-r from-transparent via-emerald-300 to-transparent shadow-[0_0_14px_#34d399] rs-laser pointer-events-none" />
         </div>
 
         {/* Wordmark & Subtitle */}
-        <div className="mt-4 text-center">
-          <div className="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 via-emerald-200 to-white bg-clip-text text-transparent">
+        <div className="mt-5 text-center">
+          <div className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 via-emerald-200 to-white bg-clip-text text-transparent">
             RentShield
           </div>
-          <div className="flex items-center justify-center space-x-2 mt-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] font-mono tracking-widest text-emerald-400/90 uppercase font-semibold">
+          <div className="flex items-center justify-center space-x-2 mt-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-mono tracking-widest text-emerald-400/90 uppercase font-semibold">
               SHA-256 ESCROW PROTOCOL
             </span>
           </div>
@@ -287,7 +332,7 @@ export const IntroSplash: React.FC = () => {
         {/* Skip Tip */}
         <div
           className={`mt-4 text-[11px] font-mono text-slate-500 transition-opacity duration-300 ${
-            isMorphing ? 'opacity-0' : 'opacity-70'
+            isMorphing ? 'opacity-0' : 'opacity-75'
           }`}
         >
           Click anywhere or press Esc to skip
@@ -296,3 +341,4 @@ export const IntroSplash: React.FC = () => {
     </div>
   );
 };
+export default IntroSplash;

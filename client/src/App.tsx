@@ -25,7 +25,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-[#050811] cyber-grid-bg text-slate-100 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
-      <IntroSplash />
       {!isDedicatedLandlordPortal && <Navbar />}
       <main className="flex-1">{children}</main>
       <footer className="border-t border-slate-900/80 bg-slate-950/60 backdrop-blur-md py-6 text-center text-xs text-slate-500">
@@ -44,6 +43,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
+      <IntroSplash />
       <Layout>
         <Routes>
           <Route path="/login" element={<Login />} />
