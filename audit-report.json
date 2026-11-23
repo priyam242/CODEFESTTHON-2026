@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-11-23T07:57:09.801Z",
+  "consoleErrors": [],
+  "pageErrors": [],
+  "networkErrors": [],
+  "computedStyles": {
+    "/login": {
+      "backgroundColor": "oklab(0.208 -0.00310889 -0.0418848 / 0.9)",
+      "borderRadius": "16px",
+      "padding": "32px",
+      "display": "block"
+    },
+    "/dashboard": {
+      "display": "grid",
+      "gap": "16px"
+    }
+  },
+  "flowChecks": [
+    {
+      "step": "Tailwind CSS Compilation on /login",
+      "pass": true
+    },
+    {
+      "step": "1-Click Judge Login (Tenant)",
+      "pass": true
+    },
+    {
+      "step": "Seeded Tenancy Display",
+      "pass": true
+    },
+    {
+      "step": "4-Step Progressive Rail",
+      "pass": true
+    },
+    {
+      "step": "Pre-hashed Fixtures Loaded",
+      "pass": true
+    },
+    {
+      "step": "Move-In Item Upload & Hash",
+      "pass": true
+    },
+    {
+      "step": "Gemini AI Damage Audit",
+      "pass": true
+    },
+    {
+      "step": "Landlord Portal Lock",
+      "pass": true
+    },
+    {
+      "step": "Verifier Tamper Detection",
+      "pass": true
+    }
+  ],
+  "overallStatus": "PASS"
+}
