@@ -23,11 +23,17 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isDedicatedLandlordPortal = location.pathname.startsWith('/verify/') && location.pathname !== '/verify';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
+    <div className="min-h-screen bg-[#050811] cyber-grid-bg text-slate-100 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
       {!isDedicatedLandlordPortal && <Navbar />}
       <main className="flex-1">{children}</main>
-      <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-600">
-        RentShield &copy; {new Date().getFullYear()} &bull; Sealed Move-In Inventory &bull; Zero Deposit Disputes
+      <footer className="border-t border-slate-900/80 bg-slate-950/60 backdrop-blur-md py-6 text-center text-xs text-slate-500">
+        <div className="flex flex-col sm:flex-row items-center justify-center space-y-1 sm:space-y-0 sm:space-x-3">
+          <span>RentShield &copy; {new Date().getFullYear()}</span>
+          <span className="hidden sm:inline text-slate-700">&bull;</span>
+          <span className="text-emerald-400/90 font-mono text-[11px]">WebCrypto SHA-256 Sealed Escrow</span>
+          <span className="hidden sm:inline text-slate-700">&bull;</span>
+          <span>Zero Security Deposit Disputes</span>
+        </div>
       </footer>
     </div>
   );

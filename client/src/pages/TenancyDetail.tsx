@@ -2,24 +2,24 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   Shield,
-  ArrowLeft,
-  Building,
-  CheckCircle2,
-  Clock,
-  Copy,
-  ExternalLink,
-  Plus,
-  Camera,
   Upload,
   Sparkles,
-  IndianRupee,
-  FileText,
-  AlertTriangle,
+  Camera,
+  CheckCircle2,
+  Clock,
+  ArrowLeft,
+  ExternalLink,
+  Copy,
+  Plus,
   Lock,
-  Check,
-  Zap,
+  IndianRupee,
   ShieldCheck,
   FileCheck2,
+  AlertTriangle,
+  Zap,
+  Check,
+  Receipt,
+  CheckCheck,
 } from 'lucide-react';
 import { tenancyApi, itemsApi, Tenancy, Item, authApi } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
@@ -29,67 +29,78 @@ export const TenancyDetail: React.FC = () => {
   const [tenancy, setTenancy] = useState<Tenancy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
 
   // New Move-In Item Form state
   const [showAddModal, setShowAddModal] = useState(false);
   const [roomName, setRoomName] = useState('Living Room');
-  const [itemName, setItemName] = useState('Daikin Inverter AC 1.5 Ton');
+  const [itemName, setItemName] = useState('');
   const [moveInNotes, setMoveInNotes] = useState('Clean filters, no dents, working perfectly on move-in');
   const [moveInFile, setMoveInFile] = useState<File | null>(null);
   const [uploadingMoveIn, setUploadingMoveIn] = useState(false);
 
   // Move-Out Form state
   const [activeMoveOutItem, setActiveMoveOutItem] = useState<Item | null>(null);
-  const [moveOutNotes, setMoveOutNotes] = useState('Normal seasonal dust, standard usage, no cracks');
+  const [moveOutNotes, setMoveOutNotes] = useState('Clean condition, normal usage, dust cleaned');
   const [moveOutFile, setMoveOutFile] = useState<File | null>(null);
   const [uploadingMoveOut, setUploadingMoveOut] = useState(false);
+  const [aiStatusIdx, setAiStatusIdx] = useState(0);
 
-  const [copied, setCopied] = useState(false);
-  const user = authApi.getCurrentUser();
-  const isLandlord = user?.role === 'LANDLORD';
+  const currentUser = authApi.getCurrentUser();
+  const isLandlord = currentUser?.role === 'LANDLORD';
 
-  const loadTenancy = useCallback(async () => {
+  const aiStatuses = [
+    'Hashing move-out raw byte stream (Web Crypto SHA-256)...',
+    'Comparing baseline vs move-out pixels with Gemini 2.5 Flash...',
+    'Arbitrating Indian Tenancy Act wear & tear vs tenant damages...',
+    'Computing transparent INR settlement deduction...',
+  ];
+
+  useEffect(() => {
+    let timer: any;
+    if (uploadingMoveOut) {
+      timer = setInterval(() => {
+        setAiStatusIdx((prev) => (prev + 1) % aiStatuses.length);
+      }, 2000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [uploadingMoveOut]);
+
+  const loadData = useCallback(async () => {
     if (!id) return;
     try {
       const data = await tenancyApi.getOne(id);
       setTenancy(data);
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Failed to load tenancy');
+      setError(err?.response?.data?.message || err?.message || 'Failed to load tenancy details');
     } finally {
       setLoading(false);
     }
   }, [id]);
 
-  // Instant multi-tab synchronization: updates automatically when other tab mutates
-  const { isLiveSynced } = useLiveSync(loadTenancy, 4000);
+  // Real-time synchronization across browser tabs (BroadcastChannel + polling fallback)
+  const { isLiveSynced } = useLiveSync(loadData, 4000);
 
   useEffect(() => {
-    if (id) {
-      loadTenancy();
-    }
-  }, [id, loadTenancy]);
+    loadData();
+  }, [loadData]);
 
-  const handleCopyLandlordLink = () => {
-    if (!tenancy) return;
-    const url = `${window.location.origin}/verify/${tenancy.landlordToken}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  // In-Browser SHA-256 Hashing via Web Crypto API (Raw byte security)
+  const computeLocalHash = async (file: File): Promise<string> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
   };
 
-  const handleOwnerDirectApprove = async () => {
-    if (!tenancy?.landlordToken) return;
-    setApproving(true);
-    try {
-      await tenancyApi.approveLandlordReview(tenancy.landlordToken);
-      emitSyncEvent('LANDLORD_APPROVED', tenancy.id);
-      await loadTenancy();
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to approve');
-    } finally {
-      setApproving(false);
-    }
+  const handleCopyHash = (hash: string) => {
+    navigator.clipboard.writeText(hash);
+    setCopiedHash(hash);
+    setTimeout(() => setCopiedHash(null), 2000);
   };
 
   const handleMoveInSubmit = async (e: React.FormEvent) => {
@@ -107,9 +118,10 @@ export const TenancyDetail: React.FC = () => {
 
       await itemsApi.uploadMoveIn(formData);
       setShowAddModal(false);
+      setItemName('');
       setMoveInFile(null);
       emitSyncEvent('MOVE_IN_UPLOADED', tenancy.id);
-      await loadTenancy();
+      await loadData();
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Failed to upload move-in item');
     } finally {
@@ -124,95 +136,130 @@ export const TenancyDetail: React.FC = () => {
 
     try {
       const formData = new FormData();
+      formData.append('moveOutNotes', moveOutNotes);
       formData.append('notes', moveOutNotes);
       if (moveOutFile) formData.append('photo', moveOutFile);
 
       await itemsApi.uploadMoveOut(activeMoveOutItem.id, formData);
       setActiveMoveOutItem(null);
       setMoveOutFile(null);
-      emitSyncEvent('MOVE_OUT_UPLOADED', tenancy?.id);
-      await loadTenancy();
+      emitSyncEvent('MOVE_OUT_SUBMITTED', id);
+      await loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to analyze move-out item');
+      alert(err?.response?.data?.message || 'Failed to analyze move-out condition');
     } finally {
       setUploadingMoveOut(false);
     }
   };
 
+  const handleCopyLandlordLink = () => {
+    if (!tenancy?.landlordToken) return;
+    const url = `${window.location.origin}/verify/${tenancy.landlordToken}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleOwnerDirectApprove = async () => {
+    if (!tenancy?.landlordToken) return;
+    setApproving(true);
+    try {
+      const updated = await tenancyApi.approveLandlordReview(tenancy.landlordToken);
+      setTenancy(updated);
+      emitSyncEvent('LANDLORD_APPROVED', tenancy.id);
+    } catch (err: any) {
+      alert('Failed to approve inventory: ' + (err?.response?.data?.message || err.message));
+    } finally {
+      setApproving(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-16 text-center text-slate-400 text-sm">
-        Loading tenancy cryptographic record...
+      <div className="max-w-7xl mx-auto px-4 py-20 text-center text-slate-400">
+        <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 mb-3 animate-pulse">
+          <Shield className="w-8 h-8" />
+        </div>
+        <p className="font-mono text-sm">Synchronizing cryptographic escrow ledger...</p>
       </div>
     );
   }
 
   if (error || !tenancy) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <p className="text-rose-400">{error || 'Tenancy not found'}</p>
-        <Link to="/" className="mt-4 inline-block text-xs text-emerald-400 hover:underline">
-          Return to Dashboard
-        </Link>
+      <div className="max-w-xl mx-auto px-4 py-16 text-center">
+        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300">
+          <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-rose-400" />
+          <h2 className="text-lg font-bold">Failed to load tenancy</h2>
+          <p className="text-xs text-rose-300/80 mt-1">{error || 'Tenancy not found'}</p>
+          <Link
+            to="/"
+            className="mt-4 inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Return to Dashboard</span>
+          </Link>
+        </div>
       </div>
     );
   }
 
   const items = tenancy.items || [];
-  const totalDeposit = Number(tenancy.depositAmount);
-  const totalDeductions = items.reduce((acc, it) => acc + (it.suggestedCut ? Number(it.suggestedCut) : 0), 0);
+  const totalDeposit = Number(tenancy.depositAmount || 0);
+  const totalDeductions = items.reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
   const estimatedRefund = Math.max(0, totalDeposit - totalDeductions);
   const landlordLink = `${window.location.origin}/verify/${tenancy.landlordToken}`;
 
-  // Guided 4-Step Workflow Status Calculation
+  // Guided Protocol Checklist Status
   const isStep1Done = items.length > 0;
   const isStep2Done = tenancy.status === 'APPROVED';
-  const isStep3Done = items.some((i) => i.moveOutPhotoUrl && i.aiVerdict);
-  const isStep4Done = isStep2Done; // Certificate unlocked when approved
+  const isStep3Done = items.some((it) => it.aiVerdict);
+  const isStep4Done = isStep2Done && isStep1Done;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Navigation & Real-time Indicator */}
       <div className="flex items-center justify-between mb-6">
         <Link
           to="/"
-          className="inline-flex items-center space-x-2 text-xs font-medium text-slate-400 hover:text-slate-200 transition"
+          className="inline-flex items-center space-x-2 text-xs font-semibold text-slate-400 hover:text-emerald-400 transition"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Tenancies</span>
         </Link>
 
         {isLiveSynced && (
-          <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 animate-pulse">
-            <Zap className="w-3.5 h-3.5 text-emerald-400" />
-            <span>⚡ Live synced just now</span>
+          <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-mono font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 animate-pulse">
+            <Zap className="w-3 h-3 text-emerald-400" />
+            <span>Live synced just now</span>
           </span>
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Guided 4-Step Workflow Sidebar */}
+        {/* Left Column: Guided 4-Step Protocol Rail */}
         <div className="lg:col-span-4 xl:col-span-3 space-y-4">
-          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 backdrop-blur-xl shadow-xl">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                Workflow Progress
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-5 backdrop-blur-xl shadow-xl glass-vault-card">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800/80">
+              <span className="text-[11px] font-bold font-mono uppercase tracking-wider text-slate-300">
+                Protocol Progress
               </span>
-              <span className="text-[10px] text-emerald-400 font-mono font-semibold">
+              <span className="text-[10px] text-emerald-400 font-mono font-bold">
                 {isStep3Done ? '3/4 Complete' : isStep2Done ? '2/4 Sealed' : isStep1Done ? '1/4 Logged' : '0/4 Initial'}
               </span>
             </div>
 
-            <div className="space-y-4 text-xs">
+            <div className="space-y-3.5 text-xs">
               {/* Step 01 */}
               <div
-                className={`p-3 rounded-xl border transition ${
+                className={`p-3.5 rounded-xl border transition-all ${
                   isStep1Done
                     ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
                     : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-300 ring-1 ring-emerald-500/30'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold uppercase tracking-wider text-[11px]">
+                  <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
                     01 Move-in Evidence
                   </span>
                   {isStep1Done ? (
@@ -233,7 +280,7 @@ export const TenancyDetail: React.FC = () => {
 
               {/* Step 02 */}
               <div
-                className={`p-3 rounded-xl border transition ${
+                className={`p-3.5 rounded-xl border transition-all ${
                   isStep2Done
                     ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
                     : isStep1Done
@@ -242,7 +289,7 @@ export const TenancyDetail: React.FC = () => {
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold uppercase tracking-wider text-[11px]">
+                  <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
                     02 Owner Review
                   </span>
                   {isStep2Done ? (
@@ -263,7 +310,7 @@ export const TenancyDetail: React.FC = () => {
 
               {/* Step 03 */}
               <div
-                className={`p-3 rounded-xl border transition ${
+                className={`p-3.5 rounded-xl border transition-all ${
                   isStep3Done
                     ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
                     : isStep2Done
@@ -272,7 +319,7 @@ export const TenancyDetail: React.FC = () => {
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold uppercase tracking-wider text-[11px]">
+                  <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
                     03 Move-out Audit
                   </span>
                   {isStep3Done ? (
@@ -293,14 +340,14 @@ export const TenancyDetail: React.FC = () => {
 
               {/* Step 04 */}
               <div
-                className={`p-3 rounded-xl border transition ${
+                className={`p-3.5 rounded-xl border transition-all ${
                   isStep4Done
                     ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
                     : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold uppercase tracking-wider text-[11px]">
+                  <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
                     04 Certificates
                   </span>
                   {isStep4Done ? (
@@ -318,9 +365,9 @@ export const TenancyDetail: React.FC = () => {
                 {isStep4Done && (
                   <Link
                     to={`/verify?id=${tenancy.id}`}
-                    className="mt-2.5 w-full inline-flex items-center justify-center space-x-1 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-bold transition shadow-sm shadow-emerald-500/20"
+                    className="mt-3 w-full inline-flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
                   >
-                    <FileCheck2 className="w-3 h-3" />
+                    <FileCheck2 className="w-3.5 h-3.5" />
                     <span>Open Public Verifier</span>
                     <ExternalLink className="w-3 h-3 ml-0.5" />
                   </Link>
@@ -330,11 +377,13 @@ export const TenancyDetail: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Tenancy Dashboard Details */}
+        {/* Right Column: Escrow Vault & Inventory */}
         <div className="lg:col-span-8 xl:col-span-9 space-y-6">
           {/* Tenancy Header Card */}
-          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 backdrop-blur-xl shadow-xl shadow-black/20">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 pb-6 border-b border-slate-800">
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 sm:p-8 backdrop-blur-xl shadow-xl glass-vault-card relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
+
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 pb-6 border-b border-slate-800/80">
               <div>
                 <div className="flex items-center space-x-3 mb-2">
                   <span
@@ -356,7 +405,7 @@ export const TenancyDetail: React.FC = () => {
                       </>
                     )}
                   </span>
-                  <span className="text-xs text-slate-500">ID: {tenancy.id.substring(0, 8)}...</span>
+                  <span className="text-xs text-slate-500 font-mono">ID: {tenancy.id.substring(0, 8)}...</span>
                   {isLandlord && (
                     <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
                       Owner View
@@ -364,26 +413,26 @@ export const TenancyDetail: React.FC = () => {
                   )}
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100">{tenancy.propertyTitle}</h1>
-                <p className="mt-1 text-sm text-slate-400">{tenancy.propertyAddress}</p>
+                <p className="mt-1 text-xs sm:text-sm text-slate-400">{tenancy.propertyAddress}</p>
               </div>
 
-              {/* Deposit Breakdown Meter */}
-              <div className="grid grid-cols-3 gap-3 bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl font-mono text-center">
+              {/* Deposit Breakdown Meter - JetBrains Mono */}
+              <div className="grid grid-cols-3 gap-3 bg-slate-950/80 border border-slate-800/90 p-4 rounded-xl font-mono text-center shadow-inner">
                 <div>
                   <div className="text-[10px] text-slate-400 uppercase tracking-wider">Deposit Locked</div>
-                  <div className="text-base sm:text-lg font-bold text-slate-100">
+                  <div className="text-base sm:text-lg font-extrabold text-slate-100 mt-0.5">
                     ₹{totalDeposit.toLocaleString('en-IN')}
                   </div>
                 </div>
                 <div className="border-x border-slate-800 px-2">
                   <div className="text-[10px] text-slate-400 uppercase tracking-wider">AI Deductions</div>
-                  <div className="text-base sm:text-lg font-bold text-rose-400">
+                  <div className="text-base sm:text-lg font-extrabold text-rose-400 mt-0.5">
                     -₹{totalDeductions.toLocaleString('en-IN')}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-emerald-400 uppercase tracking-wider">Est. Refund</div>
-                  <div className="text-base sm:text-lg font-bold text-emerald-400">
+                  <div className="text-[10px] text-emerald-400 uppercase tracking-wider">Net Refund</div>
+                  <div className="text-base sm:text-lg font-extrabold text-emerald-400 mt-0.5">
                     ₹{estimatedRefund.toLocaleString('en-IN')}
                   </div>
                 </div>
@@ -391,13 +440,13 @@ export const TenancyDetail: React.FC = () => {
             </div>
 
             {/* Landlord Verification Link Banner / Owner Actions */}
-            <div className="mt-6 p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="mt-6 p-4 rounded-xl bg-slate-950/80 border border-slate-800/90 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-start space-x-3">
-                <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 mt-0.5">
+                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 mt-0.5">
                   <Lock className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
+                  <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider font-mono">
                     {isLandlord ? 'Owner Verification & Approval Status' : 'Public Landlord Verification & Approval Link'}
                   </h4>
                   <p className="text-xs text-slate-400 mt-0.5">
@@ -429,7 +478,7 @@ export const TenancyDetail: React.FC = () => {
                 )}
                 <button
                   onClick={handleCopyLandlordLink}
-                  className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-medium text-slate-200 transition"
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-medium text-slate-200 transition"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>{copied ? 'Copied!' : 'Copy Link'}</span>
@@ -438,7 +487,7 @@ export const TenancyDetail: React.FC = () => {
                   href={landlordLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold transition shadow-sm shadow-emerald-500/20"
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
                 >
                   <span>Open Portal</span>
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -458,7 +507,7 @@ export const TenancyDetail: React.FC = () => {
             {!isLandlord && (
               <button
                 onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-lg shadow-emerald-500/20"
+                className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-lg shadow-emerald-500/20"
               >
                 <Plus className="w-4 h-4" />
                 <span>Upload Room Item</span>
@@ -490,23 +539,23 @@ export const TenancyDetail: React.FC = () => {
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 backdrop-blur-md flex flex-col justify-between shadow-lg shadow-black/20"
+                  className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-5 backdrop-blur-xl flex flex-col justify-between shadow-xl shadow-black/20 glass-vault-card group"
                 >
                   <div>
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                        <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-md">
                           {item.roomName}
                         </span>
-                        <h3 className="text-base font-bold text-slate-100 mt-1">{item.itemName}</h3>
+                        <h3 className="text-base font-bold text-slate-100 mt-1.5">{item.itemName}</h3>
                       </div>
                       <div className="text-right">
                         {item.aiVerdict ? (
                           <span
-                            className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold ${
+                            className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold font-mono ${
                               item.aiVerdict === 'NORMAL_WEAR_TEAR'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
                             }`}
                           >
                             <Sparkles className="w-3.5 h-3.5" />
@@ -515,18 +564,19 @@ export const TenancyDetail: React.FC = () => {
                             </span>
                           </span>
                         ) : (
-                          <span className="text-xs text-slate-400 bg-slate-800/60 px-2.5 py-1 rounded-full border border-slate-700/60">
+                          <span className="text-[11px] font-mono text-slate-400 bg-slate-800/60 px-2.5 py-1 rounded-full border border-slate-700/60">
                             Move-Out Pending
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Move-In & Move-Out Photo Grid */}
-                    <div className="grid grid-cols-2 gap-3 my-3">
+                    {/* Move-In & Move-Out Photo Comparison Grid */}
+                    <div className="grid grid-cols-2 gap-3 my-3.5">
                       <div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
-                          Move-In Baseline
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-mono flex items-center justify-between">
+                          <span>Move-In Baseline</span>
+                          <span className="text-emerald-400 text-[9px]">LOCKED</span>
                         </div>
                         <div className="aspect-video bg-slate-950 rounded-xl overflow-hidden border border-slate-800 relative group">
                           <img
@@ -540,15 +590,26 @@ export const TenancyDetail: React.FC = () => {
                           />
                         </div>
                         {item.moveInPhotoHash && (
-                          <div className="mt-1.5 text-[10px] font-mono text-slate-400 truncate bg-slate-950/80 px-2 py-1 rounded border border-slate-800/80" title={item.moveInPhotoHash}>
-                            SHA-256: {item.moveInPhotoHash.substring(0, 14)}...
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyHash(item.moveInPhotoHash!)}
+                            className="mt-1.5 w-full text-[10px] font-mono text-slate-400 truncate bg-slate-950/90 px-2 py-1 rounded border border-slate-800 hover:border-emerald-500/40 transition flex items-center justify-between"
+                            title="Click to copy full SHA-256 hash"
+                          >
+                            <span className="truncate">SHA-256: {item.moveInPhotoHash.substring(0, 10)}...</span>
+                            <span className="text-emerald-400 ml-1 flex-shrink-0">
+                              {copiedHash === item.moveInPhotoHash ? 'Copied!' : <Copy className="w-2.5 h-2.5 inline" />}
+                            </span>
+                          </button>
                         )}
                       </div>
 
                       <div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
-                          Move-Out Condition
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-mono flex items-center justify-between">
+                          <span>Move-Out Exit</span>
+                          <span className={item.moveOutPhotoUrl ? 'text-emerald-400 text-[9px]' : 'text-slate-500 text-[9px]'}>
+                            {item.moveOutPhotoUrl ? 'RECORDED' : 'PENDING'}
+                          </span>
                         </div>
                         {item.moveOutPhotoUrl ? (
                           <>
@@ -564,9 +625,17 @@ export const TenancyDetail: React.FC = () => {
                               />
                             </div>
                             {item.moveOutPhotoHash && (
-                              <div className="mt-1.5 text-[10px] font-mono text-slate-400 truncate bg-slate-950/80 px-2 py-1 rounded border border-slate-800/80" title={item.moveOutPhotoHash}>
-                                SHA-256: {item.moveOutPhotoHash.substring(0, 14)}...
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyHash(item.moveOutPhotoHash!)}
+                                className="mt-1.5 w-full text-[10px] font-mono text-slate-400 truncate bg-slate-950/90 px-2 py-1 rounded border border-slate-800 hover:border-emerald-500/40 transition flex items-center justify-between"
+                                title="Click to copy full SHA-256 hash"
+                              >
+                                <span className="truncate">SHA-256: {item.moveOutPhotoHash.substring(0, 10)}...</span>
+                                <span className="text-emerald-400 ml-1 flex-shrink-0">
+                                  {copiedHash === item.moveOutPhotoHash ? 'Copied!' : <Copy className="w-2.5 h-2.5 inline" />}
+                                </span>
+                              </button>
                             )}
                           </>
                         ) : (
@@ -580,37 +649,58 @@ export const TenancyDetail: React.FC = () => {
 
                     {/* Move-In Notes */}
                     {item.moveInNotes && (
-                      <p className="text-xs text-slate-400 mt-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/60">
-                        <strong className="text-slate-300">Move-In Notes:</strong> {item.moveInNotes}
+                      <p className="text-xs text-slate-400 mt-2 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                        <strong className="text-slate-300 font-mono text-[11px] uppercase">Move-In Notes:</strong> {item.moveInNotes}
                       </p>
                     )}
 
-                    {/* Gemini AI Audit Results */}
+                    {/* Official Gemini AI Arbitration Escrow Settlement Receipt */}
                     {item.aiVerdict && (
-                      <div className="mt-3 p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs">
-                        <div className="flex items-center justify-between text-emerald-400 font-semibold mb-1">
-                          <span className="flex items-center space-x-1">
+                      <div className="mt-3.5 p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs shadow-inner">
+                        <div className="flex items-center justify-between text-emerald-400 font-semibold mb-2 pb-2 border-b border-slate-800/80">
+                          <span className="flex items-center space-x-1.5">
                             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Gemini AI Audit Arbitration</span>
+                            <span className="font-mono text-xs">Gemini AI Audit Arbitration</span>
                           </span>
-                          <span className="font-mono text-slate-200">
+                          <span className="font-mono text-slate-200 font-bold">
                             Suggested Deduction: ₹{Number(item.suggestedCut || 0).toLocaleString('en-IN')}
                           </span>
                         </div>
-                        <p className="text-slate-300 text-xs mt-1">{item.aiExplanation}</p>
+
+                        {/* Escrow Settlement Breakdown Receipt */}
+                        <div className="grid grid-cols-3 gap-2 py-1.5 px-2 bg-slate-900/60 rounded-lg font-mono text-[11px] mb-2 text-center">
+                          <div>
+                            <span className="text-slate-500 block text-[9px]">GROSS DEPOSIT</span>
+                            <span className="text-slate-200 font-semibold">₹{totalDeposit.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[9px]">AI DEDUCTION</span>
+                            <span className={Number(item.suggestedCut || 0) > 0 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                              -₹{Number(item.suggestedCut || 0).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[9px]">ESCROW REFUND</span>
+                            <span className="text-emerald-400 font-bold">
+                              ₹{Math.max(0, totalDeposit - Number(item.suggestedCut || 0)).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="text-slate-300 text-xs mt-1 leading-relaxed">{item.aiExplanation}</p>
                       </div>
                     )}
                   </div>
 
                   {/* Action Buttons */}
                   <div className="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] font-mono text-slate-500">
                       Logged: {new Date(item.createdAt).toLocaleDateString()}
                     </span>
                     {!item.moveOutPhotoUrl && !isLandlord && (
                       <button
                         onClick={() => setActiveMoveOutItem(item)}
-                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/30 hover:border-transparent text-emerald-400 hover:text-slate-950 text-xs font-semibold transition"
+                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/30 hover:border-transparent text-emerald-400 hover:text-slate-950 text-xs font-bold transition shadow-sm"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
                         <span>Upload Move-Out &amp; Audit</span>
@@ -626,8 +716,8 @@ export const TenancyDetail: React.FC = () => {
 
       {/* Add Move-In Room Item Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl glass-vault-card">
             <h3 className="text-lg font-bold text-slate-100 mb-1">Upload Baseline Move-In Item</h3>
             <p className="text-xs text-slate-400 mb-6">
               A cryptographic SHA-256 fingerprint will be generated from your photo to permanently freeze baseline proof.
@@ -636,7 +726,7 @@ export const TenancyDetail: React.FC = () => {
             <form onSubmit={handleMoveInSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                  <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
                     Room Name
                   </label>
                   <input
@@ -645,11 +735,11 @@ export const TenancyDetail: React.FC = () => {
                     value={roomName}
                     onChange={(e) => setRoomName(e.target.value)}
                     placeholder="e.g. Living Room, Bedroom"
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                  <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
                     Item Name
                   </label>
                   <input
@@ -658,13 +748,13 @@ export const TenancyDetail: React.FC = () => {
                     value={itemName}
                     onChange={(e) => setItemName(e.target.value)}
                     placeholder="e.g. Inverter AC, Teak Table"
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
                   Baseline Condition Notes
                 </label>
                 <textarea
@@ -677,7 +767,7 @@ export const TenancyDetail: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
                   Move-In Item Photo
                 </label>
                 <input
@@ -699,7 +789,7 @@ export const TenancyDetail: React.FC = () => {
                 <button
                   type="submit"
                   disabled={uploadingMoveIn}
-                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
+                  className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>{uploadingMoveIn ? 'Hashing & Uploading...' : 'Lock Item Hash'}</span>
@@ -712,22 +802,43 @@ export const TenancyDetail: React.FC = () => {
 
       {/* Upload Move-Out & AI Audit Modal */}
       {activeMoveOutItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl glass-vault-card relative overflow-hidden">
             <div className="flex items-center space-x-2 text-emerald-400 mb-2">
               <Sparkles className="w-5 h-5" />
               <h3 className="text-lg font-bold text-slate-100">
                 Move-Out Inspection &amp; AI Damage Audit
               </h3>
             </div>
-            <p className="text-xs text-slate-400 mb-6">
+            <p className="text-xs text-slate-400 mb-4">
               Upload move-out photo for <strong className="text-slate-300">{activeMoveOutItem.itemName}</strong> ({activeMoveOutItem.roomName}).
               Gemini AI will compare move-in vs move-out conditions, assess normal wear &amp; tear, and arbitrate any deduction.
             </p>
 
+            {/* Laser-Scan Animation & Cycling Status Banner during AI processing */}
+            {uploadingMoveOut && (
+              <div className="relative overflow-hidden rounded-2xl bg-slate-950 border border-emerald-500/50 p-6 text-center my-4 shadow-2xl animate-pulse-emerald">
+                <div className="animate-laser-scan"></div>
+                <div className="relative z-10 space-y-2.5">
+                  <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                    <Sparkles className="w-6 h-6 animate-spin" />
+                  </div>
+                  <div className="font-mono text-xs text-emerald-300 font-bold uppercase tracking-wider">
+                    Gemini 2.5 Flash Neural Arbitration in Progress
+                  </div>
+                  <p className="font-mono text-xs text-slate-300 transition-all duration-300">
+                    {aiStatuses[aiStatusIdx]}
+                  </p>
+                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
+                    <div className="bg-emerald-400 h-full w-2/3 animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleMoveOutSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
                   Move-Out Notes
                 </label>
                 <textarea
@@ -740,7 +851,7 @@ export const TenancyDetail: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
                   Move-Out Photo
                 </label>
                 <input
@@ -769,7 +880,7 @@ export const TenancyDetail: React.FC = () => {
                 <button
                   type="submit"
                   disabled={uploadingMoveOut}
-                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
+                  className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>{uploadingMoveOut ? 'Analyzing with AI...' : 'Run AI Damage Audit'}</span>

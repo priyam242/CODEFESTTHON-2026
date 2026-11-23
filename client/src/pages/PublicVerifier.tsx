@@ -14,6 +14,9 @@ import {
   ExternalLink,
   CheckCircle2,
   AlertTriangle,
+  Radio,
+  Cpu,
+  Fingerprint,
 } from 'lucide-react';
 import { tenancyApi, PublicCertificate } from '../api';
 
@@ -105,7 +108,7 @@ export const PublicVerifier: React.FC = () => {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       {/* Top Banner */}
       <div className="text-center mb-8">
-        <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-3 shadow-lg shadow-emerald-500/10">
+        <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 mb-3 shadow-lg shadow-emerald-500/10">
           <ShieldCheck className="w-8 h-8" />
         </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
@@ -114,10 +117,16 @@ export const PublicVerifier: React.FC = () => {
         <p className="mt-1.5 text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
           Verify tamper-proof RentShield inventory certificates and PDF records. Hashing is performed directly in your browser using the native Web Crypto API.
         </p>
+
+        {/* Security Radar Banner */}
+        <div className="mt-4 inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-emerald-500/30 text-emerald-300 text-xs font-mono shadow-sm">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>100% In-Browser Web Crypto • 0 Bytes Uploaded to Server</span>
+        </div>
       </div>
 
       {/* Lookup Bar + Judge 1-Click Demo */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 mb-8 shadow-xl">
+      <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 mb-8 shadow-xl glass-vault-card">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="relative flex-1">
             <input
@@ -146,7 +155,7 @@ export const PublicVerifier: React.FC = () => {
         </div>
 
         {error && (
-          <div className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2">
+          <div className="mt-3.5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>
@@ -156,10 +165,12 @@ export const PublicVerifier: React.FC = () => {
       {/* Certificate Details */}
       {certificate && (
         <div className="space-y-6 mb-8">
-          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 backdrop-blur-xl shadow-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 backdrop-blur-xl shadow-xl glass-vault-card relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
               <div>
-                <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-2">
+                <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-2 font-mono">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Authentic Ledger Record</span>
                 </span>
@@ -168,11 +179,11 @@ export const PublicVerifier: React.FC = () => {
               </div>
 
               <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl text-center min-w-[170px]">
-                <div className="text-[10px] text-slate-400 uppercase tracking-wider">Secured Deposit</div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-wider font-mono">Secured Deposit</div>
                 <div className="text-lg font-bold text-slate-100 font-mono mt-0.5">
                   ₹{Number(certificate.depositAmount).toLocaleString('en-IN')}
                 </div>
-                <div className="text-[10px] text-amber-400 font-semibold mt-0.5">
+                <div className="text-[10px] text-amber-400 font-semibold mt-0.5 font-mono">
                   Status: {certificate.status}
                 </div>
               </div>
@@ -180,21 +191,23 @@ export const PublicVerifier: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 text-xs text-slate-300">
               <div>
-                <span className="text-slate-400 block">Certificate ID:</span>
+                <span className="text-slate-400 block font-mono text-[11px]">Certificate ID:</span>
                 <span className="font-mono text-slate-200">{certificate.id}</span>
               </div>
               <div>
-                <span className="text-slate-400 block">Logged Landlord:</span>
+                <span className="text-slate-400 block font-mono text-[11px]">Logged Landlord:</span>
                 <span className="font-medium text-slate-200">{certificate.landlordName}</span>
               </div>
               <div>
-                <span className="text-slate-400 block">Fingerprinted Items:</span>
+                <span className="text-slate-400 block font-mono text-[11px]">Fingerprinted Items:</span>
                 <span className="font-medium text-slate-200">{certificate.totalItems} Room Fixtures</span>
               </div>
             </div>
 
             <div className="mt-4 pt-4 border-t border-slate-800/80">
-              <span className="text-slate-400 text-xs block mb-1">Cryptographic Seal Signature (SHA-256):</span>
+              <span className="text-slate-400 text-xs block mb-1 font-mono uppercase tracking-wider">
+                Cryptographic Seal Signature (SHA-256):
+              </span>
               <div className="p-2.5 rounded-lg bg-slate-950/90 border border-slate-800 font-mono text-[11px] text-amber-300 break-all select-all">
                 {certificate.moveInHash}
               </div>
@@ -202,13 +215,15 @@ export const PublicVerifier: React.FC = () => {
           </div>
 
           {/* Client-Side Drag & Drop PDF / File Hash Verifier */}
-          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 backdrop-blur-xl shadow-xl">
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 backdrop-blur-xl shadow-xl glass-vault-card">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-base font-bold text-slate-100 flex items-center space-x-2">
                 <FileCheck2 className="w-5 h-5 text-emerald-400" />
                 <span>Client-Side File Byte Verification</span>
               </h3>
-              <span className="text-[10px] text-slate-400 font-mono">Web Crypto API &bull; SHA-256</span>
+              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                Web Crypto API • SHA-256
+              </span>
             </div>
             <p className="text-xs text-slate-400 mb-4">
               Drop an export PDF, move-in photo, or inspection document here. The browser computes its SHA-256 hash locally.
@@ -250,7 +265,7 @@ export const PublicVerifier: React.FC = () => {
                 <div className="mt-4 pt-4 border-t border-slate-800/80 text-left">
                   <div className="flex items-center justify-between text-xs text-slate-300 mb-1">
                     <span className="font-semibold truncate max-w-xs">{file.name}</span>
-                    <span className="text-slate-500">{(file.size / 1024).toFixed(1)} KB</span>
+                    <span className="text-slate-500 font-mono">{(file.size / 1024).toFixed(1)} KB</span>
                   </div>
                   <div className="text-[11px] font-mono text-slate-400 bg-slate-950 p-2 rounded border border-slate-800 break-all select-all">
                     Computed: {hashing ? 'Calculating SHA-256...' : computedHash}
@@ -263,7 +278,7 @@ export const PublicVerifier: React.FC = () => {
             {computedHash && (
               <div className="mt-4">
                 {isHashMatch ? (
-                  <div className="p-4 sm:p-5 rounded-2xl bg-emerald-950/40 border-2 border-emerald-500/60 text-emerald-300 text-xs shadow-xl shadow-emerald-500/10 transition-all">
+                  <div className="p-4 sm:p-5 rounded-2xl bg-emerald-950/40 border-2 border-emerald-500/60 text-emerald-300 text-xs shadow-xl shadow-emerald-500/10 transition-all animate-pulse-emerald">
                     <div className="flex items-center space-x-3 mb-2">
                       <div className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400">
                         <ShieldCheck className="w-6 h-6 flex-shrink-0" />
@@ -282,7 +297,7 @@ export const PublicVerifier: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-4 sm:p-5 rounded-2xl bg-rose-950/40 border-2 border-rose-500/60 text-rose-300 text-xs shadow-xl shadow-rose-500/10 transition-all">
+                  <div className="p-4 sm:p-5 rounded-2xl bg-rose-950/40 border-2 border-rose-500/60 text-rose-300 text-xs shadow-xl shadow-rose-500/10 transition-all animate-pulse-rose">
                     <div className="flex items-center space-x-3 mb-2">
                       <div className="p-2 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-400">
                         <ShieldAlert className="w-6 h-6 flex-shrink-0" />
@@ -299,11 +314,11 @@ export const PublicVerifier: React.FC = () => {
                     <div className="space-y-1.5 mt-2.5">
                       <div className="p-2 rounded-lg bg-slate-950/90 border border-rose-500/30 text-[10px] font-mono break-all">
                         <span className="text-slate-400 block text-[9px] uppercase tracking-wider">Computed File Hash (Current):</span>
-                        <span className="text-rose-400">{computedHash}</span>
+                        <span className="text-rose-400 font-bold">{computedHash}</span>
                       </div>
                       <div className="p-2 rounded-lg bg-slate-950/90 border border-slate-800 text-[10px] font-mono break-all">
                         <span className="text-slate-400 block text-[9px] uppercase tracking-wider">Expected Ledger Seal (Move-In):</span>
-                        <span className="text-amber-400">{certificate?.moveInHash || 'AUTHENTIC_HASH_NOT_MATCHED'}</span>
+                        <span className="text-amber-400 font-bold">{certificate?.moveInHash || 'AUTHENTIC_HASH_NOT_MATCHED'}</span>
                       </div>
                     </div>
                   </div>

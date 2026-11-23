@@ -1,6 +1,21 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, Plus, Building, IndianRupee, ArrowRight, CheckCircle2, Clock, FileCheck, KeyRound, Zap } from 'lucide-react';
+import {
+  Shield,
+  Plus,
+  Building,
+  IndianRupee,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  FileCheck,
+  KeyRound,
+  Zap,
+  Lock,
+  Sparkles,
+  ShieldCheck,
+  ExternalLink,
+} from 'lucide-react';
 import { tenancyApi, Tenancy, authApi, api } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 
@@ -76,14 +91,14 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Top Banner / Hero */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 pb-6 border-b border-slate-800">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 pb-6 border-b border-slate-800/80">
         <div>
           <div className="flex items-center space-x-2 mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
               {isLandlord ? 'Property Owner & Landlord Dashboard' : 'Tenant Deposit Protection Portal'}
             </span>
             {isLiveSynced && (
-              <span className="inline-flex items-center space-x-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
+              <span className="inline-flex items-center space-x-1 text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
                 <Zap className="w-3 h-3 text-emerald-400" />
                 <span>Live Synced Just Now</span>
               </span>
@@ -92,7 +107,7 @@ export const Dashboard: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
             {isLandlord ? `Welcome back, ${user?.name || user?.email}` : 'Protected Tenancy Deposits'}
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">
             {isLandlord
               ? 'Review tenant inventories, inspect SHA-256 photo hashes, and lock move-in records.'
               : 'Immutable SHA-256 room inventory records & AI-verified wear-and-tear protection.'}
@@ -104,15 +119,15 @@ export const Dashboard: React.FC = () => {
               type="button"
               onClick={handleResetDemo}
               disabled={resettingDemo}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 text-xs font-semibold transition shadow-sm"
+              className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-500/30 text-xs font-semibold transition shadow-sm"
               title="Restore fresh 2BHK Bangalore demo tenancy"
             >
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>{resettingDemo ? 'Resetting...' : '⚡ Reset Demo State'}</span>
+              <span>{resettingDemo ? 'Resetting...' : 'Reset Demo State'}</span>
             </button>
             <Link
               to="/tenancy/new"
-              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition shadow-lg shadow-emerald-500/20"
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-500/25"
             >
               <Plus className="w-4 h-4" />
               <span>Protect New Deposit</span>
@@ -142,47 +157,62 @@ export const Dashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Stats Cards */}
+      {/* FinTech Telemetry Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-md shadow-xl">
+        {/* Card 1: Total Protected Deposits */}
+        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800/80 backdrop-blur-xl shadow-xl relative overflow-hidden group hover:border-emerald-500/30 transition">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
           <div className="flex items-center justify-between text-slate-400 text-xs uppercase tracking-wider font-medium mb-2">
             <span>{isLandlord ? 'Total Managed Deposits' : 'Total Protected Deposits'}</span>
-            <IndianRupee className="w-4 h-4 text-emerald-400" />
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <IndianRupee className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-100 font-mono">
+          <div className="text-2xl sm:text-3xl font-extrabold text-slate-100 font-mono tracking-tight">
             ₹{totalDeposit.toLocaleString('en-IN')}
           </div>
-          <div className="mt-1 text-xs text-emerald-400 flex items-center space-x-1">
-            <Shield className="w-3.5 h-3.5" />
-            <span>Cryptographically sealed</span>
+          <div className="mt-2 text-xs text-emerald-400 flex items-center space-x-1.5 font-mono">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span className="text-[11px]">Cryptographically Sealed</span>
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-md shadow-xl">
+        {/* Card 2: Active Tenancies */}
+        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800/80 backdrop-blur-xl shadow-xl relative overflow-hidden group hover:border-emerald-500/30 transition">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent"></div>
           <div className="flex items-center justify-between text-slate-400 text-xs uppercase tracking-wider font-medium mb-2">
             <span>{isLandlord ? 'Linked Properties' : 'Active Tenancies'}</span>
-            <Building className="w-4 h-4 text-emerald-400" />
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <Building className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-100">
+          <div className="text-2xl sm:text-3xl font-extrabold text-slate-100 font-mono tracking-tight">
             {tenancies.length}
           </div>
-          <div className="mt-1 text-xs text-slate-400">
-            {isLandlord ? 'Properties matching your owner account' : 'Secure lease agreements'}
+          <div className="mt-2 text-xs text-slate-400 flex items-center space-x-1.5 font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span className="text-[11px]">{isLandlord ? 'Properties matching owner email' : 'SHA-256 Ledger Registered'}</span>
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-md shadow-xl">
+        {/* Card 3: Landlord Approved */}
+        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800/80 backdrop-blur-xl shadow-xl relative overflow-hidden group hover:border-emerald-500/30 transition">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
           <div className="flex items-center justify-between text-slate-400 text-xs uppercase tracking-wider font-medium mb-2">
             <span>{isLandlord ? 'Sealed by You' : 'Landlord Approved'}</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-100">
+          <div className="text-2xl sm:text-3xl font-extrabold text-slate-100 font-mono tracking-tight">
             {totalApproved} / {tenancies.length}
           </div>
-          <div className="mt-1 text-xs text-emerald-400">
-            {totalApproved === tenancies.length && tenancies.length > 0
-              ? 'All inventories locked'
-              : 'Pending sign-offs'}
+          <div className="mt-2 text-xs text-emerald-400 flex items-center space-x-1.5 font-mono">
+            <span className="text-[11px]">
+              {totalApproved === tenancies.length && tenancies.length > 0
+                ? 'All Inventories Dual-Locked'
+                : 'Pending Sign-offs'}
+            </span>
           </div>
         </div>
       </div>
@@ -192,6 +222,9 @@ export const Dashboard: React.FC = () => {
         <h2 className="text-lg font-bold text-slate-100">
           {isLandlord ? 'Properties Linked to Your Owner Account' : 'Your Tenancy Agreements'}
         </h2>
+        <span className="text-xs font-mono text-slate-500">
+          {tenancies.length} Escrow Contract{tenancies.length === 1 ? '' : 's'}
+        </span>
       </div>
 
       {/* Tenancies List */}
@@ -230,72 +263,105 @@ export const Dashboard: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tenancies.map((tenancy) => (
-            <div
-              key={tenancy.id}
-              className="group rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-emerald-500/40 transition duration-200 overflow-hidden backdrop-blur-md flex flex-col justify-between shadow-lg shadow-black/20"
-            >
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <span
-                    className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
-                      tenancy.status === 'APPROVED'
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                    }`}
-                  >
-                    {tenancy.status === 'APPROVED' ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Sealed & Approved</span>
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>Pending Approval</span>
-                      </>
-                    )}
-                  </span>
-                  <div className="text-right font-mono text-sm font-bold text-slate-100">
-                    ₹{Number(tenancy.depositAmount).toLocaleString('en-IN')}
-                  </div>
-                </div>
+          {tenancies.map((tenancy) => {
+            const hasMoveIn = (tenancy.items?.length || 0) > 0;
+            const isApproved = tenancy.status === 'APPROVED';
+            const hasAiAudit = tenancy.items?.some((i) => i.aiVerdict);
 
-                <h3 className="text-lg font-bold text-slate-100 group-hover:text-emerald-300 transition line-clamp-1">
-                  {tenancy.propertyTitle}
-                </h3>
-                <p className="mt-1 text-xs text-slate-400 line-clamp-2">
-                  {tenancy.propertyAddress}
-                </p>
+            return (
+              <div
+                key={tenancy.id}
+                className="group rounded-2xl bg-slate-900/90 border border-slate-800/80 hover:border-emerald-500/40 transition duration-300 overflow-hidden backdrop-blur-xl flex flex-col justify-between shadow-xl shadow-black/30 glass-vault-card relative"
+              >
+                {/* Top Subtle Edge Gradient */}
+                <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${isApproved ? 'from-emerald-500 via-emerald-300 to-emerald-500' : 'from-amber-500 via-amber-300 to-amber-500'}`}></div>
 
-                <div className="mt-4 pt-4 border-t border-slate-800 text-xs text-slate-400 space-y-1.5">
-                  <div className="flex justify-between">
-                    <span>{isLandlord ? 'Tenant ID:' : 'Landlord:'}</span>
-                    <span className="font-medium text-slate-300">
-                      {isLandlord ? `${tenancy.userId.substring(0, 8)}...` : tenancy.landlordName}
+                <div className="p-6">
+                  {/* Status & Deposit Amount */}
+                  <div className="flex items-start justify-between mb-3">
+                    <span
+                      className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider ${
+                        isApproved
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
+                      }`}
+                    >
+                      {isApproved ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Sealed &amp; Approved</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Pending Approval</span>
+                        </>
+                      )}
                     </span>
+                    <div className="text-right font-mono text-sm sm:text-base font-extrabold text-slate-100">
+                      ₹{Number(tenancy.depositAmount).toLocaleString('en-IN')}
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Logged Items:</span>
-                    <span className="font-medium text-slate-300">
+
+                  {/* Title & Address */}
+                  <h3 className="text-base sm:text-lg font-bold text-slate-100 group-hover:text-emerald-300 transition line-clamp-1">
+                    {tenancy.propertyTitle}
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-400 line-clamp-2">
+                    {tenancy.propertyAddress}
+                  </p>
+
+                  {/* Cryptographic SHA-256 Escrow Seal Strip */}
+                  {tenancy.moveInHash && (
+                    <div className="mt-3.5 p-2 rounded-lg bg-slate-950/80 border border-slate-800/90 font-mono text-[11px] text-emerald-400 flex items-center justify-between">
+                      <span className="truncate max-w-[200px]" title={tenancy.moveInHash}>
+                        SHA-256: {tenancy.moveInHash.substring(0, 10)}...{tenancy.moveInHash.substring(tenancy.moveInHash.length - 6)}
+                      </span>
+                      <span className="text-[9px] uppercase font-bold text-emerald-300 px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 flex-shrink-0">
+                        IMMUTABLE
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Protocol Stage Mini Progress Bar */}
+                  <div className="mt-4 pt-3 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                      <span>Protocol Lifecycle</span>
+                      <span className="text-emerald-400">{hasAiAudit ? 'Stage 3/3' : isApproved ? 'Stage 2/3' : 'Stage 1/3'}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div className={`h-1.5 rounded-full ${hasMoveIn ? 'bg-emerald-500' : 'bg-slate-800'}`} title="Move-In Photos Sealed"></div>
+                      <div className={`h-1.5 rounded-full ${isApproved ? 'bg-emerald-500' : 'bg-slate-800'}`} title="Landlord Locked"></div>
+                      <div className={`h-1.5 rounded-full ${hasAiAudit ? 'bg-emerald-500' : 'bg-slate-800'}`} title="AI Move-Out Audited"></div>
+                    </div>
+                    <div className="flex items-center justify-between text-[9px] text-slate-500 mt-1 font-mono">
+                      <span>Move-In Sealed</span>
+                      <span>Owner Locked</span>
+                      <span>AI Ready</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-xs text-slate-400 flex justify-between">
+                    <span>Logged Fixtures:</span>
+                    <span className="font-semibold text-slate-200">
                       {tenancy.items?.length || 0} room items
                     </span>
                   </div>
                 </div>
-              </div>
 
-              <div className="p-4 bg-slate-950/40 border-t border-slate-800">
-                <Link
-                  to={`/tenancy/${tenancy.id}`}
-                  className="w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-slate-900 hover:bg-emerald-500/10 border border-slate-800 hover:border-emerald-500/30 text-emerald-400 text-xs font-semibold transition"
-                >
-                  <FileCheck className="w-3.5 h-3.5" />
-                  <span>{isLandlord ? 'Inspect Hashes & Review Audits' : 'Inspect Inventory & AI Audits'}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+                <div className="p-4 bg-slate-950/60 border-t border-slate-800/80">
+                  <Link
+                    to={`/tenancy/${tenancy.id}`}
+                    className="w-full inline-flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-500/15 border border-slate-800 hover:border-emerald-500/40 text-emerald-400 text-xs font-semibold transition"
+                  >
+                    <FileCheck className="w-3.5 h-3.5" />
+                    <span>{isLandlord ? 'Inspect Hashes & Review Audits' : 'Inspect Inventory & AI Audits'}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
