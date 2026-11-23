@@ -1,56 +1,34 @@
 ================================================================================
-RENTSHIELD REAL-WORLD RENTAL LOGIC HARDENING & SOCIETY GATE PASS NOC AUDIT
+RENTSHIELD NAVBAR SIGN IN & INTROSPLASH INTERACTION HARDENING AUDIT
 ================================================================================
-Timestamp: 2026-11-24T00:34:00+05:30
+Timestamp: 2026-11-24T00:43:00+05:30
 Repository: https://github.com/priyam242/CODEFESTTHON-2026.git
 Branch: main
 
-1. SEPARATE OWNER vs GUEST QR STORAGE (FIX SINGLE customQrUrl COLLISION BUG)
-- Database & Backend (server/prisma/schema.prisma & server/src/payments):
-  * Added optional fields `landlordQrUrl String?` and `tenantQrUrl String?` to `Tenancy` model while preserving legacy `customQrUrl`.
-  * Updated `PrismaService.ensureSchema` with self-healing migration:
-    `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "landlordQrUrl" TEXT;`
-    `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "tenantQrUrl" TEXT;`
-  * Updated `PaymentsController` and `PaymentsService` to support updating and persisting `landlordQrUrl` and `tenantQrUrl` independently.
-- Frontend Payment Engine (client/src/components/PaymentModal.tsx & client/src/api.ts):
-  * Step 02 / 03 (Security Deposit: Guest -> Owner): Strictly uses and persists `landlordUpi` + `landlordQrUrl`.
-  * Step 04 / 05 (Escrow Refund: Owner -> Guest): Strictly uses and persists `tenantUpi` + `tenantQrUrl`.
-  * Eliminates cross-party QR collisions: Owner's Deposit QR never bleeds into or overrides Guest's Refund QR.
+1. NAVBAR SIGN IN BUTTON INTERACTION & DYNAMIC FEEDBACK
+- Audited all header and Navbar auth links (client/src/components/Navbar.tsx):
+  * Updated top-right "Sign In" button to be an explicit, high-priority interactive link:
+    `<Link to="/login" onClick={handleSignInClick} className="relative z-50 cursor-pointer pointer-events-auto ...">`
+  * Enhanced `handleSignInClick`:
+    - When clicked from any outside route, cleanly navigates to `/login`.
+    - When already on `/login`, dispatches the `rentshield-switch-to-login` event (flipping registration back to sign-in if toggled), smoothly scrolls to `#login-auth-card`, focuses `input[type="email"]`, and applies an instant emerald pulse ring (`ring-2 ring-emerald-400 border-emerald-400`) so the button always delivers immediate visual feedback instead of feeling static.
+- Added corresponding event listener and target ID `#login-auth-card` in `client/src/pages/Login.tsx`.
 
-2. REVISION LOOP & ALL-ITEMS MOVE-OUT FRAUD GUARD
-- Revision Flow (client/src/pages/TenancyDetail.tsx):
-  * When Landlord requests revision (`status === 'REVISION_REQUESTED'`), Tenant sees an interactive amber alert banner displaying Landlord's `revisionNotes` with a direct button `"🔄 Re-Submit Fixed Inventory to Owner"`.
-  * Baseline room fixture uploads are kept open during `PENDING` and `REVISION_REQUESTED`, locking only upon `APPROVED`, `LOCKED`, or `SETTLED`.
-- Move-Out Fraud Guard (client/src/pages/TenancyDetail.tsx, LandlordVerify.tsx & Dashboard.tsx):
-  * Enforces strict `auditedItemsCount === items.length` checking both `Boolean(i.moveOutPhotoUrl && i.aiVerdict)`.
-  * Live status tracker displays `${auditedItemsCount}/${items.length} Rooms Audited`.
-  * Step 05 Final Refund Settlement unlocks only when all fixtures are 100% inspected and verified by Gemini AI.
+2. CLICK INTERCEPTION ELIMINATION & INTROSPLASH HYGIENE
+- IntroSplash Cleanup (client/src/components/IntroSplash.tsx):
+  * Removed the global `document.addEventListener('click', handleDocumentClick)` listener that was capturing all document-level click bubbles.
+  * Replay is now explicitly wired via `#navbar-brand-logo` `onClick` invoking `replayIntroAnimation()`.
+  * Added `pointerEvents: isMorphing ? 'none' : 'auto'` to both the outer backdrop container and the central `contentRef` container during the FLIP morph transition, ensuring zero click blocking on header elements.
+  * Enforced `pointer-events-none` on all decorative glow radial layers and background grid accents.
+  * Verified that once `phase === 'done'`, `IntroSplash` returns strictly `null`, leaving zero DOM artifacts.
+- Navbar Brand Logo Bounds:
+  * Updated `#navbar-brand-logo` in `Navbar.tsx` to `inline-flex w-fit items-center space-x-3 group relative z-50 cursor-pointer pointer-events-auto flex-shrink-0`.
+  * Guarantees zero oversized margins or overlapping pseudo-elements that could obstruct adjacent navigation targets.
 
-3. SOCIETY MOVE-OUT GATE PASS & NO-DUES NOC (STEP 06 & SETTLED CARDS)
-- Printable Modal (client/src/components/SocietyGatePassModal.tsx):
-  * Official printable certificate compliant with Model Tenancy Act (MTA 2021 Section 13/19).
-  * Features emerald `"✅ CLEARED FOR SOCIETY EXIT • ZERO DUES PENDING"` stamp, Society name & address, Tenant & Landlord names, Agreement Ref, Security Deposit & Settlement UTR IDs, and Settled timestamp.
-  * Real phone-scannable QR matrix generated via `qrcode` encoding the permanent public verification URL (`/verify?id=${tenancy.id}`).
-  * Print-optimized layout with `@media print` rules for clean single-page printing.
-- Accessibility:
-  * Available via `"🛂 Society Gate Pass & NOC"` button in Step 06 on both Tenant (`TenancyDetail.tsx`) and Landlord (`LandlordVerify.tsx`) views.
-  * Prominent `"🛂 View / Print Society Gate Pass & NOC"` button embedded directly in every Settled History card on `Dashboard.tsx`.
-
-4. DUAL-TENANCY 1-CLICK JUDGE DEMO SEED
-- Seed Configuration (server/src/prisma/prisma.service.ts):
-  * Active Tenancy (`demo-tenancy-indiranagar-001`):
-    - Status: `APPROVED`, `depositPaid: true`, `depositPaymentId: 'pay_RS_DEMO_882910'`, Steps 01-03 sealed (3/6 Sealed).
-    - Positioned at Step 04 for immediate 1-click Judge testing of Move-Out photo upload and Gemini AI inspection.
-  * Settled Past Tenancy (`koramangala-settled-002`):
-    - Status: `SETTLED`, `depositPaymentId: 'pay_RS_DEMO_882910'`, `settlementPaymentId: 'pay_RS_REFUND_994102'`, `settledAt: 2026-11-20T14:30:00Z`.
-    - 2 audited room fixtures with SHA-256 hashes and Gemini AI verdicts.
-    - Chronologically sorted into Settled History stack with active `"🛂 View / Print Society Gate Pass & NOC"` access.
-
-5. BUILD & COMPILATION VERIFICATION
-- Prisma Client: Generated v6.19.3 in 84ms.
-- Backend (`rentshield-server`): `nest build` passed with 0 errors.
-- Frontend (`rentshield-client`): `vite build` passed with 0 errors (1,705 modules transformed).
-- Monorepo: `pnpm build` exited with code 0.
+3. BUILD & COMPILATION VERIFICATION
+- Frontend Build: `pnpm --filter rentshield-client build` passed with exit code 0.
+  * 1,705 modules transformed via Vite v6.4.6.
+  * 0 TypeScript errors, 0 compilation warnings.
 
 Verified by Antigravity Autonomous Agent.
 ================================================================================

@@ -3,6 +3,7 @@ import { Shield, LogOut, Plus, CheckCircle2, Cpu, Bell } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authApi, tenancyApi } from '../api';
 import { useLiveSync } from '../realtimeSync';
+import { replayIntroAnimation } from './IntroSplash';
 
 export const Navbar: React.FC = () => {
   const user = authApi.getCurrentUser();
@@ -40,6 +41,28 @@ export const Navbar: React.FC = () => {
     navigate('/login');
   };
 
+  const handleSignInClick = (e: React.MouseEvent) => {
+    if (location.pathname === '/login') {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('rentshield-switch-to-login'));
+      const emailInput = document.querySelector<HTMLInputElement>('input[type="email"]');
+      const loginCard = document.getElementById('login-auth-card');
+
+      if (emailInput) {
+        emailInput.focus();
+        emailInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        emailInput.classList.add('ring-2', 'ring-emerald-400', 'border-emerald-400');
+        setTimeout(() => {
+          emailInput.classList.remove('ring-2', 'ring-emerald-400', 'border-emerald-400');
+        }, 1200);
+      } else if (loginCard) {
+        loginCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    } else {
+      navigate('/login');
+    }
+  };
+
   return (
     <nav className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -47,7 +70,12 @@ export const Navbar: React.FC = () => {
           <Link
             to="/"
             id="navbar-brand-logo"
-            className="flex items-center space-x-3 group"
+            onClick={(e) => {
+              if (location.pathname === '/') {
+                replayIntroAnimation();
+              }
+            }}
+            className="inline-flex w-fit items-center space-x-3 group relative z-50 cursor-pointer pointer-events-auto flex-shrink-0"
             title="RentShield Cyber-Escrow (Click to replay intro animation)"
           >
             <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 group-hover:border-emerald-500/50 group-hover:scale-105 transition-all shadow-lg shadow-emerald-500/10">
@@ -65,20 +93,21 @@ export const Navbar: React.FC = () => {
 
           {/* Show protocol status pill when on auth page or unauthenticated */}
           {isAuthPage || !user ? (
-            <div className="flex items-center space-x-3 sm:space-x-4">
-              <div className="hidden sm:inline-flex items-center space-x-2 text-xs font-mono px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 shadow-sm shadow-emerald-500/10">
+            <div className="flex items-center space-x-3 sm:space-x-4 relative z-50 pointer-events-auto">
+              <div className="hidden sm:inline-flex items-center space-x-2 text-xs font-mono px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 shadow-sm shadow-emerald-500/10 pointer-events-none select-none">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="text-[11px] font-semibold">Gemini 2.5 Flash + WebCrypto Active</span>
               </div>
               <Link
                 to="/verify"
-                className="text-xs font-medium text-slate-300 hover:text-emerald-400 px-3 py-1.5 rounded-xl hover:bg-slate-900 border border-slate-800/60 transition"
+                className="relative z-50 cursor-pointer pointer-events-auto text-xs font-medium text-slate-300 hover:text-emerald-400 px-3 py-1.5 rounded-xl hover:bg-slate-900 border border-slate-800/60 transition"
               >
                 Verify Hash
               </Link>
               <Link
                 to="/login"
-                className="text-xs font-bold px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-lg shadow-emerald-500/20"
+                onClick={handleSignInClick}
+                className="relative z-50 cursor-pointer pointer-events-auto text-xs font-bold px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 transition shadow-lg shadow-emerald-500/20 flex items-center justify-center select-none"
               >
                 Sign In
               </Link>

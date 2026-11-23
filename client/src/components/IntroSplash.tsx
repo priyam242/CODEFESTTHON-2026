@@ -104,23 +104,13 @@ export const IntroSplash: React.FC = () => {
       }
     };
 
-    // Delegated click listener: Clicking top-left #navbar-brand-logo re-triggers intro
-    const handleDocumentClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('#navbar-brand-logo')) {
-        startAnimation();
-      }
-    };
-
     window.addEventListener('replay-rentshield-intro', handleReplayEvent);
     window.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('click', handleDocumentClick);
 
     return () => {
       clearExistingTimers();
       window.removeEventListener('replay-rentshield-intro', handleReplayEvent);
       window.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('click', handleDocumentClick);
     };
   }, []);
 
@@ -138,12 +128,14 @@ export const IntroSplash: React.FC = () => {
   return (
     <div
       onClick={isMorphing ? undefined : handleSkip}
-      className={`fixed inset-0 select-none overflow-hidden flex items-center justify-center ${isMorphing ? 'pointer-events-none' : 'cursor-pointer'
-        }`}
+      className={`fixed inset-0 select-none overflow-hidden flex items-center justify-center ${
+        isMorphing ? 'pointer-events-none' : 'cursor-pointer'
+      }`}
       style={{
         zIndex: 99999,
         backgroundColor: isMorphing ? 'rgba(5, 9, 18, 0)' : '#050912',
         transition: 'background-color 850ms cubic-bezier(0.22, 1, 0.36, 1)',
+        pointerEvents: isMorphing ? 'none' : 'auto',
       }}
     >
       <style>{`
@@ -219,8 +211,11 @@ export const IntroSplash: React.FC = () => {
           transition: isMorphing
             ? 'transform 850ms cubic-bezier(0.22, 1, 0.36, 1), opacity 800ms ease-out'
             : 'none',
+          pointerEvents: isMorphing ? 'none' : 'auto',
         }}
-        className="relative z-10 flex flex-col items-center justify-center"
+        className={`relative z-10 flex flex-col items-center justify-center ${
+          isMorphing ? 'pointer-events-none' : ''
+        }`}
       >
         {/* Holographic Shield Container */}
         <div className="relative w-32 h-32 flex items-center justify-center rs-pulse-glow">

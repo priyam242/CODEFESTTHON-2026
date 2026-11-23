@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Shield,
@@ -30,6 +30,29 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleSwitchToLogin = () => {
+      setIsRegister(false);
+      setError(null);
+      setTimeout(() => {
+        const emailInput = document.querySelector<HTMLInputElement>('input[type="email"]');
+        if (emailInput) {
+          emailInput.focus();
+          emailInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          emailInput.classList.add('ring-2', 'ring-emerald-400', 'border-emerald-400');
+          setTimeout(() => {
+            emailInput.classList.remove('ring-2', 'ring-emerald-400', 'border-emerald-400');
+          }, 1200);
+        }
+      }, 50);
+    };
+
+    window.addEventListener('rentshield-switch-to-login', handleSwitchToLogin);
+    return () => {
+      window.removeEventListener('rentshield-switch-to-login', handleSwitchToLogin);
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,7 +190,7 @@ export const Login: React.FC = () => {
 
         {/* RIGHT COLUMN: GLASS VAULT AUTH & 1-CLICK JUDGE ACCESS */}
         <div className="lg:col-span-5">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl shadow-black/60 glass-vault-card relative overflow-hidden">
+          <div id="login-auth-card" className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl shadow-black/60 glass-vault-card relative overflow-hidden">
             {/* Ambient top highlight */}
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
 
