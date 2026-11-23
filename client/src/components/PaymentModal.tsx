@@ -17,7 +17,7 @@ import {
   Lock,
   ArrowRight,
 } from 'lucide-react';
-import { Tenancy, paymentsApi, tenancyApi } from '../api';
+import { Tenancy, paymentsApi, tenancyApi, authApi } from '../api';
 import { emitSyncEvent } from '../realtimeSync';
 
 // Helper to load official Razorpay Checkout SDK dynamically
@@ -108,10 +108,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   }
 
   // Dynamic Initial UPI IDs
+  const user = authApi.getCurrentUser();
+  const savedUserUpi = user?.email
+    ? localStorage.getItem(`rentshield_default_upi_${user.email.toLowerCase()}`)
+    : null;
+
   const defaultTenantUpi =
     tenancy.tenantUpi ||
+    (isRecipientSettingsOnly && currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : null) ||
+    (currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : null) ||
     (tenancy.user?.email ? tenancy.user.email.split('@')[0] + '@okaxis' : 'tenant.aarav@okhdfcbank');
-  const defaultLandlordUpi = tenancy.landlordUpi || 'ramesh.malik@okhdfcbank';
+  const defaultLandlordUpi =
+    tenancy.landlordUpi ||
+    (isRecipientSettingsOnly && currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : null) ||
+    (currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : null) ||
+    'ramesh.malik@okhdfcbank';
   const initialVpa = isLandlordPaying ? defaultTenantUpi : defaultLandlordUpi;
 
   // Separate Owner vs Guest QR code storage to prevent collision
@@ -214,6 +225,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         landlordQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
         customQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
       });
+      // Also sync to user's saved UPI vault in localStorage
+      if (user?.email && vpa.trim()) {
+        localStorage.setItem(`rentshield_default_upi_${user.email.toLowerCase()}`, vpa.trim());
+      }
       emitSyncEvent('TENANCY_UPDATED', tenancy.id);
       if (onSettled) onSettled(updated);
       setPaymentSuccess('Receiving UPI ID & QR settings saved successfully!');

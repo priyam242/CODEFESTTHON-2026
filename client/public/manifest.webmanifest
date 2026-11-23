@@ -1,0 +1,19 @@
+{
+  "name": "RentShield Cyber-Escrow",
+  "short_name": "RentShield",
+  "description": "Tamper-proof Move-In & Move-Out inspection protocol sealed by WebCrypto SHA-256 and verified with Gemini AI.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050912",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

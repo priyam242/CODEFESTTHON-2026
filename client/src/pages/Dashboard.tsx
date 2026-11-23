@@ -78,7 +78,7 @@ export const Dashboard: React.FC = () => {
   const loadTenancies = useCallback(async () => {
     try {
       const data = await tenancyApi.getAll();
-      setTenancies(data);
+      setTenancies(Array.isArray(data) ? data : []);
     } catch (err: any) {
       if (isInitialLoad.current) {
         setError(err?.response?.data?.message || err?.message || 'Failed to fetch tenancies');
@@ -131,12 +131,13 @@ export const Dashboard: React.FC = () => {
   };
 
   // Sort Active tenancies strictly newest-first (createdAt descending)
-  const activeTenancies = tenancies
+  const safeTenancies = Array.isArray(tenancies) ? tenancies : [];
+  const activeTenancies = safeTenancies
     .filter((t) => !isSettledTenancy(t))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Sort Settled History tenancies strictly newest-first (settledAt / createdAt descending)
-  const settledTenancies = tenancies
+  const settledTenancies = safeTenancies
     .filter((t) => isSettledTenancy(t))
     .sort((a, b) => {
       const timeA = new Date(a.settledAt || a.createdAt).getTime();

@@ -1,34 +1,49 @@
 ================================================================================
-RENTSHIELD NAVBAR SIGN IN & INTROSPLASH INTERACTION HARDENING AUDIT
+RENTSHIELD 1-CLICK PWA INSTALL & USER PROFILE UPI VAULT AUDIT
 ================================================================================
-Timestamp: 2026-11-24T00:43:00+05:30
+Timestamp: 2026-11-24T00:56:00+05:30
 Repository: https://github.com/priyam242/CODEFESTTHON-2026.git
 Branch: main
 
-1. NAVBAR SIGN IN BUTTON INTERACTION & DYNAMIC FEEDBACK
-- Audited all header and Navbar auth links (client/src/components/Navbar.tsx):
-  * Updated top-right "Sign In" button to be an explicit, high-priority interactive link:
-    `<Link to="/login" onClick={handleSignInClick} className="relative z-50 cursor-pointer pointer-events-auto ...">`
-  * Enhanced `handleSignInClick`:
-    - When clicked from any outside route, cleanly navigates to `/login`.
-    - When already on `/login`, dispatches the `rentshield-switch-to-login` event (flipping registration back to sign-in if toggled), smoothly scrolls to `#login-auth-card`, focuses `input[type="email"]`, and applies an instant emerald pulse ring (`ring-2 ring-emerald-400 border-emerald-400`) so the button always delivers immediate visual feedback instead of feeling static.
-- Added corresponding event listener and target ID `#login-auth-card` in `client/src/pages/Login.tsx`.
+1. 1-CLICK INSTALLABLE PWA ENGINE
+- Web App Manifest (client/public/manifest.webmanifest):
+  * Configured name: "RentShield Cyber-Escrow", short_name: "RentShield".
+  * Display mode: "standalone", theme_color: "#10b981", background_color: "#050912".
+  * Linked icons targeting /logo.svg with maskable & any purpose support.
+  * Linked via `<link rel="manifest" href="/manifest.webmanifest" />` in client/index.html.
+- Network-First Cache-Safe Service Worker (client/public/sw.js):
+  * Cache-safe strategy: fetches fresh network bytes for HTML/JS/CSS assets while bypassing dynamic API requests (/api, /socket, /uploads).
+  * Auto-registered in client/src/main.tsx.
+- Navbar "📲 Install App" Button & Install Guide Modal (client/src/components/Navbar.tsx):
+  * Captures browser beforeinstallprompt event. When available, triggers native browser/OS install prompt (deferredPrompt.prompt()).
+  * If prompt is not directly available (e.g., Safari iOS or desktop address bar), opens an interactive glassmorphic Install Guide modal with platform-specific 1-step instructions for Desktop (Chrome/Edge/Brave), iOS (Safari), and Android (Chrome).
+  * Automatically detects standalone PWA display mode (`display-mode: standalone`).
 
-2. CLICK INTERCEPTION ELIMINATION & INTROSPLASH HYGIENE
-- IntroSplash Cleanup (client/src/components/IntroSplash.tsx):
-  * Removed the global `document.addEventListener('click', handleDocumentClick)` listener that was capturing all document-level click bubbles.
-  * Replay is now explicitly wired via `#navbar-brand-logo` `onClick` invoking `replayIntroAnimation()`.
-  * Added `pointerEvents: isMorphing ? 'none' : 'auto'` to both the outer backdrop container and the central `contentRef` container during the FLIP morph transition, ensuring zero click blocking on header elements.
-  * Enforced `pointer-events-none` on all decorative glow radial layers and background grid accents.
-  * Verified that once `phase === 'done'`, `IntroSplash` returns strictly `null`, leaving zero DOM artifacts.
-- Navbar Brand Logo Bounds:
-  * Updated `#navbar-brand-logo` in `Navbar.tsx` to `inline-flex w-fit items-center space-x-3 group relative z-50 cursor-pointer pointer-events-auto flex-shrink-0`.
-  * Guarantees zero oversized margins or overlapping pseudo-elements that could obstruct adjacent navigation targets.
+2. CLICKABLE USER PROFILE & SAVED DEFAULT UPI VAULT
+- User Profile & Payment Vault Modal (client/src/components/UserProfileModal.tsx):
+  * Accessible by clicking the user badge in the Navbar.
+  * Features Cyber-Shield avatar with user initials, full name, email with 1-click clipboard copy, role badge (TENANT / LANDLORD), and active WebCrypto SHA-256 beacon.
+  * Default Receiving UPI ID Vault:
+    - Allows setting and persisting default UPI ID in localStorage (`rentshield_default_upi_<email>`).
+    - Integrated with PaymentModal.tsx to auto-preload the user's receiving UPI ID for security deposits and escrow refunds.
+    - Displays green confirmation toast upon saving.
+  * Quick Protocol Stats: displays Active Escrows, Settled Past tenancies, and SHA Protection level.
+  * Direct Sign Out action.
 
-3. BUILD & COMPILATION VERIFICATION
-- Frontend Build: `pnpm --filter rentshield-client build` passed with exit code 0.
-  * 1,705 modules transformed via Vite v6.4.6.
-  * 0 TypeScript errors, 0 compilation warnings.
+3. PLAYWRIGHT AUTOMATED TEST AUDIT
+- Test Suite Executed: verify_pwa_and_profile.mjs
+- Test Results:
+  * Check 1: "📲 Install App" button visible in Navbar (PASSED)
+  * Check 2: Click "📲 Install App" -> Install Guide modal opens with instructions (PASSED)
+  * Check 3: "Sign In" button visible and interactive on /login (PASSED)
+  * Check 4: Authenticated user session hydrates cleanly (PASSED)
+  * Check 5: Clickable User Profile badge visible in Navbar (PASSED)
+  * Check 6: Click User Profile badge -> User Profile & Default UPI Vault modal opens (PASSED)
+  * Check 7: Update Default UPI in Vault -> Saved feedback toast renders (PASSED)
+- Overall Status: ALL PLAYWRIGHT VERIFICATION CHECKS PASSED 100%!
+
+4. BUILD VERIFICATION
+- Frontend Build: `pnpm --filter rentshield-client build` passed with exit code 0 (1,706 modules transformed, 0 errors).
 
 Verified by Antigravity Autonomous Agent.
 ================================================================================

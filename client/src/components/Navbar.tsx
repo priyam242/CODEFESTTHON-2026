@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, LogOut, Plus, CheckCircle2, Cpu, Bell } from 'lucide-react';
+import { Shield, LogOut, Plus, CheckCircle2, Cpu, Bell, Smartphone, X } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authApi, tenancyApi } from '../api';
 import { useLiveSync } from '../realtimeSync';
 import { replayIntroAnimation } from './IntroSplash';
+import { UserProfileModal } from './UserProfileModal';
 
 export const Navbar: React.FC = () => {
   const user = authApi.getCurrentUser();
@@ -15,6 +16,51 @@ export const Navbar: React.FC = () => {
   const isDashboard = location.pathname === '/';
   const isLandlord = user?.role === 'LANDLORD';
 
+  // PWA Install State & Handlers
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState<boolean>(() => {
+    return (
+      typeof window !== 'undefined' &&
+      (window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true)
+    );
+  });
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsStandalone(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choiceResult = await deferredPrompt.userChoice;
+      if (choiceResult && choiceResult.outcome === 'accepted') {
+        setIsStandalone(true);
+      }
+      setDeferredPrompt(null);
+    } else {
+      setShowInstallGuide(true);
+    }
+  };
+
   const checkPending = useCallback(async () => {
     if (!user || user.role !== 'LANDLORD') {
       setPendingCount(0);
@@ -22,7 +68,7 @@ export const Navbar: React.FC = () => {
     }
     try {
       const data = await tenancyApi.getAll();
-      const count = data.filter((t) => t.status === 'PENDING').length;
+      const count = Array.isArray(data) ? data.filter((t) => t.status === 'PENDING').length : 0;
       setPendingCount(count);
     } catch {
       // Graceful offline/silent handling
@@ -93,7 +139,7 @@ export const Navbar: React.FC = () => {
 
           {/* Show protocol status pill when on auth page or unauthenticated */}
           {isAuthPage || !user ? (
-            <div className="flex items-center space-x-3 sm:space-x-4 relative z-50 pointer-events-auto">
+            <div className="flex items-center space-x-2 sm:space-x-3 relative z-50 pointer-events-auto">
               <div className="hidden sm:inline-flex items-center space-x-2 text-xs font-mono px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 shadow-sm shadow-emerald-500/10 pointer-events-none select-none">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="text-[11px] font-semibold">Gemini 2.5 Flash + WebCrypto Active</span>
@@ -104,6 +150,17 @@ export const Navbar: React.FC = () => {
               >
                 Verify Hash
               </Link>
+              {!isStandalone && (
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  title="Install RentShield App (PWA)"
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-emerald-500/35 hover:border-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold font-mono transition shadow-sm relative z-50 cursor-pointer pointer-events-auto"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>📲 Install App</span>
+                </button>
+              )}
               <Link
                 to="/login"
                 onClick={handleSignInClick}
@@ -113,13 +170,25 @@ export const Navbar: React.FC = () => {
               </Link>
             </div>
           ) : (
-            <div className="flex items-center space-x-3 sm:space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-3">
               <Link
                 to="/verify"
                 className="hidden sm:inline-flex items-center space-x-1.5 text-xs text-slate-300 hover:text-emerald-400 font-medium transition px-3 py-1.5 rounded-xl hover:bg-slate-900 border border-slate-800/60"
               >
                 <span>Verify Hash</span>
               </Link>
+
+              {!isStandalone && (
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  title="Install RentShield App (PWA)"
+                  className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-emerald-500/35 hover:border-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold font-mono transition shadow-sm relative z-50 cursor-pointer pointer-events-auto"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>📲 Install App</span>
+                </button>
+              )}
 
               {/* Show CTA only when NOT on dashboard (preventing duplicate CTA conflict with hero button) */}
               {user.role === 'TENANT' && !isDashboard && (
@@ -163,13 +232,22 @@ export const Navbar: React.FC = () => {
                 </button>
               )}
 
-              {/* User Identity Chip */}
-              <div className="flex items-center space-x-2 text-xs text-slate-300 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl">
+              {/* Clickable User Identity Chip & Vault Trigger */}
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(true)}
+                title="Open Profile & Saved Default UPI Vault"
+                className="flex items-center space-x-2 text-xs text-slate-300 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/40 px-3 py-1.5 rounded-xl transition cursor-pointer relative z-50 group"
+              >
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="font-medium text-slate-200 max-w-[130px] truncate">{user.name || user.email}</span>
+                <span className="font-medium text-slate-200 max-w-[130px] truncate group-hover:text-emerald-300 transition">
+                  {user.name || user.email}
+                </span>
                 <span className="text-slate-700">•</span>
-                <span className="font-mono text-[10px] font-bold text-emerald-400 uppercase tracking-wider">{user.role}</span>
-              </div>
+                <span className="font-mono text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                  {user.role}
+                </span>
+              </button>
 
               <button
                 onClick={handleLogout}
@@ -182,6 +260,91 @@ export const Navbar: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* User Profile & Saved UPI Vault Modal */}
+      {showProfileModal && (
+        <UserProfileModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          onLogout={handleLogout}
+        />
+      )}
+
+      {/* PWA 1-Step Install Guide Modal */}
+      {showInstallGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden glass-vault-card">
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500"></div>
+
+            <button
+              type="button"
+              onClick={() => setShowInstallGuide(false)}
+              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100">Install RentShield App</h3>
+                <p className="text-xs text-slate-400">Install native standalone PWA on your device</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 my-5 text-xs text-slate-300">
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-start space-x-3">
+                <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 font-mono font-bold text-xs">
+                  01
+                </div>
+                <div>
+                  <span className="font-bold text-slate-100 block">Desktop (Chrome / Edge / Brave):</span>
+                  <span className="text-slate-400 leading-relaxed">
+                    Click the <strong>Install (⊕)</strong> icon on the right side of your address bar, or click browser menu (⋮) &rarr; <strong>&quot;Install RentShield&quot;</strong>.
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-start space-x-3">
+                <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 font-mono font-bold text-xs">
+                  02
+                </div>
+                <div>
+                  <span className="font-bold text-slate-100 block">iOS (Apple Safari):</span>
+                  <span className="text-slate-400 leading-relaxed">
+                    Tap the <strong>Share</strong> button (box with upward arrow) in the toolbar, then tap <strong>&quot;Add to Home Screen&quot;</strong>.
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-start space-x-3">
+                <div className="p-1.5 rounded-lg bg-teal-500/10 text-teal-400 font-mono font-bold text-xs">
+                  03
+                </div>
+                <div>
+                  <span className="font-bold text-slate-100 block">Android (Chrome / Samsung):</span>
+                  <span className="text-slate-400 leading-relaxed">
+                    Tap the <strong>three dots (⋮)</strong> menu in the upper right, then tap <strong>&quot;Install App&quot;</strong> or <strong>&quot;Add to Home screen&quot;</strong>.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowInstallGuide(false)}
+                className="w-full sm:w-auto px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs font-mono transition shadow-md shadow-emerald-500/20"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   );
 };
+export default Navbar;
