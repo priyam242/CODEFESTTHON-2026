@@ -45,6 +45,8 @@ export const LandlordVerify: React.FC = () => {
 
   // Owner Payout UPI Modal & Settlement State
   const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [payoutModalStage, setPayoutModalStage] = useState<'DEPOSIT' | 'SETTLEMENT'>('SETTLEMENT');
+  const [isRecipientSettingsOnly, setIsRecipientSettingsOnly] = useState(false);
   const [tenantVpa, setTenantVpa] = useState('tenant.aarav@okhdfcbank');
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [isSettled, setIsSettled] = useState(false);
@@ -178,6 +180,15 @@ export const LandlordVerify: React.FC = () => {
     } catch {}
   }
 
+  // Strict 6-Step Protocol Tracker for Landlord Portal
+  const isStep1Done = items.length > 0;
+  const isStep2Done = isApproved || isSettled || tenancy.status === 'LOCKED' || Boolean(tenancy.signerAudit);
+  const isStep3Done = Boolean(tenancy.depositPaid);
+  const isStep4Done = isStep3Done && (isVacated || isMoveOutCompleted);
+  const isStep5Done = isSettled || tenancy.status === 'SETTLED';
+  const isStep6Done = isSettled || tenancy.status === 'SETTLED';
+  const completedStepsCount = [isStep1Done, isStep2Done, isStep3Done, isStep4Done, isStep5Done, isStep6Done].filter(Boolean).length;
+
   return (
     <div className="min-h-screen py-10 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
       {/* Top Header */}
@@ -246,15 +257,57 @@ export const LandlordVerify: React.FC = () => {
           ) : (
             <button
               type="button"
-              onClick={() => setShowPayoutModal(true)}
+              onClick={() => {
+                setPayoutModalStage('SETTLEMENT');
+                setIsRecipientSettingsOnly(false);
+                setShowPayoutModal(true);
+              }}
               className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-mono transition shadow-md shadow-emerald-500/20 whitespace-nowrap self-start sm:self-center"
             >
               <QrCode className="w-3.5 h-3.5" />
-              <span>💸 Pay Net Refund via UPI QR (₹{netRefund.toLocaleString('en-IN')})</span>
+              <span>💸 Scan Guest QR / Pay Net Refund (₹{netRefund.toLocaleString('en-IN')})</span>
             </button>
           )}
         </div>
       )}
+
+      {/* 6-Step Protocol Tracker Card for Landlord */}
+      <div className="mb-6 p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 backdrop-blur-xl shadow-lg">
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800/80">
+          <span className="text-[11px] font-bold font-mono uppercase tracking-wider text-slate-300">
+            Escrow Protocol Sequence
+          </span>
+          <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+            {completedStepsCount}/6 Sealed
+          </span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-[10px] font-mono">
+          <div className={`p-2 rounded-lg border ${isStep1Done ? 'bg-slate-950 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/40 border-slate-800 text-slate-500'}`}>
+            <span className="block font-bold">01 Move-In</span>
+            <span>{isStep1Done ? `✓ ${items.length} Fixtures` : 'Pending'}</span>
+          </div>
+          <div className={`p-2 rounded-lg border ${isStep2Done ? 'bg-slate-950 border-emerald-500/40 text-emerald-300' : 'bg-amber-500/10 border-amber-500/40 text-amber-300'}`}>
+            <span className="block font-bold">02 Owner Lock</span>
+            <span>{isStep2Done ? '✓ Sealed' : 'Action Required'}</span>
+          </div>
+          <div className={`p-2 rounded-lg border ${isStep3Done ? 'bg-slate-950 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/40 border-slate-800 text-slate-500'}`}>
+            <span className="block font-bold">03 Deposit</span>
+            <span>{isStep3Done ? '✓ Paid' : 'Awaiting Guest'}</span>
+          </div>
+          <div className={`p-2 rounded-lg border ${isStep4Done ? 'bg-slate-950 border-emerald-500/40 text-emerald-300' : !isStep3Done ? 'bg-slate-950/40 border-slate-800 text-slate-600' : 'bg-amber-500/10 border-amber-500/40 text-amber-300'}`}>
+            <span className="block font-bold">04 Move-Out</span>
+            <span>{!isStep3Done ? '🔒 Locked' : isStep4Done ? '✓ Audited' : 'In Progress'}</span>
+          </div>
+          <div className={`p-2 rounded-lg border ${isStep5Done ? 'bg-slate-950 border-emerald-500/40 text-emerald-300' : !isStep4Done ? 'bg-slate-950/40 border-slate-800 text-slate-600' : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 animate-pulse'}`}>
+            <span className="block font-bold">05 Payout</span>
+            <span>{!isStep4Done ? '🔒 Locked' : isStep5Done ? '✓ Settled' : 'Ready to Pay'}</span>
+          </div>
+          <div className={`p-2 rounded-lg border ${isStep6Done ? 'bg-slate-950 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/40 border-slate-800 text-slate-600'}`}>
+            <span className="block font-bold">06 Archive</span>
+            <span>{isStep6Done ? '✓ Court Sealed' : 'Pending'}</span>
+          </div>
+        </div>
+      </div>
 
       {/* Tenancy Overview Card */}
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 sm:p-8 backdrop-blur-xl mb-8 shadow-xl glass-vault-card relative overflow-hidden">
@@ -363,11 +416,15 @@ export const LandlordVerify: React.FC = () => {
             </div>
             <button
               type="button"
-              onClick={() => setShowPayoutModal(true)}
+              onClick={() => {
+                setPayoutModalStage('SETTLEMENT');
+                setIsRecipientSettingsOnly(false);
+                setShowPayoutModal(true);
+              }}
               className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-mono transition shadow-lg shadow-emerald-500/20"
             >
               <QrCode className="w-4 h-4" />
-              <span>💸 Pay Net Refund via UPI QR (₹{netRefund.toLocaleString('en-IN')})</span>
+              <span>💸 Scan Guest QR / Pay Net Refund (₹{netRefund.toLocaleString('en-IN')})</span>
             </button>
           </div>
 
@@ -659,9 +716,10 @@ export const LandlordVerify: React.FC = () => {
           onClose={() => setShowPayoutModal(false)}
           tenancy={tenancy}
           currentUserRole="LANDLORD"
-          stage="SETTLEMENT"
+          stage={payoutModalStage}
+          isRecipientSettingsOnly={isRecipientSettingsOnly}
           landlordToken={landlordToken}
-          defaultAmount={netRefund}
+          defaultAmount={payoutModalStage === 'DEPOSIT' ? totalDeposit : netRefund}
           onSettled={(updated) => {
             setTenancy(updated);
             setIsSettled(true);

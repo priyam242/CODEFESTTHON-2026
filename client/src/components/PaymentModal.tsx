@@ -470,6 +470,27 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   <div className="flex-1 border-t border-slate-800" />
                 </div>
 
+                {/* QR Direction Clear Header */}
+                <div className="text-center space-y-1 mb-2">
+                  <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-[11px] font-mono font-bold text-slate-200">
+                    <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>
+                      {effectiveStage === 'DEPOSIT'
+                        ? "Owner's Security Deposit Receiving QR"
+                        : netDifference >= 0
+                        ? "Tenant's Escrow Refund Receiving QR"
+                        : "Owner's Excess Damage Receiving QR"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    {effectiveStage === 'DEPOSIT'
+                      ? `Guest (${payerName}): Scan to pay ₹${amount.toLocaleString('en-IN')} to Owner (${payeeName})`
+                      : netDifference >= 0
+                      ? `Owner (${payerName}): Scan with UPI to refund ₹${amount.toLocaleString('en-IN')} to Tenant (${payeeName})`
+                      : `Guest (${payerName}): Scan to pay ₹${amount.toLocaleString('en-IN')} excess damage to Owner (${payeeName})`}
+                  </p>
+                </div>
+
                 {/* Real Phone-Scannable QR Image */}
                 <div className="p-3 rounded-2xl bg-white mx-auto inline-block shadow-2xl border-4 border-emerald-500/40">
                   {customQrImage ? (
@@ -493,7 +514,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
                 <div className="text-[10px] text-emerald-400 font-mono font-semibold flex items-center justify-center space-x-1">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>100% Real Phone-Scannable (GPay, PhonePe, Paytm, BHIM)</span>
+                  <span>100% Real Phone-Scannable NPCI QR • Payee VPA: {vpa}</span>
                 </div>
 
                 {/* Direct UPI URI Action Buttons */}

@@ -25,7 +25,7 @@ import {
   QrCode,
   CreditCard,
 } from 'lucide-react';
-import { tenancyApi, itemsApi, Tenancy, Item, authApi, getAssetUrl, fallbackFixtureSvg } from '../api';
+import { tenancyApi, itemsApi, paymentsApi, Tenancy, Item, authApi, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 
@@ -64,8 +64,17 @@ export const TenancyDetail: React.FC = () => {
   const [isRecipientSettingsOnly, setIsRecipientSettingsOnly] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
 
+  // Guest Refund Receiving UPI state
+  const [guestRefundVpa, setGuestRefundVpa] = useState<string>('');
+  const [savingGuestUpi, setSavingGuestUpi] = useState(false);
+  const [guestUpiSavedMsg, setGuestUpiSavedMsg] = useState<string | null>(null);
+
   const currentUser = authApi.getCurrentUser();
-  const isLandlord = currentUser?.role === 'LANDLORD';
+  const isLandlord =
+    currentUser?.role === 'LANDLORD' ||
+    (Boolean(currentUser?.email) &&
+      Boolean(tenancy?.landlordEmail) &&
+      currentUser!.email.toLowerCase() === tenancy!.landlordEmail!.toLowerCase());
 
   const aiStatuses = [
     'Hashing move-out raw byte stream (Web Crypto SHA-256)...',
@@ -112,6 +121,31 @@ export const TenancyDetail: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (tenancy?.tenantUpi) {
+      setGuestRefundVpa(tenancy.tenantUpi);
+    }
+  }, [tenancy]);
+
+  const handleSaveGuestRefundUpi = async () => {
+    if (!tenancy || !guestRefundVpa.trim()) return;
+    setSavingGuestUpi(true);
+    try {
+      const updated = await paymentsApi.updateRecipient({
+        tenancyId: tenancy.id,
+        tenantUpi: guestRefundVpa.trim(),
+      });
+      setTenancy(updated);
+      emitSyncEvent('TENANCY_UPDATED', tenancy.id);
+      setGuestUpiSavedMsg('Receiving UPI ID saved!');
+      setTimeout(() => setGuestUpiSavedMsg(null), 3000);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to update receiving UPI ID');
+    } finally {
+      setSavingGuestUpi(false);
+    }
+  };
 
   // In-Browser SHA-256 Hashing via Web Crypto API (Raw byte security)
   const computeLocalHash = async (file: File): Promise<string> => {
@@ -175,6 +209,10 @@ export const TenancyDetail: React.FC = () => {
   const handleMoveOutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeMoveOutItem) return;
+    if (!tenancy?.depositPaid) {
+      alert('🔒 Move-Out Audit is strictly locked until Step 03 (Security Deposit Payment) is completed.');
+      return;
+    }
     setUploadingMoveOut(true);
 
     try {
@@ -284,11 +322,29 @@ export const TenancyDetail: React.FC = () => {
     ? `https://wa.me/${waPhone}?text=${waText}`
     : `https://api.whatsapp.com/send?text=${waText}`;
 
-  // Guided Protocol Checklist Status
+  // Strict 6-Step Protocol Sequence
   const isStep1Done = items.length > 0;
-  const isStep2Done = tenancy.status === 'APPROVED';
-  const isStep3Done = items.some((it) => it.aiVerdict);
-  const isStep4Done = isStep2Done && isStep1Done;
+  const isStep2Done =
+    tenancy.status === 'APPROVED' ||
+    tenancy.status === 'LOCKED' ||
+    tenancy.status === 'SETTLED' ||
+    Boolean(tenancy.signerAudit);
+  const isStep3Done = Boolean(tenancy.depositPaid);
+  const isStep4Done =
+    isStep3Done &&
+    items.length > 0 &&
+    items.every((it) => Boolean(it.moveOutPhotoUrl || it.aiVerdict));
+  const isStep5Done = tenancy.status === 'SETTLED';
+  const isStep6Done = tenancy.status === 'SETTLED';
+
+  const completedStepsCount = [
+    isStep1Done,
+    isStep2Done,
+    isStep3Done,
+    isStep4Done,
+    isStep5Done,
+    isStep6Done,
+  ].filter(Boolean).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -311,22 +367,22 @@ export const TenancyDetail: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Guided 4-Step Protocol Rail */}
+        {/* Left Column: Strict 6-Step Protocol Tracker */}
         <div className="lg:col-span-4 xl:col-span-3 space-y-4">
           <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-5 backdrop-blur-xl shadow-xl glass-vault-card">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800/80">
               <span className="text-[11px] font-bold font-mono uppercase tracking-wider text-slate-300">
                 Protocol Progress
               </span>
-              <span className="text-[10px] text-emerald-400 font-mono font-bold">
-                {isStep3Done ? '3/4 Complete' : isStep2Done ? '2/4 Sealed' : isStep1Done ? '1/4 Logged' : '0/4 Initial'}
+              <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                {completedStepsCount}/6 Sealed
               </span>
             </div>
 
-            <div className="space-y-3.5 text-xs">
-              {/* Step 01 */}
+            <div className="space-y-3 text-xs">
+              {/* Step 01: Move-In Evidence */}
               <div
-                className={`p-3.5 rounded-xl border transition-all ${
+                className={`p-3 rounded-xl border transition-all ${
                   isStep1Done
                     ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
                     : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-300 ring-1 ring-emerald-500/30'
@@ -334,37 +390,49 @@ export const TenancyDetail: React.FC = () => {
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
-                    01 Move-in Evidence
+                    01 MOVE-IN EVIDENCE
                   </span>
                   {isStep1Done ? (
                     <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
                       <Check className="w-3 h-3" />
                       <span>{items.length} Logged</span>
                     </span>
-                  ) : (
+                  ) : !isLandlord ? (
                     <span className="text-[10px] text-amber-400 font-semibold animate-pulse">
-                      Action Needed
+                      Action Required
                     </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500">Pending</span>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Tenant takes baseline room photos. SHA-256 signatures generated locally.
+                  Tenant uploads baseline room photos with local SHA-256 signatures.
                 </p>
+                {!isStep1Done && !isLandlord && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(true)}
+                    className="mt-2 w-full py-1.5 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] font-mono transition flex items-center justify-center space-x-1 shadow-sm"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Upload Room Item</span>
+                  </button>
+                )}
               </div>
 
-              {/* Step 02 */}
+              {/* Step 02: Owner Review & QR Setup */}
               <div
-                className={`p-3.5 rounded-xl border transition-all ${
+                className={`p-3 rounded-xl border transition-all ${
                   isStep2Done
                     ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
                     : isStep1Done
-                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 ring-1 ring-amber-500/20'
                     : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
-                    02 Owner Review
+                    02 OWNER REVIEW &amp; QR
                   </span>
                   {isStep2Done ? (
                     <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
@@ -372,80 +440,275 @@ export const TenancyDetail: React.FC = () => {
                       <span>Sealed</span>
                     </span>
                   ) : isStep1Done ? (
-                    <span className="text-[10px] text-amber-400 font-semibold">Awaiting Lock</span>
+                    <span className="text-[10px] text-amber-400 font-semibold">
+                      {isLandlord ? 'Action Required' : 'Awaiting Lock'}
+                    </span>
                   ) : (
-                    <span className="text-[10px] text-slate-600">Waiting</span>
+                    <span className="text-[10px] text-slate-600">🔒 Locked</span>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Landlord reviews baseline photos via zero-login link and locks the deposit.
+                  Landlord reviews baseline photos, verifies SHA-256 signatures, and confirms receiving QR.
                 </p>
+                {isLandlord && !isStep2Done && isStep1Done && (
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleOwnerDirectApprove}
+                      disabled={approving}
+                      className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] font-mono transition shadow-sm"
+                    >
+                      {approving ? 'Sealing...' : '✓ Lock & Approve Baseline'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentModalStage('DEPOSIT');
+                        setIsRecipientSettingsOnly(true);
+                        setShowUpiModal(true);
+                      }}
+                      className="w-full py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-mono transition"
+                    >
+                      ⚙️ Set/Upload Owner Deposit QR
+                    </button>
+                  </div>
+                )}
+                {!isLandlord && !isStep2Done && isStep1Done && (
+                  <button
+                    type="button"
+                    onClick={handleNotifyOwner}
+                    disabled={notifyingOwner}
+                    className="mt-2 w-full py-1.5 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] font-mono transition shadow-sm"
+                  >
+                    {notifyingOwner ? 'Sending...' : '🔔 Notify Owner to Seal'}
+                  </button>
+                )}
               </div>
 
-              {/* Step 03 */}
+              {/* Step 03: Security Deposit Payment (Guest -> Owner) */}
               <div
-                className={`p-3.5 rounded-xl border transition-all ${
+                className={`p-3 rounded-xl border transition-all ${
                   isStep3Done
                     ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
-                    : isStep2Done
-                    ? 'bg-slate-950/80 border-slate-800 text-slate-300'
+                    : isStep1Done
+                    ? 'bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border-emerald-500/50 text-emerald-300 ring-1 ring-emerald-500/30'
                     : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
-                    03 Move-out Audit
+                    03 ESCROW DEPOSIT (₹{totalDeposit.toLocaleString('en-IN')})
                   </span>
                   {isStep3Done ? (
                     <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
                       <Check className="w-3 h-3" />
-                      <span>Audited</span>
+                      <span>Deposit Paid</span>
                     </span>
-                  ) : isStep2Done ? (
-                    <span className="text-[10px] text-slate-400">Ready</span>
+                  ) : isStep1Done ? (
+                    <span className="text-[10px] text-emerald-400 font-semibold animate-pulse">
+                      {isLandlord ? 'Awaiting Payment' : 'Action Required'}
+                    </span>
                   ) : (
-                    <span className="text-[10px] text-slate-600">Locked</span>
+                    <span className="text-[10px] text-slate-600">🔒 Locked</span>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Gemini AI inspects move-out photos, arbitrates wear &amp; tear, and computes refund.
+                  Guest scans Owner's payment QR code or pays via Razorpay escrow to lock deposit.
                 </p>
+                {!isStep3Done && isStep1Done && (
+                  !isLandlord ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentModalStage('DEPOSIT');
+                        setIsRecipientSettingsOnly(false);
+                        setShowUpiModal(true);
+                      }}
+                      className="mt-2 w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1.5 active:scale-95"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>💳 Pay Security Deposit</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentModalStage('DEPOSIT');
+                        setIsRecipientSettingsOnly(true);
+                        setShowUpiModal(true);
+                      }}
+                      className="mt-2 w-full py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 font-mono text-[11px] transition flex items-center justify-center space-x-1"
+                    >
+                      <QrCode className="w-3 h-3" />
+                      <span>⚙️ Set/Upload My Deposit QR</span>
+                    </button>
+                  )
+                )}
+                {isStep3Done && (
+                  <div className="mt-2 inline-flex items-center space-x-1 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    <ShieldCheck className="w-3 h-3" />
+                    <span>₹{totalDeposit.toLocaleString('en-IN')} Secured in Escrow</span>
+                  </div>
+                )}
               </div>
 
-              {/* Step 04 */}
+              {/* Step 04: Move-Out Audit & Guest Refund QR */}
               <div
-                className={`p-3.5 rounded-xl border transition-all ${
-                  isStep4Done
+                className={`p-3 rounded-xl border transition-all ${
+                  !isStep3Done
+                    ? 'bg-slate-950/40 border-slate-800/80 text-slate-600'
+                    : isStep4Done
+                    ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
+                    : 'bg-amber-500/10 border-amber-500/40 text-amber-300 ring-1 ring-amber-500/20'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
+                    04 MOVE-OUT &amp; REFUND QR
+                  </span>
+                  {!isStep3Done ? (
+                    <span className="text-[10px] text-slate-600 font-mono">🔒 Locked</span>
+                  ) : isStep4Done ? (
+                    <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
+                      <Check className="w-3 h-3" />
+                      <span>Audited</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-400 font-semibold">
+                      {items.filter((i) => Boolean(i.moveOutPhotoUrl || i.aiVerdict)).length}/{items.length} Inspected
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  {!isStep3Done
+                    ? 'Locked until Step 03 deposit payment is confirmed.'
+                    : 'Gemini AI arbitrates wear & tear. Tenant configures receiving refund QR.'}
+                </p>
+                {isStep3Done && !isStep4Done && !isLandlord && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentModalStage('SETTLEMENT');
+                      setIsRecipientSettingsOnly(true);
+                      setShowUpiModal(true);
+                    }}
+                    className="mt-2 w-full py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-mono transition flex items-center justify-center space-x-1"
+                  >
+                    <QrCode className="w-3 h-3 text-emerald-400" />
+                    <span>⚙️ Set/Upload My Refund QR</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Step 05: Final Refund Settlement (Owner -> Guest) */}
+              <div
+                className={`p-3 rounded-xl border transition-all ${
+                  !isStep4Done
+                    ? 'bg-slate-950/40 border-slate-800/80 text-slate-600'
+                    : isStep5Done
+                    ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
+                    : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-300 ring-1 ring-emerald-500/30'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
+                    05 FINAL SETTLEMENT
+                  </span>
+                  {!isStep4Done ? (
+                    <span className="text-[10px] text-slate-600 font-mono">🔒 Locked</span>
+                  ) : isStep5Done ? (
+                    <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
+                      <Check className="w-3 h-3" />
+                      <span>Settled</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-400 font-semibold animate-pulse">
+                      Ready to Settle
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  {!isStep4Done
+                    ? 'Unlocked once all room items complete Move-Out audit.'
+                    : totalDeductions <= totalDeposit
+                    ? 'Owner scans Guest Refund QR to return remaining deposit balance.'
+                    : 'Tenant pays excess damage balance to Owner.'}
+                </p>
+                {isStep4Done && !isStep5Done && (
+                  totalDeductions <= totalDeposit ? (
+                    isLandlord ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalStage('SETTLEMENT');
+                          setIsRecipientSettingsOnly(false);
+                          setShowUpiModal(true);
+                        }}
+                        className="mt-2 w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1 active:scale-95"
+                      >
+                        <QrCode className="w-3.5 h-3.5" />
+                        <span>💸 Scan Guest QR / Pay ₹{estimatedRefund.toLocaleString('en-IN')}</span>
+                      </button>
+                    ) : (
+                      <div className="mt-2 p-2 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-400 text-center font-bold">
+                        ⏳ Awaiting Owner Refund (₹{estimatedRefund.toLocaleString('en-IN')})
+                      </div>
+                    )
+                  ) : (
+                    !isLandlord ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalStage('SETTLEMENT');
+                          setIsRecipientSettingsOnly(false);
+                          setShowUpiModal(true);
+                        }}
+                        className="mt-2 w-full py-2 px-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs font-mono shadow-md transition flex items-center justify-center space-x-1"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>💳 Pay Excess Damage (₹{(totalDeductions - totalDeposit).toLocaleString('en-IN')})</span>
+                      </button>
+                    ) : (
+                      <div className="mt-2 p-2 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-amber-400 text-center font-bold">
+                        ⏳ Awaiting Tenant Payment (₹{(totalDeductions - totalDeposit).toLocaleString('en-IN')})
+                      </div>
+                    )
+                  )
+                )}
+              </div>
+
+              {/* Step 06: Court Certificate & Archive */}
+              <div
+                className={`p-3 rounded-xl border transition-all ${
+                  isStep6Done
                     ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
                     : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold uppercase tracking-wider text-[11px] font-mono">
-                    04 Certificates
+                    06 COURT CERTIFICATE
                   </span>
-                  {isStep4Done ? (
+                  {isStep6Done ? (
                     <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
                       <ShieldCheck className="w-3 h-3" />
-                      <span>Verified</span>
+                      <span>Archived</span>
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-600">Locked</span>
+                    <span className="text-[10px] text-slate-600">Pending Settlement</span>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
                   Immutable tamper-proof certificate generated with local Web Crypto byte verification.
                 </p>
-                {isStep4Done && (
-                  <Link
-                    to={`/verify?id=${tenancy.id}`}
-                    className="mt-3 w-full inline-flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
-                  >
-                    <FileCheck2 className="w-3.5 h-3.5" />
-                    <span>Open Public Verifier</span>
-                    <ExternalLink className="w-3 h-3 ml-0.5" />
-                  </Link>
-                )}
+                <Link
+                  to={`/verify?id=${tenancy.id}`}
+                  className="mt-2 w-full inline-flex items-center justify-center space-x-1.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold transition border border-slate-700"
+                >
+                  <FileCheck2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Open Public Verifier</span>
+                  <ExternalLink className="w-3 h-3 ml-0.5" />
+                </Link>
               </div>
             </div>
           </div>
@@ -822,6 +1085,42 @@ export const TenancyDetail: React.FC = () => {
             </div>
           </div>
 
+          {/* Strict Gate Lock: Deposit Unpaid Warning Banner */}
+          {!tenancy.depositPaid && items.length > 0 && (
+            <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 flex-shrink-0">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold flex items-center space-x-1.5">
+                    <span>🔒 Complete Step 03 (Pay Security Deposit to Owner) to unlock Move-Out Audit</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200">
+                      Deposit Pending
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-300/80 mt-0.5">
+                    Under RentShield escrow protocols, Move-Out condition uploads and AI arbitration unlock only after the security deposit is confirmed paid.
+                  </p>
+                </div>
+              </div>
+              {!isLandlord && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentModalStage('DEPOSIT');
+                    setIsRecipientSettingsOnly(false);
+                    setShowUpiModal(true);
+                  }}
+                  className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap self-start sm:self-center"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Pay Deposit Now</span>
+                </button>
+              )}
+            </div>
+          )}
+
           {items.length === 0 ? (
             <div className="text-center py-12 rounded-2xl bg-slate-900/40 border border-slate-800 border-dashed">
               <Camera className="w-8 h-8 text-slate-500 mx-auto mb-2" />
@@ -1003,13 +1302,24 @@ export const TenancyDetail: React.FC = () => {
                       Logged: {new Date(item.createdAt).toLocaleDateString()}
                     </span>
                     {!item.moveOutPhotoUrl && !isLandlord && (
-                      <button
-                        onClick={() => setActiveMoveOutItem(item)}
-                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/30 hover:border-transparent text-emerald-400 hover:text-slate-950 text-xs font-bold transition shadow-sm"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Upload Move-Out &amp; Audit</span>
-                      </button>
+                      tenancy.depositPaid ? (
+                        <button
+                          onClick={() => setActiveMoveOutItem(item)}
+                          className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/30 hover:border-transparent text-emerald-400 hover:text-slate-950 text-xs font-bold transition shadow-sm"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Upload Move-Out &amp; Audit</span>
+                        </button>
+                      ) : (
+                        <button
+                          disabled
+                          title="Complete Step 03 (Pay Security Deposit) to unlock Move-Out"
+                          className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/80 text-slate-500 text-xs font-mono cursor-not-allowed"
+                        >
+                          <Lock className="w-3 h-3 text-slate-500" />
+                          <span>Move-Out Locked (Deposit Pending)</span>
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
@@ -1194,6 +1504,49 @@ export const TenancyDetail: React.FC = () => {
                   ⚠️ Judge bypass active: duplicate baseline byte hash permitted for testing demonstration.
                 </div>
               )}
+
+              {/* Guest Refund Receiving UPI & QR Setup */}
+              <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold font-mono text-slate-200 flex items-center space-x-1.5">
+                    <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Your Receiving UPI ID (For Owner's Escrow Refund):</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentModalStage('SETTLEMENT');
+                      setIsRecipientSettingsOnly(true);
+                      setShowUpiModal(true);
+                    }}
+                    className="text-[11px] text-emerald-400 hover:underline font-mono"
+                  >
+                    ⚙️ Upload Custom QR
+                  </button>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={guestRefundVpa}
+                    onChange={(e) => setGuestRefundVpa(e.target.value)}
+                    placeholder="e.g. yourname@okaxis"
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-emerald-300 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveGuestRefundUpi}
+                    disabled={savingGuestUpi || !guestRefundVpa.trim()}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold transition disabled:opacity-50"
+                  >
+                    {savingGuestUpi ? 'Saving...' : 'Save UPI'}
+                  </button>
+                </div>
+                {guestUpiSavedMsg && (
+                  <div className="text-[11px] text-emerald-400 font-mono">
+                    ✓ {guestUpiSavedMsg}
+                  </div>
+                )}
+              </div>
 
               <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-400 flex items-start space-x-2">
                 <Shield className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />

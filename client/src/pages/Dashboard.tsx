@@ -420,6 +420,15 @@ export const Dashboard: React.FC = () => {
             const netRefund = Math.max(0, originalDeposit - totalDeductions);
             const isVacated = (tenancy.items && tenancy.items.length > 0 && tenancy.items.every((item) => Boolean(item.moveOutPhotoUrl || item.aiVerdict))) || tenancy.status === 'COMPLETED' || tenancy.status === 'VACATED';
 
+            // 6-step progress calculation
+            const isStep1Done = hasMoveIn;
+            const isStep2Done = isApproved || tenancy.status === 'LOCKED' || tenancy.status === 'SETTLED' || Boolean(tenancy.signerAudit);
+            const isStep3Done = Boolean(tenancy.depositPaid);
+            const isStep4Done = isStep3Done && isVacated;
+            const isStep5Done = tenancy.status === 'SETTLED';
+            const isStep6Done = tenancy.status === 'SETTLED';
+            const completedCount = [isStep1Done, isStep2Done, isStep3Done, isStep4Done, isStep5Done, isStep6Done].filter(Boolean).length;
+
             return (
               <div
                 key={tenancy.id}
@@ -436,34 +445,39 @@ export const Dashboard: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Status & Deposit Amount */}
+                  {/* Status, Progress & Deposit Amount */}
                   <div className="flex items-start justify-between mb-3">
-                    <span
-                      className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider ${
-                        isApproved
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
-                          : tenancy.status === 'PENDING'
-                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 animate-pulse'
-                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
-                      }`}
-                    >
-                      {isApproved ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Sealed Escrow</span>
-                        </>
-                      ) : tenancy.status === 'PENDING' ? (
-                        <>
-                          <Bell className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-                          <span>Awaiting Owner Signature</span>
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>Move-In Open</span>
-                        </>
-                      )}
-                    </span>
+                    <div className="flex items-center space-x-1.5 flex-wrap gap-1">
+                      <span
+                        className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider ${
+                          isApproved
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
+                            : tenancy.status === 'PENDING'
+                            ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 animate-pulse'
+                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
+                        }`}
+                      >
+                        {isApproved ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Sealed Escrow</span>
+                          </>
+                        ) : tenancy.status === 'PENDING' ? (
+                          <>
+                            <Bell className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                            <span>Awaiting Owner Signature</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Move-In Open</span>
+                          </>
+                        )}
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-950 border border-slate-800 text-emerald-400 font-bold">
+                        {completedCount}/6 Sealed
+                      </span>
+                    </div>
                     <div className="text-right font-mono text-sm sm:text-base font-extrabold text-slate-100">
                       ₹{Number(tenancy.depositAmount).toLocaleString('en-IN')}
                     </div>
@@ -478,19 +492,39 @@ export const Dashboard: React.FC = () => {
                   </p>
 
                   {/* STAGE 1: Move-In Escrow Deposit Pay Button for Unfunded Tenancy */}
-                  {!tenancy.depositPaid && !isLandlord && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentModalStage('DEPOSIT');
-                        setIsRecipientSettingsOnly(false);
-                        setSelectedPaymentTenancy(tenancy);
-                      }}
-                      className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95"
-                    >
-                      <CreditCard className="w-3.5 h-3.5" />
-                      <span>💳 Pay &amp; Lock Deposit (₹{originalDeposit.toLocaleString('en-IN')})</span>
-                    </button>
+                  {!tenancy.depositPaid && (
+                    !isLandlord ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalStage('DEPOSIT');
+                          setIsRecipientSettingsOnly(false);
+                          setSelectedPaymentTenancy(tenancy);
+                        }}
+                        className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>💳 Pay Security Deposit (₹{originalDeposit.toLocaleString('en-IN')})</span>
+                      </button>
+                    ) : (
+                      <div className="mt-3 flex items-center space-x-2">
+                        <div className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-amber-400 text-center font-bold">
+                          ⏳ Awaiting Deposit: ₹{originalDeposit.toLocaleString('en-IN')}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('DEPOSIT');
+                            setIsRecipientSettingsOnly(true);
+                            setSelectedPaymentTenancy(tenancy);
+                          }}
+                          title="Set receiving UPI ID / QR"
+                          className="py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-mono transition"
+                        >
+                          ⚙️ QR
+                        </button>
+                      </div>
+                    )
                   )}
 
                   {/* Cryptographic SHA-256 Escrow Seal Strip */}
@@ -539,7 +573,7 @@ export const Dashboard: React.FC = () => {
                           className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95"
                         >
                           <QrCode className="w-3.5 h-3.5" />
-                          <span>💸 Pay Net Refund to Tenant (₹{netRefund.toLocaleString('en-IN')})</span>
+                          <span>💸 Scan Guest QR / Pay Net Refund (₹{netRefund.toLocaleString('en-IN')})</span>
                         </button>
                       ) : (
                         <div className="mt-3 flex items-center space-x-2">
