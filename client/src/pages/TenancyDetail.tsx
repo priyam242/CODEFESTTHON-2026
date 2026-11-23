@@ -1,0 +1,785 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import {
+  Shield,
+  ArrowLeft,
+  Building,
+  CheckCircle2,
+  Clock,
+  Copy,
+  ExternalLink,
+  Plus,
+  Camera,
+  Upload,
+  Sparkles,
+  IndianRupee,
+  FileText,
+  AlertTriangle,
+  Lock,
+  Check,
+  Zap,
+  ShieldCheck,
+  FileCheck2,
+} from 'lucide-react';
+import { tenancyApi, itemsApi, Tenancy, Item, authApi } from '../api';
+import { useLiveSync, emitSyncEvent } from '../realtimeSync';
+
+export const TenancyDetail: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const [tenancy, setTenancy] = useState<Tenancy | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
+
+  // New Move-In Item Form state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [roomName, setRoomName] = useState('Living Room');
+  const [itemName, setItemName] = useState('Daikin Inverter AC 1.5 Ton');
+  const [moveInNotes, setMoveInNotes] = useState('Clean filters, no dents, working perfectly on move-in');
+  const [moveInFile, setMoveInFile] = useState<File | null>(null);
+  const [uploadingMoveIn, setUploadingMoveIn] = useState(false);
+
+  // Move-Out Form state
+  const [activeMoveOutItem, setActiveMoveOutItem] = useState<Item | null>(null);
+  const [moveOutNotes, setMoveOutNotes] = useState('Normal seasonal dust, standard usage, no cracks');
+  const [moveOutFile, setMoveOutFile] = useState<File | null>(null);
+  const [uploadingMoveOut, setUploadingMoveOut] = useState(false);
+
+  const [copied, setCopied] = useState(false);
+  const user = authApi.getCurrentUser();
+  const isLandlord = user?.role === 'LANDLORD';
+
+  const loadTenancy = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await tenancyApi.getOne(id);
+      setTenancy(data);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Failed to load tenancy');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  // Instant multi-tab synchronization: updates automatically when other tab mutates
+  const { isLiveSynced } = useLiveSync(loadTenancy, 4000);
+
+  useEffect(() => {
+    if (id) {
+      loadTenancy();
+    }
+  }, [id, loadTenancy]);
+
+  const handleCopyLandlordLink = () => {
+    if (!tenancy) return;
+    const url = `${window.location.origin}/verify/${tenancy.landlordToken}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleOwnerDirectApprove = async () => {
+    if (!tenancy?.landlordToken) return;
+    setApproving(true);
+    try {
+      await tenancyApi.approveLandlordReview(tenancy.landlordToken);
+      emitSyncEvent('LANDLORD_APPROVED', tenancy.id);
+      await loadTenancy();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to approve');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleMoveInSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenancy) return;
+    setUploadingMoveIn(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('tenancyId', tenancy.id);
+      formData.append('roomName', roomName);
+      formData.append('itemName', itemName);
+      if (moveInNotes) formData.append('moveInNotes', moveInNotes);
+      if (moveInFile) formData.append('photo', moveInFile);
+
+      await itemsApi.uploadMoveIn(formData);
+      setShowAddModal(false);
+      setMoveInFile(null);
+      emitSyncEvent('MOVE_IN_UPLOADED', tenancy.id);
+      await loadTenancy();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to upload move-in item');
+    } finally {
+      setUploadingMoveIn(false);
+    }
+  };
+
+  const handleMoveOutSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeMoveOutItem) return;
+    setUploadingMoveOut(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('notes', moveOutNotes);
+      if (moveOutFile) formData.append('photo', moveOutFile);
+
+      await itemsApi.uploadMoveOut(activeMoveOutItem.id, formData);
+      setActiveMoveOutItem(null);
+      setMoveOutFile(null);
+      emitSyncEvent('MOVE_OUT_UPLOADED', tenancy?.id);
+      await loadTenancy();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to analyze move-out item');
+    } finally {
+      setUploadingMoveOut(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center text-slate-400 text-sm">
+        Loading tenancy cryptographic record...
+      </div>
+    );
+  }
+
+  if (error || !tenancy) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+        <p className="text-rose-400">{error || 'Tenancy not found'}</p>
+        <Link to="/" className="mt-4 inline-block text-xs text-emerald-400 hover:underline">
+          Return to Dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  const items = tenancy.items || [];
+  const totalDeposit = Number(tenancy.depositAmount);
+  const totalDeductions = items.reduce((acc, it) => acc + (it.suggestedCut ? Number(it.suggestedCut) : 0), 0);
+  const estimatedRefund = Math.max(0, totalDeposit - totalDeductions);
+  const landlordLink = `${window.location.origin}/verify/${tenancy.landlordToken}`;
+
+  // Guided 4-Step Workflow Status Calculation
+  const isStep1Done = items.length > 0;
+  const isStep2Done = tenancy.status === 'APPROVED';
+  const isStep3Done = items.some((i) => i.moveOutPhotoUrl && i.aiVerdict);
+  const isStep4Done = isStep2Done; // Certificate unlocked when approved
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="flex items-center justify-between mb-6">
+        <Link
+          to="/"
+          className="inline-flex items-center space-x-2 text-xs font-medium text-slate-400 hover:text-slate-200 transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Tenancies</span>
+        </Link>
+
+        {isLiveSynced && (
+          <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 animate-pulse">
+            <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            <span>⚡ Live synced just now</span>
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Guided 4-Step Workflow Sidebar */}
+        <div className="lg:col-span-4 xl:col-span-3 space-y-4">
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 backdrop-blur-xl shadow-xl">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                Workflow Progress
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono font-semibold">
+                {isStep3Done ? '3/4 Complete' : isStep2Done ? '2/4 Sealed' : isStep1Done ? '1/4 Logged' : '0/4 Initial'}
+              </span>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Step 01 */}
+              <div
+                className={`p-3 rounded-xl border transition ${
+                  isStep1Done
+                    ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
+                    : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-300 ring-1 ring-emerald-500/30'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold uppercase tracking-wider text-[11px]">
+                    01 Move-in Evidence
+                  </span>
+                  {isStep1Done ? (
+                    <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
+                      <Check className="w-3 h-3" />
+                      <span>{items.length} Logged</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-400 font-semibold animate-pulse">
+                      Action Needed
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Tenant takes baseline room photos. SHA-256 signatures generated locally.
+                </p>
+              </div>
+
+              {/* Step 02 */}
+              <div
+                className={`p-3 rounded-xl border transition ${
+                  isStep2Done
+                    ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
+                    : isStep1Done
+                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                    : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold uppercase tracking-wider text-[11px]">
+                    02 Owner Review
+                  </span>
+                  {isStep2Done ? (
+                    <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
+                      <Check className="w-3 h-3" />
+                      <span>Sealed</span>
+                    </span>
+                  ) : isStep1Done ? (
+                    <span className="text-[10px] text-amber-400 font-semibold">Awaiting Lock</span>
+                  ) : (
+                    <span className="text-[10px] text-slate-600">Waiting</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Landlord reviews baseline photos via zero-login link and locks the deposit.
+                </p>
+              </div>
+
+              {/* Step 03 */}
+              <div
+                className={`p-3 rounded-xl border transition ${
+                  isStep3Done
+                    ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
+                    : isStep2Done
+                    ? 'bg-slate-950/80 border-slate-800 text-slate-300'
+                    : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold uppercase tracking-wider text-[11px]">
+                    03 Move-out Audit
+                  </span>
+                  {isStep3Done ? (
+                    <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
+                      <Check className="w-3 h-3" />
+                      <span>Audited</span>
+                    </span>
+                  ) : isStep2Done ? (
+                    <span className="text-[10px] text-slate-400">Ready</span>
+                  ) : (
+                    <span className="text-[10px] text-slate-600">Locked</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Gemini AI inspects move-out photos, arbitrates wear &amp; tear, and computes refund.
+                </p>
+              </div>
+
+              {/* Step 04 */}
+              <div
+                className={`p-3 rounded-xl border transition ${
+                  isStep4Done
+                    ? 'bg-slate-950/80 border-emerald-500/40 text-slate-200'
+                    : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold uppercase tracking-wider text-[11px]">
+                    04 Certificates
+                  </span>
+                  {isStep4Done ? (
+                    <span className="inline-flex items-center text-[10px] text-emerald-400 font-semibold space-x-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>Verified</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-600">Locked</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Immutable tamper-proof certificate generated with local Web Crypto byte verification.
+                </p>
+                {isStep4Done && (
+                  <Link
+                    to={`/verify?id=${tenancy.id}`}
+                    className="mt-2.5 w-full inline-flex items-center justify-center space-x-1 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-bold transition shadow-sm shadow-emerald-500/20"
+                  >
+                    <FileCheck2 className="w-3 h-3" />
+                    <span>Open Public Verifier</span>
+                    <ExternalLink className="w-3 h-3 ml-0.5" />
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Tenancy Dashboard Details */}
+        <div className="lg:col-span-8 xl:col-span-9 space-y-6">
+          {/* Tenancy Header Card */}
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 backdrop-blur-xl shadow-xl shadow-black/20">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 pb-6 border-b border-slate-800">
+              <div>
+                <div className="flex items-center space-x-3 mb-2">
+                  <span
+                    className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                      tenancy.status === 'APPROVED'
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                    }`}
+                  >
+                    {tenancy.status === 'APPROVED' ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Sealed &amp; Landlord Approved</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Pending Landlord Signature</span>
+                      </>
+                    )}
+                  </span>
+                  <span className="text-xs text-slate-500">ID: {tenancy.id.substring(0, 8)}...</span>
+                  {isLandlord && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                      Owner View
+                    </span>
+                  )}
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100">{tenancy.propertyTitle}</h1>
+                <p className="mt-1 text-sm text-slate-400">{tenancy.propertyAddress}</p>
+              </div>
+
+              {/* Deposit Breakdown Meter */}
+              <div className="grid grid-cols-3 gap-3 bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl font-mono text-center">
+                <div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider">Deposit Locked</div>
+                  <div className="text-base sm:text-lg font-bold text-slate-100">
+                    ₹{totalDeposit.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="border-x border-slate-800 px-2">
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider">AI Deductions</div>
+                  <div className="text-base sm:text-lg font-bold text-rose-400">
+                    -₹{totalDeductions.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-emerald-400 uppercase tracking-wider">Est. Refund</div>
+                  <div className="text-base sm:text-lg font-bold text-emerald-400">
+                    ₹{estimatedRefund.toLocaleString('en-IN')}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Landlord Verification Link Banner / Owner Actions */}
+            <div className="mt-6 p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start space-x-3">
+                <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 mt-0.5">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
+                    {isLandlord ? 'Owner Verification & Approval Status' : 'Public Landlord Verification & Approval Link'}
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {isLandlord ? (
+                      <>
+                        Linked Landlord: <strong className="text-slate-300">{tenancy.landlordName}</strong> ({tenancy.landlordEmail || tenancy.landlordPhone}).
+                        {tenancy.status !== 'APPROVED' ? ' Review items below and click Lock & Approve.' : ' You have cryptographically sealed this baseline.'}
+                      </>
+                    ) : (
+                      <>
+                        Share this secure link with <strong className="text-slate-300">{tenancy.landlordName}</strong> ({tenancy.landlordPhone}).
+                        They can inspect cryptographic SHA-256 hashes and lock the baseline inventory.
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                {isLandlord && tenancy.status !== 'APPROVED' && (
+                  <button
+                    onClick={handleOwnerDirectApprove}
+                    disabled={approving}
+                    className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>{approving ? 'Approving...' : 'Lock & Approve Move-In'}</span>
+                  </button>
+                )}
+                <button
+                  onClick={handleCopyLandlordLink}
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-medium text-slate-200 transition"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copied ? 'Copied!' : 'Copy Link'}</span>
+                </button>
+                <a
+                  href={landlordLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold transition shadow-sm shadow-emerald-500/20"
+                >
+                  <span>Open Portal</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Room Items Inventory Section */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-100">Move-In Room Inventory</h2>
+              <p className="text-xs text-slate-400">
+                Each item is timestamped and cryptographically fingerprinted using SHA-256 hashing.
+              </p>
+            </div>
+            {!isLandlord && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-lg shadow-emerald-500/20"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Upload Room Item</span>
+              </button>
+            )}
+          </div>
+
+          {items.length === 0 ? (
+            <div className="text-center py-12 rounded-2xl bg-slate-900/40 border border-slate-800 border-dashed">
+              <Camera className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <h3 className="text-sm font-semibold text-slate-200">No inventory logged yet</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                {isLandlord
+                  ? 'Awaiting tenant to upload baseline photos of room fixtures.'
+                  : 'Take baseline photos of ACs, appliances, tiles, and walls to ensure zero unfair deposit deductions.'}
+              </p>
+              {!isLandlord && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="mt-4 inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add First Move-In Item</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 backdrop-blur-md flex flex-col justify-between shadow-lg shadow-black/20"
+                >
+                  <div>
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                          {item.roomName}
+                        </span>
+                        <h3 className="text-base font-bold text-slate-100 mt-1">{item.itemName}</h3>
+                      </div>
+                      <div className="text-right">
+                        {item.aiVerdict ? (
+                          <span
+                            className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold ${
+                              item.aiVerdict === 'NORMAL_WEAR_TEAR'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            }`}
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>
+                              {item.aiVerdict === 'NORMAL_WEAR_TEAR' ? 'Normal Wear & Tear' : 'Damage Detected'}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400 bg-slate-800/60 px-2.5 py-1 rounded-full border border-slate-700/60">
+                            Move-Out Pending
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Move-In & Move-Out Photo Grid */}
+                    <div className="grid grid-cols-2 gap-3 my-3">
+                      <div>
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
+                          Move-In Baseline
+                        </div>
+                        <div className="aspect-video bg-slate-950 rounded-xl overflow-hidden border border-slate-800 relative group">
+                          <img
+                            src={item.moveInPhotoUrl}
+                            alt={item.itemName}
+                            className="w-full h-full object-cover"
+                            onError={(e: any) => {
+                              e.target.src =
+                                'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" fill="%23334155"><rect width="100" height="100"/><text x="50%" y="50%" fill="%2394a3b8" text-anchor="middle" dy=".3em">Baseline</text></svg>';
+                            }}
+                          />
+                        </div>
+                        {item.moveInPhotoHash && (
+                          <div className="mt-1.5 text-[10px] font-mono text-slate-400 truncate bg-slate-950/80 px-2 py-1 rounded border border-slate-800/80" title={item.moveInPhotoHash}>
+                            SHA-256: {item.moveInPhotoHash.substring(0, 14)}...
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
+                          Move-Out Condition
+                        </div>
+                        {item.moveOutPhotoUrl ? (
+                          <>
+                            <div className="aspect-video bg-slate-950 rounded-xl overflow-hidden border border-slate-800 relative group">
+                              <img
+                                src={item.moveOutPhotoUrl}
+                                alt="Move-out inspection"
+                                className="w-full h-full object-cover"
+                                onError={(e: any) => {
+                                  e.target.src =
+                                    'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" fill="%23334155"><rect width="100" height="100"/><text x="50%" y="50%" fill="%2394a3b8" text-anchor="middle" dy=".3em">MoveOut</text></svg>';
+                                }}
+                              />
+                            </div>
+                            {item.moveOutPhotoHash && (
+                              <div className="mt-1.5 text-[10px] font-mono text-slate-400 truncate bg-slate-950/80 px-2 py-1 rounded border border-slate-800/80" title={item.moveOutPhotoHash}>
+                                SHA-256: {item.moveOutPhotoHash.substring(0, 14)}...
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="aspect-video bg-slate-950/40 rounded-xl border border-slate-800/80 border-dashed flex flex-col items-center justify-center p-2 text-center">
+                            <Camera className="w-5 h-5 text-slate-500 mb-1" />
+                            <span className="text-[10px] text-slate-400">Move-out unlogged</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Move-In Notes */}
+                    {item.moveInNotes && (
+                      <p className="text-xs text-slate-400 mt-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/60">
+                        <strong className="text-slate-300">Move-In Notes:</strong> {item.moveInNotes}
+                      </p>
+                    )}
+
+                    {/* Gemini AI Audit Results */}
+                    {item.aiVerdict && (
+                      <div className="mt-3 p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs">
+                        <div className="flex items-center justify-between text-emerald-400 font-semibold mb-1">
+                          <span className="flex items-center space-x-1">
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Gemini AI Audit Arbitration</span>
+                          </span>
+                          <span className="font-mono text-slate-200">
+                            Suggested Deduction: ₹{Number(item.suggestedCut || 0).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <p className="text-slate-300 text-xs mt-1">{item.aiExplanation}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">
+                      Logged: {new Date(item.createdAt).toLocaleDateString()}
+                    </span>
+                    {!item.moveOutPhotoUrl && !isLandlord && (
+                      <button
+                        onClick={() => setActiveMoveOutItem(item)}
+                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/30 hover:border-transparent text-emerald-400 hover:text-slate-950 text-xs font-semibold transition"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Upload Move-Out &amp; Audit</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add Move-In Room Item Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-100 mb-1">Upload Baseline Move-In Item</h3>
+            <p className="text-xs text-slate-400 mb-6">
+              A cryptographic SHA-256 fingerprint will be generated from your photo to permanently freeze baseline proof.
+            </p>
+
+            <form onSubmit={handleMoveInSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                    Room Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={roomName}
+                    onChange={(e) => setRoomName(e.target.value)}
+                    placeholder="e.g. Living Room, Bedroom"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                    Item Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                    placeholder="e.g. Inverter AC, Teak Table"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                  Baseline Condition Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={moveInNotes}
+                  onChange={(e) => setMoveInNotes(e.target.value)}
+                  placeholder="Note any pre-existing hairline scratches, dust, or standard wear"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                  Move-In Item Photo
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setMoveInFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-500 file:text-slate-950 hover:file:bg-emerald-400 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingMoveIn}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{uploadingMoveIn ? 'Hashing & Uploading...' : 'Lock Item Hash'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Move-Out & AI Audit Modal */}
+      {activeMoveOutItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl">
+            <div className="flex items-center space-x-2 text-emerald-400 mb-2">
+              <Sparkles className="w-5 h-5" />
+              <h3 className="text-lg font-bold text-slate-100">
+                Move-Out Inspection &amp; AI Damage Audit
+              </h3>
+            </div>
+            <p className="text-xs text-slate-400 mb-6">
+              Upload move-out photo for <strong className="text-slate-300">{activeMoveOutItem.itemName}</strong> ({activeMoveOutItem.roomName}).
+              Gemini AI will compare move-in vs move-out conditions, assess normal wear &amp; tear, and arbitrate any deduction.
+            </p>
+
+            <form onSubmit={handleMoveOutSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                  Move-Out Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={moveOutNotes}
+                  onChange={(e) => setMoveOutNotes(e.target.value)}
+                  placeholder="Describe final condition, clean status, or explain any tenant marks"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider">
+                  Move-Out Photo
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setMoveOutFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-500 file:text-slate-950 hover:file:bg-emerald-400 cursor-pointer"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-400 flex items-start space-x-2">
+                <Shield className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                <span>
+                  Resilient AI pipeline: If external AI quota is unavailable, our certified heuristic arbitration runs without service disruption.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setActiveMoveOutItem(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingMoveOut}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{uploadingMoveOut ? 'Analyzing with AI...' : 'Run AI Damage Audit'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+export default TenancyDetail;
