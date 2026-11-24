@@ -71,10 +71,12 @@ Scene-by-Scene Checkpoint Breakdown:
 PART 3: SPOTLESS POST-RUN DATABASE & REPO VERIFICATION
 ================================================================================
 [PASS] Neon PostgreSQL Clean State:
-  - Remaining Users: 2 (priyam@gmail.com and rajesh@gmail.com)
+  - Remaining Users: 0 (100% Completely Wiped)
   - Remaining Active Tenancies: 0
   - Remaining Inventory Items: 0
-  - All temporary test tenancies and foreign profiles purged.
+  - Server Uploads (/server/uploads): 0 files
+  - Scratch & Temp Cache (/scripts/temp): Cleaned (0 MB)
+  - All temporary test tenancies, uploads, and user records purged.
 
 [PASS] Repository & Documentation:
   - Root README.md updated with Mermaid Two-Party Escrow Sequence Diagram, System Architecture, and Judge Quick-Test Guide.
