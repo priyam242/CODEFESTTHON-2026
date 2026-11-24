@@ -587,14 +587,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   <span>
                     {loadingRazorpay
                       ? 'Opening Razorpay Gateway...'
-                      : `Pay ₹${amount.toLocaleString('en-IN')} via Razorpay (Cards / UPI / Netbanking)`}
+                      : effectiveStage === 'SETTLEMENT'
+                      ? `⚡ Release ₹${amount.toLocaleString('en-IN')} via Razorpay Escrow`
+                      : `⚡ Pay ₹${amount.toLocaleString('en-IN')} via Razorpay Verified Escrow`}
                   </span>
                 </button>
 
                 {/* Divider */}
                 <div className="flex items-center my-3 text-slate-600 text-[10px] font-mono">
                   <div className="flex-1 border-t border-slate-800" />
-                  <span className="px-2 text-slate-500 uppercase tracking-wider">or scan direct phone upi qr</span>
+                  <span className="px-2 text-slate-400 font-bold uppercase tracking-wider">📲 Direct UPI Transfer</span>
                   <div className="flex-1 border-t border-slate-800" />
                 </div>
 
@@ -667,8 +669,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     <Check className="w-4 h-4" />
                     <span>
                       {verifyingPayment
-                        ? 'Notifying Receiver...'
-                        : `📤 Notify ${payeeName}: Payment Sent (Awaiting Bank Confirmation)`}
+                        ? 'Notifying Counterparty...'
+                        : effectiveStage === 'DEPOSIT'
+                        ? '📤 Notify Owner: UPI Sent (Awaiting Bank Confirmation)'
+                        : '📤 Notify Guest: Refund Sent (Awaiting Bank Confirmation)'}
                     </span>
                   </button>
                   <p className="text-[10px] text-slate-400 font-mono mt-1.5 text-center">

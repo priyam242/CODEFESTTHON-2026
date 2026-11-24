@@ -289,7 +289,7 @@ export class PaymentsService {
     if (dto.method === 'DIRECT_UPI_SCAN' || dto.method === 'DIRECT_UPI') {
       // Scenario C1: Payer marks payment as sent on UPI app -> Two-party notification
       if (dto.action === 'MARK_SENT') {
-        const pendingStage = dto.stage === 'DEPOSIT' ? 'DEPOSIT_SENT' : 'REFUND_SENT';
+        const pendingStage = dto.stage === 'DEPOSIT' ? 'DEPOSIT_CLAIMED' : 'REFUND_CLAIMED';
         const pendingId = `pay_RS_DIRECT_UPI_${Date.now()}`;
         const updated = await this.prisma.tenancyClient.update({
           where: { id: tenancy.id },

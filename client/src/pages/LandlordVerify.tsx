@@ -543,7 +543,7 @@ export const LandlordVerify: React.FC = () => {
               </div>
             </div>
 
-            {tenancy.pendingPaymentStage === 'DEPOSIT_SENT' && (
+            {(tenancy.pendingPaymentStage === 'DEPOSIT_SENT' || tenancy.pendingPaymentStage === 'DEPOSIT_CLAIMED') && (
               <button
                 type="button"
                 onClick={handleConfirmDepositReceived}

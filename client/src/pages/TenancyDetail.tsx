@@ -871,7 +871,7 @@ export const TenancyDetail: React.FC = () => {
                   Guest scans Owner's payment QR code or pays via Razorpay escrow to lock deposit.
                 </p>
                 {!isStep3Done && isStep1Done && (
-                  tenancy.pendingPaymentStage === 'DEPOSIT_SENT' ? (
+                  (tenancy.pendingPaymentStage === 'DEPOSIT_SENT' || tenancy.pendingPaymentStage === 'DEPOSIT_CLAIMED') ? (
                     isLandlord ? (
                       <button
                         type="button"
@@ -1023,7 +1023,7 @@ export const TenancyDetail: React.FC = () => {
                     : 'Tenant pays excess damage balance to Owner.'}
                 </p>
                 {isStep4Done && !isStep5Done && (
-                  tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+                  (tenancy.pendingPaymentStage === 'REFUND_SENT' || tenancy.pendingPaymentStage === 'REFUND_CLAIMED') ? (
                     !isLandlord ? (
                       <button
                         type="button"
@@ -1248,7 +1248,7 @@ export const TenancyDetail: React.FC = () => {
 
                 {/* STAGE 1: Move-In Security Deposit Escrow Alert & Pay Button */}
                 {!tenancy.depositPaid && (
-                  tenancy.pendingPaymentStage === 'DEPOSIT_SENT' ? (
+                  (tenancy.pendingPaymentStage === 'DEPOSIT_SENT' || tenancy.pendingPaymentStage === 'DEPOSIT_CLAIMED') ? (
                     isLandlord ? (
                       <div className="mt-3.5 p-4 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/60 shadow-lg shadow-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
                         <div className="flex items-center space-x-3">
@@ -1382,7 +1382,7 @@ export const TenancyDetail: React.FC = () => {
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                           <span>✅ Net Refund Paid &amp; Cleared (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
                         </div>
-                      ) : tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+                      ) : (tenancy.pendingPaymentStage === 'REFUND_SENT' || tenancy.pendingPaymentStage === 'REFUND_CLAIMED') ? (
                         <div className="w-full px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] font-mono text-amber-300 text-center font-bold">
                           ⏳ Net Refund Marked Sent (₹{Number(tenancy.pendingPaymentAmount || (totalDeposit - totalDeductions)).toLocaleString('en-IN')}) • Waiting for Guest Bank Confirmation
                         </div>
@@ -1406,7 +1406,7 @@ export const TenancyDetail: React.FC = () => {
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                           <span>✅ Net Refund Received &amp; Cleared (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
                         </div>
-                      ) : tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+                      ) : (tenancy.pendingPaymentStage === 'REFUND_SENT' || tenancy.pendingPaymentStage === 'REFUND_CLAIMED') ? (
                         <div className="w-full p-4 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/60 shadow-lg text-left">
                           <div className="text-xs font-bold font-mono text-emerald-300 uppercase tracking-wider">
                             💰 Owner Sent ₹{Number(tenancy.pendingPaymentAmount || (totalDeposit - totalDeductions)).toLocaleString('en-IN')} Net Refund via Direct UPI
@@ -1729,7 +1729,7 @@ export const TenancyDetail: React.FC = () => {
                   </div>
                 </div>
 
-                {tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+                {(tenancy.pendingPaymentStage === 'REFUND_SENT' || tenancy.pendingPaymentStage === 'REFUND_CLAIMED') ? (
                   <button
                     type="button"
                     onClick={handleConfirmSettlementReceived}
