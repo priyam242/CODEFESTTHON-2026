@@ -137,6 +137,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaid" BOOLEAN DEFAULT false;`,
         `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "depositPaymentId" TEXT;`,
         `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "settlementPaymentId" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "pendingPaymentStage" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "pendingPaymentId" TEXT;`,
+        `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "pendingPaymentAmount" DECIMAL;`,
       ];
       for (const q of alterQueries) {
         try {
@@ -485,6 +488,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           status: data.status || 'ACTIVE',
           moveInHash: data.moveInHash || null,
           estimatedRefund: data.estimatedRefund || data.depositAmount,
+          pendingPaymentStage: data.pendingPaymentStage || null,
+          pendingPaymentId: data.pendingPaymentId || null,
+          pendingPaymentAmount: data.pendingPaymentAmount || null,
           userId: data.userId,
           createdAt: new Date(),
         };

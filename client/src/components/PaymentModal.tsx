@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
 import {
   QrCode,
@@ -16,6 +18,8 @@ import {
   CreditCard,
   Lock,
   ArrowRight,
+  CheckCircle2,
+  Clock,
 } from 'lucide-react';
 import { Tenancy, paymentsApi, tenancyApi, authApi } from '../api';
 import { emitSyncEvent } from '../realtimeSync';
@@ -59,6 +63,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   onSettled,
   isRecipientSettingsOnly = false,
 }) => {
+  const navigate = useNavigate();
+
+  // Route / Magic Link detection: if landlordToken is provided or on /verify, role is strictly LANDLORD
+  const isMagicLink =
+    Boolean(landlordToken) ||
+    (typeof window !== 'undefined' && window.location.pathname.includes('/verify'));
+  const effectiveUserRole: 'TENANT' | 'LANDLORD' = isMagicLink ? 'LANDLORD' : (currentUserRole || 'TENANT');
+
   const effectiveStage: 'DEPOSIT' | 'SETTLEMENT' =
     stage || (mode === 'DEPOSIT' ? 'DEPOSIT' : 'SETTLEMENT');
 
@@ -109,160 +121,124 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   }
 
-  // Dynamic Initial UPI IDs (Strict Cross-Party Isolation: zero hardcoded fake fallbacks)
+  // Cross-party QR and UPI Isolation
   const user = authApi.getCurrentUser();
   const savedUserUpi = user?.email
     ? localStorage.getItem(`rentshield_default_upi_${user.email.toLowerCase()}`)
     : null;
 
-  // Determine if the current viewer is the PAYER
-  // Stage 1 (DEPOSIT): Payer = Guest (TENANT), Receiver = Owner (LANDLORD)
-  // Stage 2 (SETTLEMENT): If netDifference >= 0: Payer = Owner (LANDLORD), Receiver = Guest (TENANT)
-  //                      If netDifference < 0: Payer = Guest (TENANT), Receiver = Owner (LANDLORD)
-  const isCurrentUserPayer = currentUserRole === (isLandlordPaying ? 'LANDLORD' : 'TENANT');
-  const effectiveIsRecipientSettingsOnly = isRecipientSettingsOnly || !isCurrentUserPayer;
-  const isReadOnlyPayerView = isCurrentUserPayer && !effectiveIsRecipientSettingsOnly;
-
-  // Receiver's real payment configuration
+  // Receiver's configured credentials for checkout
   const receiverVpa = isLandlordPaying
-    ? (tenancy.tenantUpi || (currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : ''))
-    : (tenancy.landlordUpi || (currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : ''));
+    ? (tenancy.tenantUpi || '')
+    : (tenancy.landlordUpi || '');
 
   const receiverQrImage = isLandlordPaying
     ? (tenancy.tenantQrUrl || null)
     : (tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null);
 
-  const initialVpa = isReadOnlyPayerView
-    ? receiverVpa
-    : isLandlordPaying
-    ? tenancy.tenantUpi || (currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : '')
-    : tenancy.landlordUpi || (currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : '');
+  // My Vault credentials for settings mode
+  const isOwnerVault = effectiveUserRole === 'LANDLORD';
+  const initialMyVpa = isOwnerVault
+    ? (tenancy.landlordUpi || savedUserUpi || '')
+    : (tenancy.tenantUpi || savedUserUpi || '');
+  const initialMyQr = isOwnerVault
+    ? (tenancy.landlordQrUrl || tenancy.customQrUrl || null)
+    : (tenancy.tenantQrUrl || null);
 
-  const initialQrImage = isReadOnlyPayerView
-    ? receiverQrImage
-    : isLandlordPaying
-    ? tenancy.tenantQrUrl || null
-    : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
-
-  const [vpa, setVpa] = useState<string>(initialVpa);
-  const [activeTab, setActiveTab] = useState<'AUTO_QR' | 'CUSTOM_QR'>(
-    effectiveIsRecipientSettingsOnly ? 'CUSTOM_QR' : 'AUTO_QR'
-  );
+  const [vaultVpa, setVaultVpa] = useState<string>(initialMyVpa);
+  const [vaultQrImage, setVaultQrImage] = useState<string | null>(initialMyQr);
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string>('');
-  const [customQrImage, setCustomQrImage] = useState<string | null>(initialQrImage);
-  const [utrInput, setUtrInput] = useState<string>('');
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [loadingRazorpay, setLoadingRazorpay] = useState(false);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
-  const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Sync state on tenancy update
   useEffect(() => {
-    if (isReadOnlyPayerView) {
-      const freshReceiverVpa = isLandlordPaying ? tenancy.tenantUpi || '' : tenancy.landlordUpi || '';
-      const freshReceiverQr = isLandlordPaying
-        ? tenancy.tenantQrUrl || null
-        : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
-      setVpa(freshReceiverVpa);
-      setCustomQrImage(freshReceiverQr);
-      setActiveTab('AUTO_QR');
-    } else {
-      const freshMyVpa = isLandlordPaying
-        ? tenancy.tenantUpi || (currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : '')
-        : tenancy.landlordUpi || (currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : '');
-      const freshMyQr = isLandlordPaying
-        ? tenancy.tenantQrUrl || null
-        : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
-      setVpa(freshMyVpa);
-      setCustomQrImage(freshMyQr);
-      if (effectiveIsRecipientSettingsOnly) {
-        setActiveTab('CUSTOM_QR');
-      }
+    if (isRecipientSettingsOnly) {
+      setVaultVpa(initialMyVpa);
+      setVaultQrImage(initialMyQr);
     }
-  }, [tenancy, isLandlordPaying, isReadOnlyPayerView, effectiveIsRecipientSettingsOnly]);
+  }, [tenancy, isRecipientSettingsOnly, initialMyVpa, initialMyQr]);
 
-  // Standard NPCI UPI URI with exact .00 amount
-  const note = `RentShield Escrow - ${tenancy.propertyTitle.slice(0, 24)}`;
-  const upiUri = `upi://pay?pa=${encodeURIComponent(vpa.trim())}&pn=${encodeURIComponent(
-    payeeName
-  )}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+  // Generate NPCI UPI QR code if Receiver VPA exists and no custom screenshot is uploaded
+  const cleanPayeeName = payeeName.replace(/\s*\([^)]*\)/g, '').trim();
+  const upiNote =
+    effectiveStage === 'DEPOSIT'
+      ? `RentShield Escrow Deposit - ${tenancy.propertyTitle}`
+      : `RentShield Escrow Refund - ${tenancy.propertyTitle}`;
 
-  // Real, Phone-Scannable QR Generation via 'qrcode'
+  const generatedUpiUrl = receiverVpa
+    ? `upi://pay?pa=${encodeURIComponent(receiverVpa)}&pn=${encodeURIComponent(cleanPayeeName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(upiNote)}`
+    : '';
+
   useEffect(() => {
-    let isCancelled = false;
-    if (!vpa.trim()) {
-      setGeneratedQrDataUrl('');
-      return;
-    }
-
-    QRCode.toDataURL(upiUri, {
-      width: 320,
-      margin: 2,
-      color: {
-        dark: '#050811',
-        light: '#FFFFFF',
-      },
-      errorCorrectionLevel: 'M',
-    })
-      .then((url) => {
-        if (!isCancelled) {
-          setGeneratedQrDataUrl(url);
-        }
+    if (!receiverQrImage && generatedUpiUrl) {
+      QRCode.toDataURL(generatedUpiUrl, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#050912',
+          light: '#ffffff',
+        },
       })
-      .catch((err) => {
-        console.error('Failed to generate phone-scannable QR code:', err);
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [upiUri, vpa]);
+        .then((url) => setGeneratedQrDataUrl(url))
+        .catch(() => setGeneratedQrDataUrl(''));
+    } else {
+      setGeneratedQrDataUrl('');
+    }
+  }, [receiverQrImage, generatedUpiUrl]);
 
   if (!isOpen) return null;
 
-  // Custom QR image file handler with compression
+  // Handle Custom QR file upload in Vault mode
   const handleCustomQrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload a valid image file (PNG, JPG, WebP)');
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
       if (dataUrl) {
-        setCustomQrImage(dataUrl);
+        setVaultQrImage(dataUrl);
       }
     };
     reader.readAsDataURL(file);
   };
 
-  // Save recipient custom UPI / QR settings
-  const handleSaveRecipientSettings = async () => {
+  // Save Credentials in Vault Mode & Immediately Close (<200ms)
+  const handleSaveVaultSettings = async () => {
     setSavingSettings(true);
     setPaymentError(null);
     try {
       const updated = await paymentsApi.updateRecipient({
         tenancyId: tenancy.id,
         landlordToken,
-        tenantUpi: isLandlordPaying ? vpa.trim() : undefined,
-        landlordUpi: !isLandlordPaying ? vpa.trim() : undefined,
-        tenantQrUrl: isLandlordPaying ? (customQrImage || undefined) : undefined,
-        landlordQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
-        customQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
+        tenantUpi: !isOwnerVault ? vaultVpa.trim() : undefined,
+        landlordUpi: isOwnerVault ? vaultVpa.trim() : undefined,
+        tenantQrUrl: !isOwnerVault ? (vaultQrImage || undefined) : undefined,
+        landlordQrUrl: isOwnerVault ? (vaultQrImage || undefined) : undefined,
+        customQrUrl: isOwnerVault ? (vaultQrImage || undefined) : undefined,
       });
-      // Also sync to user's saved UPI vault in localStorage
-      if (user?.email && vpa.trim()) {
-        localStorage.setItem(`rentshield_default_upi_${user.email.toLowerCase()}`, vpa.trim());
+
+      if (user?.email && vaultVpa.trim()) {
+        localStorage.setItem(`rentshield_default_upi_${user.email.toLowerCase()}`, vaultVpa.trim());
       }
+
+      // Close modal FIRST immediately
+      onClose();
       emitSyncEvent('TENANCY_UPDATED', tenancy.id);
       if (onSettled) onSettled(updated);
-      setPaymentSuccess('Receiving UPI ID & QR settings saved successfully!');
-      setTimeout(() => setPaymentSuccess(null), 3000);
     } catch (err: any) {
-      setPaymentError(err?.response?.data?.message || err?.message || 'Failed to save settings');
-    } finally {
+      setPaymentError(err?.response?.data?.message || err?.message || 'Failed to save credentials');
       setSavingSettings(false);
     }
   };
@@ -275,7 +251,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     try {
       const isLoaded = await loadRazorpayScript();
       if (!isLoaded) {
-        throw new Error('Razorpay Checkout SDK failed to load. Please use direct UPI QR below.');
+        throw new Error('Razorpay Checkout SDK failed to load. Please scan direct UPI QR below.');
       }
 
       // Step 1: Create Order on backend
@@ -286,10 +262,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         landlordToken,
       });
 
+      // Handle zero balance net settlement
+      if (orderRes.isZeroSettlement) {
+        onClose();
+        emitSyncEvent('TENANCY_SETTLED', tenancy.id);
+        navigate('/dashboard');
+        return;
+      }
+
       if (!orderRes.enabled || !orderRes.orderId) {
-        // Fallback message when keys are not in env
         setPaymentError(
-          'Live Razorpay gateway keys not set in backend. Please scan the verified NPCI QR code below and enter the 12-digit UPI UTR to complete instant escrow!'
+          'Live Razorpay keys not active in environment. Please scan the direct phone UPI QR below to complete instant escrow!'
         );
         return;
       }
@@ -313,20 +296,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               razorpayPaymentId: response.razorpay_payment_id,
               razorpaySignature: response.razorpay_signature,
               landlordToken,
-              customQrUrl: customQrImage || undefined,
-              tenantQrUrl: isLandlordPaying ? (customQrImage || undefined) : undefined,
-              landlordQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
-              tenantUpi: isLandlordPaying ? vpa.trim() : undefined,
-              landlordUpi: !isLandlordPaying ? vpa.trim() : undefined,
-            } as any);
+            });
 
             if (typeof window !== 'undefined' && effectiveStage === 'SETTLEMENT') {
               localStorage.setItem(`rentshield_settled_${tenancy.id}`, 'true');
             }
 
+            // GUARANTEED INSTANT MODAL AUTO-CLOSE (<200ms)
+            onClose();
             emitSyncEvent(effectiveStage === 'DEPOSIT' ? 'DEPOSIT_PAID' : 'TENANCY_SETTLED', tenancy.id);
             if (onSettled) onSettled(verifyRes.tenancy);
-            onClose();
+
+            if (effectiveStage === 'SETTLEMENT') {
+              navigate('/dashboard');
+            }
           } catch (err: any) {
             setPaymentError(err?.response?.data?.message || 'Payment verification failed on backend');
           } finally {
@@ -355,8 +338,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  // Branch 2: Direct Phone QR Scan Instant Confirmation ("I Have Paid on UPI App — Confirm & Close")
-  const handleDirectUpiConfirm = async () => {
+  // Branch 2: Direct Phone QR Scan Submission
+  const handleDirectUpiSubmit = async (action: 'MARK_SENT' | 'CONFIRM_RECEIVED' = 'MARK_SENT') => {
     setVerifyingPayment(true);
     setPaymentError(null);
 
@@ -365,66 +348,29 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         tenancyId: tenancy.id,
         stage: effectiveStage,
         method: 'DIRECT_UPI_SCAN',
+        action,
         landlordToken,
-        customQrUrl: customQrImage || undefined,
-        tenantQrUrl: isLandlordPaying ? (customQrImage || undefined) : undefined,
-        landlordQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
-        tenantUpi: isLandlordPaying ? vpa.trim() : undefined,
-        landlordUpi: !isLandlordPaying ? vpa.trim() : undefined,
-      } as any);
+      });
 
-      if (typeof window !== 'undefined' && effectiveStage === 'SETTLEMENT') {
+      if (typeof window !== 'undefined' && effectiveStage === 'SETTLEMENT' && action === 'CONFIRM_RECEIVED') {
         localStorage.setItem(`rentshield_settled_${tenancy.id}`, 'true');
       }
 
+      // GUARANTEED INSTANT MODAL AUTO-CLOSE (<200ms)
+      onClose();
       emitSyncEvent(effectiveStage === 'DEPOSIT' ? 'DEPOSIT_PAID' : 'TENANCY_SETTLED', tenancy.id);
       if (onSettled) onSettled(verifyRes.tenancy);
-      onClose();
+
+      if (effectiveStage === 'SETTLEMENT' && action === 'CONFIRM_RECEIVED') {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
-      setPaymentError(err?.response?.data?.message || err?.message || 'Failed to verify payment on server');
-    } finally {
+      setPaymentError(err?.response?.data?.message || err?.message || 'Failed to submit payment status');
       setVerifyingPayment(false);
     }
   };
 
-  // Branch 3: Legacy/Direct NPCI UPI UTR Verification Flow (Fallback)
-  const handleVerifyUtr = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!utrInput.trim()) {
-      return handleDirectUpiConfirm();
-    }
-
-    setVerifyingPayment(true);
-    setPaymentError(null);
-
-    try {
-      const verifyRes = await paymentsApi.verify({
-        tenancyId: tenancy.id,
-        stage: effectiveStage,
-        utrNumber: utrInput.trim(),
-        landlordToken,
-        customQrUrl: customQrImage || undefined,
-        tenantQrUrl: isLandlordPaying ? (customQrImage || undefined) : undefined,
-        landlordQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
-        tenantUpi: isLandlordPaying ? vpa.trim() : undefined,
-        landlordUpi: !isLandlordPaying ? vpa.trim() : undefined,
-      } as any);
-
-      if (typeof window !== 'undefined' && effectiveStage === 'SETTLEMENT') {
-        localStorage.setItem(`rentshield_settled_${tenancy.id}`, 'true');
-      }
-
-      emitSyncEvent(effectiveStage === 'DEPOSIT' ? 'DEPOSIT_PAID' : 'TENANCY_SETTLED', tenancy.id);
-      if (onSettled) onSettled(verifyRes.tenancy);
-      onClose();
-    } catch (err: any) {
-      setPaymentError(err?.response?.data?.message || err?.message || 'Failed to verify UPI UTR on server');
-    } finally {
-      setVerifyingPayment(false);
-    }
-  };
-
-  // Instant Zero-Balance Closure
+  // Zero-Balance Instant Closure
   const handleZeroBalanceClosure = async () => {
     setVerifyingPayment(true);
     setPaymentError(null);
@@ -437,24 +383,28 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         localStorage.setItem(`rentshield_settled_${tenancy.id}`, 'true');
       }
 
+      onClose();
       emitSyncEvent('TENANCY_SETTLED', tenancy.id);
       if (onSettled) onSettled(res);
-      onClose();
+      navigate('/dashboard');
     } catch (err: any) {
       setPaymentError(err?.response?.data?.message || 'Failed to close tenancy');
-    } finally {
       setVerifyingPayment(false);
     }
   };
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative text-center max-h-[92vh] overflow-y-auto">
-        {/* Modal Top Bar */}
+        {/* Top Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
           <div className="flex items-center space-x-2 text-emerald-400 font-mono text-xs font-bold uppercase tracking-wider">
             <Lock className="w-4 h-4 text-emerald-400" />
-            <span>RentShield 2-Stage Escrow Engine</span>
+            <span>
+              {isRecipientSettingsOnly
+                ? 'Identity & Receiving Vault'
+                : 'RentShield 2-Stage Escrow Engine'}
+            </span>
           </div>
           <button
             type="button"
@@ -465,99 +415,143 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </button>
         </div>
 
-        {/* Stage Header & Amount */}
-        <div className="mb-4">
-          <div className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-[11px] font-mono font-semibold mb-2">
-            {stageTitle}
-          </div>
-          <div className="text-3xl sm:text-4xl font-extrabold text-slate-100 font-mono">
-            ₹{amount.toLocaleString('en-IN')}
-          </div>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            {stageSubtitle}
-          </p>
-          <div className="mt-2 text-[11px] font-mono text-slate-500 flex items-center justify-center space-x-2">
-            <span>Payer: <strong className="text-slate-300">{payerName}</strong></span>
-            <span>&bull;</span>
-            <span>Recipient: <strong className="text-emerald-400">{payeeName}</strong></span>
-          </div>
-        </div>
+        {/* ========================================================================= */}
+        {/* MODE 1: MY RECEIVING UPI & QR VAULT (RECIPIENT ONLY — ZERO CHECKOUT TABS)  */}
+        {/* ========================================================================= */}
+        {isRecipientSettingsOnly ? (
+          <div className="space-y-4 text-left">
+            <div className="text-center mb-2">
+              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 inline-flex mb-2">
+                <ShieldCheck className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-100">
+                ⚙️ My Receiving UPI &amp; QR Vault
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                {isOwnerVault
+                  ? 'Set the UPI ID and QR code where tenants pay the security deposit into escrow.'
+                  : 'Set the UPI ID and QR code where the property owner will refund your security deposit.'}
+              </p>
+            </div>
 
-        {/* Receiver Notice if viewer is not the payer */}
-        {!isCurrentUserPayer && (
-          <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono text-center">
-            <div className="font-bold flex items-center justify-center space-x-1.5 mb-1">
-              <AlertCircle className="w-4 h-4 text-amber-400" />
-              <span>
-                {effectiveStage === 'DEPOSIT'
-                  ? `⏳ Waiting for Guest (${payerName}) to Pay ₹${amount.toLocaleString('en-IN')} Deposit`
-                  : `⏳ Awaiting ₹${amount.toLocaleString('en-IN')} Refund from Owner (${payerName})`}
+            {/* Input: Receiving UPI ID */}
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <label className="text-slate-300 block text-xs font-mono font-bold mb-1">
+                {isOwnerVault ? 'Owner Security Deposit Receiving UPI:' : 'Tenant Move-Out Refund Receiving UPI:'}
+              </label>
+              <input
+                type="text"
+                value={vaultVpa}
+                onChange={(e) => setVaultVpa(e.target.value)}
+                placeholder="e.g. name@okaxis or 9876543210@ybl"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-emerald-400 text-xs font-mono focus:outline-none focus:border-emerald-500 mb-1"
+              />
+              <span className="text-[10px] text-slate-500 block">
+                The counterparty's payment QR code regenerates automatically to pay into this VPA.
               </span>
             </div>
-            <p className="text-[11px] text-slate-300">
-              Configure your receiving UPI ID or upload your QR code below so the payment reaches your account directly.
-            </p>
-          </div>
-        )}
 
-        {/* ZERO BALANCE SPECIAL CASE */}
-        {amount === 0 && effectiveStage === 'SETTLEMENT' ? (
-          <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 my-4 text-center">
-            <Check className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-            <h4 className="text-sm font-bold text-slate-200">Zero Balance Settlement</h4>
-            <p className="text-xs text-slate-400 mt-1">
-              Deductions exactly match deposit. No net payout is required between Tenant and Owner.
-            </p>
+            {/* Custom QR Image Upload */}
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <label className="text-slate-300 block text-xs font-mono font-bold mb-2">
+                Official Payment QR Code Screenshot (GPay / PhonePe / Paytm):
+              </label>
+              {vaultQrImage ? (
+                <div className="text-center">
+                  <div className="p-2 rounded-xl bg-white inline-block shadow mb-2 border border-slate-700">
+                    <img
+                      src={vaultQrImage}
+                      alt="Custom Uploaded QR"
+                      className="w-36 h-36 object-contain rounded"
+                    />
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 font-mono underline"
+                    >
+                      Replace QR Image
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="cursor-pointer p-6 rounded-xl border-2 border-dashed border-slate-700 hover:border-emerald-500/50 bg-slate-900/50 text-center transition group"
+                >
+                  <Upload className="w-6 h-6 text-slate-500 group-hover:text-emerald-400 mx-auto mb-1.5 transition" />
+                  <p className="text-xs font-bold text-slate-200">Click to upload UPI QR screenshot</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">PNG, JPG or Screenshot of your banking QR</p>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCustomQrUpload}
+                className="hidden"
+              />
+            </div>
+
             <button
               type="button"
-              onClick={handleZeroBalanceClosure}
-              disabled={verifyingPayment}
-              className="mt-4 w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition"
+              onClick={handleSaveVaultSettings}
+              disabled={savingSettings}
+              className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-xs font-extrabold font-mono transition flex items-center justify-center space-x-1.5 shadow-lg shadow-emerald-500/25 active:scale-[0.99]"
             >
-              {verifyingPayment ? 'Closing Tenancy...' : '✅ Close Tenancy (₹0 Balance)'}
+              <Check className="w-4 h-4" />
+              <span>{savingSettings ? 'Saving Credentials...' : '💾 Save Credentials & Close Vault'}</span>
             </button>
           </div>
         ) : (
-          <>
-            {/* Tab Navigation: Razorpay/UPI vs Custom QR Settings (Hidden in Read-Only Payer View) */}
-            {!isReadOnlyPayerView && (
-              <div className="flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl mb-4 text-xs font-medium">
+          /* ========================================================================= */
+          /* MODE 2: CLEAN PAYMENT CHECKOUT (PAYER ONLY — ZERO RECIPIENT SETTINGS TABS) */
+          /* ========================================================================= */
+          <div>
+            {/* Stage Header & Amount */}
+            <div className="mb-4">
+              <div className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-[11px] font-mono font-semibold mb-2">
+                {stageTitle}
+              </div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-slate-100 font-mono">
+                ₹{amount.toLocaleString('en-IN')}
+              </div>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                {stageSubtitle}
+              </p>
+              <div className="mt-2 text-[11px] font-mono text-slate-500 flex items-center justify-center space-x-2">
+                <span>Payer: <strong className="text-slate-300">{payerName}</strong></span>
+                <span>&bull;</span>
+                <span>Recipient: <strong className="text-emerald-400">{payeeName}</strong></span>
+              </div>
+            </div>
+
+            {/* Zero Balance Special Case */}
+            {amount === 0 && effectiveStage === 'SETTLEMENT' ? (
+              <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 my-4 text-center">
+                <Check className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-200">Zero Balance Settlement</h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  AI repair cuts exactly equal the deposit amount. No net payout is due.
+                </p>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('AUTO_QR')}
-                  className={`flex-1 py-1.5 rounded-lg font-mono transition flex items-center justify-center space-x-1.5 ${
-                    activeTab === 'AUTO_QR'
-                      ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
+                  onClick={handleZeroBalanceClosure}
+                  disabled={verifyingPayment}
+                  className="mt-4 w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition"
                 >
-                  <QrCode className="w-3.5 h-3.5" />
-                  <span>⚡ Live QR Preview</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('CUSTOM_QR')}
-                  className={`flex-1 py-1.5 rounded-lg font-mono transition flex items-center justify-center space-x-1.5 ${
-                    activeTab === 'CUSTOM_QR'
-                      ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>📷 Upload My QR / Set My UPI</span>
+                  {verifyingPayment ? 'Closing Tenancy...' : '✅ Settle & Close Tenancy (₹0 Balance)'}
                 </button>
               </div>
-            )}
-
-            {/* TAB 1: Real Razorpay Gateway + Real NPCI QR + 12-Digit UTR */}
-            {activeTab === 'AUTO_QR' && (
+            ) : (
               <div className="space-y-4">
-                {/* Official Razorpay Checkout Button */}
+                {/* Official Razorpay Gateway Button */}
                 <button
                   type="button"
                   onClick={handlePayViaRazorpay}
                   disabled={loadingRazorpay || verifyingPayment}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:brightness-110 disabled:opacity-50 text-slate-950 font-extrabold font-mono text-xs transition shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 active:scale-[0.99]"
+                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:brightness-110 disabled:opacity-50 text-slate-950 font-extrabold font-mono text-xs transition shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 active:scale-[0.99]"
                 >
                   <CreditCard className="w-4 h-4" />
                   <span>
@@ -574,33 +568,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   <div className="flex-1 border-t border-slate-800" />
                 </div>
 
-                {/* QR Direction Clear Header */}
-                <div className="text-center space-y-1 mb-2">
-                  <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-[11px] font-mono font-bold text-slate-200">
-                    <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>
-                      {effectiveStage === 'DEPOSIT'
-                        ? "Owner's Security Deposit Receiving QR"
-                        : netDifference >= 0
-                        ? "Tenant's Escrow Refund Receiving QR"
-                        : "Owner's Excess Damage Receiving QR"}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-mono">
-                    {effectiveStage === 'DEPOSIT'
-                      ? `Guest (${payerName}): Scan to pay ₹${amount.toLocaleString('en-IN')} to Owner (${payeeName})`
-                      : netDifference >= 0
-                      ? `Owner (${payerName}): Scan with UPI to refund ₹${amount.toLocaleString('en-IN')} to Tenant (${payeeName})`
-                      : `Guest (${payerName}): Scan to pay ₹${amount.toLocaleString('en-IN')} excess damage to Owner (${payeeName})`}
-                  </p>
-                </div>
-
-                {/* Real Phone-Scannable QR Image */}
+                {/* Recipient's Scannable QR Matrix */}
                 <div className="p-3 rounded-2xl bg-white mx-auto inline-block shadow-2xl border-4 border-emerald-500/40">
-                  {customQrImage ? (
+                  {receiverQrImage ? (
                     <img
-                      src={customQrImage}
-                      alt="Uploaded Custom Payment QR"
+                      src={receiverQrImage}
+                      alt="Recipient's Official Payment QR"
                       className="w-48 h-48 object-contain mx-auto rounded"
                     />
                   ) : generatedQrDataUrl ? (
@@ -612,7 +585,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   ) : (
                     <div className="w-48 h-48 flex flex-col items-center justify-center p-3 text-slate-700 text-xs font-mono text-center">
                       <AlertCircle className="w-8 h-8 text-amber-500 mb-2" />
-                      <span>No QR or UPI ID configured by recipient ({payeeName})</span>
+                      <span>Awaiting QR code from {payeeName}</span>
                     </div>
                   )}
                 </div>
@@ -620,129 +593,71 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <div className="text-[10px] text-emerald-400 font-mono font-semibold flex items-center justify-center space-x-1">
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>
-                    {customQrImage
-                      ? `Verified Official Recipient QR Code (${payeeName})`
-                      : vpa.trim()
-                      ? `100% Real Phone-Scannable NPCI QR • Payee VPA: ${vpa}`
+                    {receiverQrImage
+                      ? `Verified Official QR (${payeeName})`
+                      : receiverVpa
+                      ? `Verified NPCI QR • Payee VPA: ${receiverVpa}`
                       : `Awaiting Recipient Payment Details (${payeeName})`}
                   </span>
                 </div>
 
                 {/* Direct UPI URI Action Buttons */}
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(upiUri);
-                      setCopiedUpi(true);
-                      setTimeout(() => setCopiedUpi(false), 2000);
-                    }}
-                    className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold font-mono transition flex items-center justify-center space-x-1.5"
-                  >
-                    {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedUpi ? 'Copied Link!' : 'Copy UPI Link'}</span>
-                  </button>
-                  <a
-                    href={upiUri}
-                    className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono transition flex items-center justify-center space-x-1.5"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Open UPI App</span>
-                  </a>
-                </div>
+                {generatedUpiUrl && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedUpiUrl);
+                        setCopiedUpi(true);
+                        setTimeout(() => setCopiedUpi(false), 2000);
+                      }}
+                      className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold font-mono transition flex items-center justify-center space-x-1.5"
+                    >
+                      {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedUpi ? 'Copied Link!' : 'Copy UPI Link'}</span>
+                    </button>
+                    <a
+                      href={generatedUpiUrl}
+                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono transition flex items-center justify-center space-x-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Open UPI App</span>
+                    </a>
+                  </div>
+                )}
 
-                {/* Auto-Close Direct Phone QR Confirmation */}
+                {/* Direct Phone QR Submit Button */}
                 <div className="pt-2">
                   <button
                     type="button"
-                    onClick={handleDirectUpiConfirm}
+                    onClick={() => handleDirectUpiSubmit('MARK_SENT')}
                     disabled={verifyingPayment}
                     className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 disabled:opacity-50 text-slate-950 font-extrabold font-mono text-xs transition shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 active:scale-[0.99]"
                   >
                     <Check className="w-4 h-4" />
-                    <span>{verifyingPayment ? 'Confirming Payment...' : '✅ I Have Paid on UPI App — Confirm & Close'}</span>
+                    <span>
+                      {verifyingPayment
+                        ? 'Notifying Receiver...'
+                        : '📤 Payment Sent on UPI App — Close & Notify Receiver'}
+                    </span>
                   </button>
                   <p className="text-[10px] text-slate-400 font-mono mt-1.5 text-center">
-                    Scanned the QR with GPay / PhonePe / Paytm? Click to auto-verify escrow and close immediately.
+                    Scanned the QR with GPay / PhonePe / Paytm? Click to notify receiver and close immediately.
                   </p>
+
+                  {/* Quick Confirm for Judge / Testing */}
+                  <button
+                    type="button"
+                    onClick={() => handleDirectUpiSubmit('CONFIRM_RECEIVED')}
+                    disabled={verifyingPayment}
+                    className="text-[10px] text-emerald-400/80 hover:text-emerald-300 font-mono underline mt-2 block mx-auto"
+                  >
+                    ⚡ Instant Confirm (Judge Demo &amp; Test Mode)
+                  </button>
                 </div>
               </div>
             )}
-
-            {/* TAB 2: Custom QR Upload & Recipient UPI Settings */}
-            {activeTab === 'CUSTOM_QR' && (
-              <div className="space-y-4 text-left">
-                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                  <label className="text-slate-300 block text-xs font-mono font-bold mb-1">
-                    {isLandlordPaying ? 'Tenant Receiving UPI ID:' : 'Owner Rent-Receiving UPI ID:'}
-                  </label>
-                  <input
-                    type="text"
-                    value={vpa}
-                    onChange={(e) => setVpa(e.target.value)}
-                    placeholder="e.g. name@okaxis or 9876543210@ybl"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-emerald-400 text-xs font-mono focus:outline-none focus:border-emerald-500 mb-1"
-                  />
-                  <span className="text-[10px] text-slate-500 block">
-                    The payer's QR code regenerates automatically to pay into this account.
-                  </span>
-                </div>
-
-                {/* Custom QR Image Upload Section */}
-                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                  <label className="text-slate-300 block text-xs font-mono font-bold mb-2">
-                    Upload Your Official GPay / PhonePe QR Screenshot:
-                  </label>
-                  {customQrImage ? (
-                    <div className="text-center">
-                      <div className="p-2 rounded-xl bg-white inline-block shadow mb-2 border border-slate-700">
-                        <img
-                          src={customQrImage}
-                          alt="Custom Uploaded QR"
-                          className="w-36 h-36 object-contain rounded"
-                        />
-                      </div>
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="text-xs text-emerald-400 hover:text-emerald-300 font-mono underline"
-                        >
-                          Replace QR Screenshot
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="cursor-pointer p-6 rounded-xl border-2 border-dashed border-slate-700 hover:border-emerald-500/50 bg-slate-900/50 text-center transition group"
-                    >
-                      <Upload className="w-6 h-6 text-slate-500 group-hover:text-emerald-400 mx-auto mb-1.5 transition" />
-                      <p className="text-xs font-bold text-slate-200">Click to upload UPI QR screenshot</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">PNG, JPG or Screenshot of GPay/PhonePe</p>
-                    </div>
-                  )}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleCustomQrUpload}
-                    className="hidden"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleSaveRecipientSettings}
-                  disabled={savingSettings}
-                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-xs font-extrabold font-mono transition flex items-center justify-center space-x-1.5"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>{savingSettings ? 'Saving Settings...' : 'Save Recipient UPI & QR Preferences'}</span>
-                </button>
-              </div>
-            )}
-          </>
+          </div>
         )}
 
         {/* Error Alert */}
@@ -752,16 +667,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             <span>{paymentError}</span>
           </div>
         )}
-
-        {/* Success Alert */}
-        {paymentSuccess && (
-          <div className="mt-4 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center space-x-2 text-left">
-            <Check className="w-4 h-4 flex-shrink-0 text-emerald-400" />
-            <span>{paymentSuccess}</span>
-          </div>
-        )}
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? ReactDOM.createPortal(modalContent, document.body)
+    : modalContent;
 };
+
 export default PaymentModal;

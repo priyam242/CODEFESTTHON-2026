@@ -758,11 +758,11 @@ export const Dashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Verified Payment Ref / UTR ID & Sealed Hash */}
+                    {/* Verified Payment Ref ID & Sealed Hash */}
                     <div className="mt-3 space-y-1.5">
                       {(tenancy.settlementPaymentId || tenancy.depositPaymentId) && (
                         <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-[10px] font-mono text-emerald-300 flex items-center justify-between">
-                          <span className="text-slate-400">Payment Ref / UTR:</span>
+                          <span className="text-slate-400">Payment Ref:</span>
                           <span className="font-bold">{tenancy.settlementPaymentId || tenancy.depositPaymentId}</span>
                         </div>
                       )}

@@ -230,7 +230,7 @@ export const PublicVerifier: React.FC = () => {
               </div>
               {(certificate.settlementPaymentId || certificate.depositPaymentId) && (
                 <div className="mt-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono text-emerald-300 flex items-center justify-between">
-                  <span className="text-slate-400">Escrow Payment Ref / Bank UTR:</span>
+                  <span className="text-slate-400">Escrow Payment Reference:</span>
                   <span className="font-bold text-emerald-400">{certificate.settlementPaymentId || certificate.depositPaymentId}</span>
                 </div>
               )}

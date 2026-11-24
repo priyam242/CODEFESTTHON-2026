@@ -55,7 +55,28 @@ export const LandlordVerify: React.FC = () => {
   const [ownerUpiSavedMsg, setOwnerUpiSavedMsg] = useState<string | null>(null);
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [isSettled, setIsSettled] = useState(false);
+  const [confirmingDeposit, setConfirmingDeposit] = useState(false);
   const isInitialLoad = useRef(true);
+
+  const handleConfirmDepositReceived = async () => {
+    if (!tenancy || !landlordToken) return;
+    setConfirmingDeposit(true);
+    try {
+      const res = await paymentsApi.confirmDirectPayment({
+        tenancyId: tenancy.id,
+        stage: 'DEPOSIT',
+        landlordToken,
+      });
+      setTenancy(res.tenancy);
+      emitSyncEvent('DEPOSIT_PAID', tenancy.id);
+      setSuccessMessage('Deposit payment confirmed and locked into escrow!');
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Failed to confirm deposit payment');
+    } finally {
+      setConfirmingDeposit(false);
+    }
+  };
 
   const loadReview = useCallback(async () => {
     if (!landlordToken) return;
@@ -455,6 +476,34 @@ export const LandlordVerify: React.FC = () => {
         </div>
       </div>
 
+      {/* Pending Deposit Payment Action Card for Landlord */}
+      {tenancy.pendingPaymentStage === 'DEPOSIT_SENT' && !tenancy.depositPaid && (
+        <div className="mb-8 p-4 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/60 shadow-lg shadow-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+              <CreditCard className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-bold font-mono text-emerald-300 uppercase tracking-wider">
+                💰 Tenant Sent ₹{Number(tenancy.pendingPaymentAmount || tenancy.depositAmount).toLocaleString('en-IN')} Deposit via Direct UPI
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Please check your bank / UPI app ({tenancy.landlordUpi || 'registered account'}). Click below to confirm receipt and lock deposit into escrow.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleConfirmDepositReceived}
+            disabled={confirmingDeposit}
+            className="shrink-0 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-extrabold text-xs font-mono shadow-md shadow-emerald-500/25 transition flex items-center justify-center space-x-2"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>{confirmingDeposit ? 'Confirming...' : '✅ Confirm Money Received in Bank'}</span>
+          </button>
+        </div>
+      )}
+
       {/* AI Settlement Breakdown Card (when move-out audit has started/completed) */}
       {hasMoveOut && (
         <div className="mb-8 rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 backdrop-blur-xl shadow-xl glass-vault-card">
@@ -470,6 +519,11 @@ export const LandlordVerify: React.FC = () => {
               <div className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 <span>✅ Net Refund Paid &amp; Cleared (₹{netRefund.toLocaleString('en-IN')})</span>
+              </div>
+            ) : tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+              <div className="px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono inline-flex items-center space-x-2">
+                <Clock className="w-4 h-4 text-amber-400 animate-spin" />
+                <span>⏳ Net Refund Marked Sent (₹{netRefund.toLocaleString('en-IN')}) • Waiting for Guest Bank Confirmation</span>
               </div>
             ) : hasGuestRefundMethod ? (
               <button

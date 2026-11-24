@@ -305,6 +305,48 @@ export const TenancyDetail: React.FC = () => {
     }
   };
 
+  const [confirmingDeposit, setConfirmingDeposit] = useState(false);
+  const [confirmingSettlement, setConfirmingSettlement] = useState(false);
+
+  const handleConfirmDepositReceived = async () => {
+    if (!tenancy) return;
+    setConfirmingDeposit(true);
+    try {
+      const res = await paymentsApi.confirmDirectPayment({
+        tenancyId: tenancy.id,
+        stage: 'DEPOSIT',
+      });
+      setTenancy(res.tenancy);
+      emitSyncEvent('DEPOSIT_PAID', tenancy.id);
+      setToastMessage('Deposit payment confirmed and locked into escrow!');
+      setTimeout(() => setToastMessage(null), 5000);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Failed to confirm deposit payment');
+    } finally {
+      setConfirmingDeposit(false);
+    }
+  };
+
+  const handleConfirmSettlementReceived = async () => {
+    if (!tenancy) return;
+    setConfirmingSettlement(true);
+    try {
+      const res = await paymentsApi.confirmDirectPayment({
+        tenancyId: tenancy.id,
+        stage: 'SETTLEMENT',
+      });
+      setTenancy(res.tenancy);
+      emitSyncEvent('TENANCY_SETTLED', tenancy.id);
+      setToastMessage('Net refund confirmed! Tenancy successfully settled.');
+      setTimeout(() => setToastMessage(null), 5000);
+      navigate('/dashboard');
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Failed to confirm refund settlement');
+    } finally {
+      setConfirmingSettlement(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center text-slate-400">
@@ -546,7 +588,23 @@ export const TenancyDetail: React.FC = () => {
                   Guest scans Owner's payment QR code or pays via Razorpay escrow to lock deposit.
                 </p>
                 {!isStep3Done && isStep1Done && (
-                  !isLandlord ? (
+                  tenancy.pendingPaymentStage === 'DEPOSIT_SENT' ? (
+                    isLandlord ? (
+                      <button
+                        type="button"
+                        onClick={handleConfirmDepositReceived}
+                        disabled={confirmingDeposit}
+                        className="mt-2 w-full py-2 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] font-mono transition shadow-md flex items-center justify-center space-x-1"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{confirmingDeposit ? 'Confirming...' : `✅ Confirm ₹${Number(tenancy.pendingPaymentAmount || totalDeposit).toLocaleString('en-IN')} in Bank`}</span>
+                      </button>
+                    ) : (
+                      <div className="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-mono">
+                        ⏳ Deposit Marked Sent • Waiting for Owner Confirmation
+                      </div>
+                    )
+                  ) : !isLandlord ? (
                     hasOwnerPaymentMethod ? (
                       <button
                         type="button"
@@ -682,7 +740,23 @@ export const TenancyDetail: React.FC = () => {
                     : 'Tenant pays excess damage balance to Owner.'}
                 </p>
                 {isStep4Done && !isStep5Done && (
-                  totalDeductions <= totalDeposit ? (
+                  tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+                    !isLandlord ? (
+                      <button
+                        type="button"
+                        onClick={handleConfirmSettlementReceived}
+                        disabled={confirmingSettlement}
+                        className="mt-2 w-full py-2 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] font-mono transition shadow-md flex items-center justify-center space-x-1"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{confirmingSettlement ? 'Settling...' : `✅ Confirm ₹${Number(tenancy.pendingPaymentAmount || estimatedRefund).toLocaleString('en-IN')} in Bank`}</span>
+                      </button>
+                    ) : (
+                      <div className="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-mono">
+                        ⏳ Net Refund Marked Sent • Waiting for Guest Confirmation
+                      </div>
+                    )
+                  ) : totalDeductions <= totalDeposit ? (
                     isLandlord ? (
                       hasGuestRefundMethod ? (
                         <button
@@ -870,66 +944,99 @@ export const TenancyDetail: React.FC = () => {
                 )}
 
                 {/* STAGE 1: Move-In Security Deposit Escrow Alert & Pay Button */}
-                {!tenancy.depositPaid && !isLandlord && (
-                  <div className="mt-3.5 p-3.5 rounded-xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent border border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300">
-                        <CreditCard className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold font-mono text-emerald-300 uppercase tracking-wider">
-                          Stage 1 Required: Move-In Deposit Unfunded
+                {!tenancy.depositPaid && (
+                  tenancy.pendingPaymentStage === 'DEPOSIT_SENT' ? (
+                    isLandlord ? (
+                      <div className="mt-3.5 p-4 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/60 shadow-lg shadow-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                            <CreditCard className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold font-mono text-emerald-300 uppercase tracking-wider">
+                              💰 Tenant Sent ₹{Number(tenancy.pendingPaymentAmount || totalDeposit).toLocaleString('en-IN')} Deposit via Direct UPI
+                            </div>
+                            <p className="text-[11px] text-slate-300 mt-0.5">
+                              Please check your bank / UPI app. Once verified, click below to confirm receipt and lock deposit into escrow.
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-[11px] text-slate-300 mt-0.5">
-                          Deposit of ₹{totalDeposit.toLocaleString('en-IN')} must be locked into cryptographic escrow to seal your tenancy.
-                        </p>
+                        <button
+                          type="button"
+                          onClick={handleConfirmDepositReceived}
+                          disabled={confirmingDeposit}
+                          className="shrink-0 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-extrabold text-xs font-mono shadow-md shadow-emerald-500/25 transition flex items-center justify-center space-x-2"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>{confirmingDeposit ? 'Confirming...' : '✅ Confirm Money Received in Bank'}</span>
+                        </button>
                       </div>
+                    ) : (
+                      <div className="mt-3.5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center space-x-3 text-amber-300 text-xs font-mono">
+                        <Clock className="w-4 h-4 animate-spin shrink-0 text-amber-400" />
+                        <span>⏳ Deposit Payment Marked Sent (₹{Number(tenancy.pendingPaymentAmount || totalDeposit).toLocaleString('en-IN')}) • Waiting for Owner Bank Confirmation</span>
+                      </div>
+                    )
+                  ) : !isLandlord ? (
+                    <div className="mt-3.5 p-3.5 rounded-xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent border border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300">
+                          <CreditCard className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold font-mono text-emerald-300 uppercase tracking-wider">
+                            Stage 1 Required: Move-In Deposit Unfunded
+                          </div>
+                          <p className="text-[11px] text-slate-300 mt-0.5">
+                            Deposit of ₹{totalDeposit.toLocaleString('en-IN')} must be locked into cryptographic escrow to seal your tenancy.
+                          </p>
+                        </div>
+                      </div>
+                      {hasOwnerPaymentMethod ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('DEPOSIT');
+                            setIsRecipientSettingsOnly(false);
+                            setShowUpiModal(true);
+                          }}
+                          className="py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap flex items-center justify-center space-x-1.5"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>💳 Pay &amp; Lock Deposit (₹{totalDeposit.toLocaleString('en-IN')})</span>
+                        </button>
+                      ) : (
+                        <div className="text-amber-300 text-xs font-mono px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                          ⏳ Waiting for Owner to set Payment UPI / QR
+                        </div>
+                      )}
                     </div>
-                    {hasOwnerPaymentMethod ? (
+                  ) : (
+                    <div className="mt-3.5 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center space-x-2.5">
+                        <Clock className="w-4 h-4 text-amber-400" />
+                        <div>
+                          <div className="text-xs font-bold font-mono text-amber-300 uppercase tracking-wider">
+                            Stage 1: Awaiting Guest Security Deposit
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Guest ({tenancy.user?.name || (tenancy as any).userName || 'Tenant'}) will pay ₹{totalDeposit.toLocaleString('en-IN')} into escrow.
+                          </p>
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
                           setPaymentModalStage('DEPOSIT');
-                          setIsRecipientSettingsOnly(false);
+                          setIsRecipientSettingsOnly(true);
                           setShowUpiModal(true);
                         }}
-                        className="py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap flex items-center justify-center space-x-1.5"
+                        className="py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-mono font-semibold transition"
                       >
-                        <CreditCard className="w-3.5 h-3.5" />
-                        <span>💳 Pay &amp; Lock Deposit (₹{totalDeposit.toLocaleString('en-IN')})</span>
+                        ⚙️ Set/Update My Deposit UPI/QR
                       </button>
-                    ) : (
-                      <div className="text-amber-300 text-xs font-mono px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                        ⏳ Waiting for Owner to set Payment UPI / QR
-                      </div>
-                    )}
-                  </div>
-                )}
-                {!tenancy.depositPaid && isLandlord && (
-                  <div className="mt-3.5 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center space-x-2.5">
-                      <Clock className="w-4 h-4 text-amber-400" />
-                      <div>
-                        <div className="text-xs font-bold font-mono text-amber-300 uppercase tracking-wider">
-                          Stage 1: Awaiting Guest Security Deposit
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Guest ({tenancy.user?.name || (tenancy as any).userName || 'Tenant'}) will pay ₹{totalDeposit.toLocaleString('en-IN')} into escrow.
-                        </p>
-                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentModalStage('DEPOSIT');
-                        setIsRecipientSettingsOnly(true);
-                        setShowUpiModal(true);
-                      }}
-                      className="py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-mono font-semibold transition"
-                    >
-                      ⚙️ Set/Update My Deposit UPI/QR
-                    </button>
-                  </div>
+                  )
                 )}
                 {tenancy.depositPaid && (
                   <div className="mt-2.5 inline-flex items-center space-x-1.5 text-[11px] font-mono px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-300">
@@ -972,6 +1079,10 @@ export const TenancyDetail: React.FC = () => {
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                           <span>✅ Net Refund Paid &amp; Cleared (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
                         </div>
+                      ) : tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+                        <div className="w-full px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] font-mono text-amber-300 text-center font-bold">
+                          ⏳ Net Refund Marked Sent (₹{Number(tenancy.pendingPaymentAmount || (totalDeposit - totalDeductions)).toLocaleString('en-IN')}) • Waiting for Guest Bank Confirmation
+                        </div>
                       ) : (
                         <button
                           type="button"
@@ -991,6 +1102,24 @@ export const TenancyDetail: React.FC = () => {
                         <div className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono">
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                           <span>✅ Net Refund Received &amp; Cleared (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
+                        </div>
+                      ) : tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+                        <div className="w-full p-4 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/60 shadow-lg text-left">
+                          <div className="text-xs font-bold font-mono text-emerald-300 uppercase tracking-wider">
+                            💰 Owner Sent ₹{Number(tenancy.pendingPaymentAmount || (totalDeposit - totalDeductions)).toLocaleString('en-IN')} Net Refund via Direct UPI
+                          </div>
+                          <p className="text-[11px] text-slate-300 mt-0.5">
+                            Check your UPI/bank app. Confirm receipt to seal court certificate &amp; gate pass NOC.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleConfirmSettlementReceived}
+                            disabled={confirmingSettlement}
+                            className="mt-2.5 w-full py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs font-mono shadow-md flex items-center justify-center space-x-1.5 transition active:scale-95"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>{confirmingSettlement ? 'Settling...' : '✅ Confirm Money Received in Bank'}</span>
+                          </button>
                         </div>
                       ) : (
                         <div className="w-full space-y-1.5">

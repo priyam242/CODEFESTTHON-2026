@@ -1,5 +1,5 @@
-// RentShield PWA Service Worker (Network-First Cache-Safe)
-const CACHE_NAME = 'rentshield-pwa-v1';
+// RentShield PWA Service Worker (Always-Fresh Network-First with Zero JS Caching)
+const CACHE_NAME = 'rentshield-pwa-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -10,9 +10,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
+          return caches.delete(key);
         })
       )
     )
@@ -24,12 +22,22 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Bypass API and websocket requests
-  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/socket') || url.pathname.startsWith('/uploads')) {
+  // Strictly bypass service worker caching for API, JS bundles, CSS, HTML, sockets, and uploads
+  if (
+    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/socket') ||
+    url.pathname.startsWith('/uploads') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css') ||
+    url.pathname.endsWith('.html') ||
+    url.pathname === '/' ||
+    event.request.mode === 'navigate'
+  ) {
+    // Pure network fetch — never serve stale JS or outdated bundles
     return;
   }
 
-  // Network-first with cache fallback
+  // Network-first for static media/assets with cache fallback
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {

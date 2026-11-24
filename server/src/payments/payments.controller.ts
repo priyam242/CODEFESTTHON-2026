@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Req } from '@nestjs/common';
 import { PaymentsService, CreateOrderDto, VerifyPaymentDto } from './payments.service';
 
 @Controller('payments')
@@ -6,13 +6,13 @@ export class PaymentsController {
   constructor(private paymentsService: PaymentsService) {}
 
   @Post('create-order')
-  async createOrder(@Body() dto: CreateOrderDto) {
-    return this.paymentsService.createOrder(dto);
+  async createOrder(@Body() dto: CreateOrderDto, @Req() req: any) {
+    return this.paymentsService.createOrder(dto, req.user);
   }
 
   @Post('verify')
-  async verifyPayment(@Body() dto: VerifyPaymentDto) {
-    return this.paymentsService.verifyPayment(dto);
+  async verifyPayment(@Body() dto: VerifyPaymentDto, @Req() req: any) {
+    return this.paymentsService.verifyPayment(dto, req.user);
   }
 
   @Post('update-recipient')
@@ -27,7 +27,8 @@ export class PaymentsController {
       landlordQrUrl?: string;
       tenantQrUrl?: string;
     },
+    @Req() req: any,
   ) {
-    return this.paymentsService.updateRecipientUpi(dto);
+    return this.paymentsService.updateRecipientUpi(dto, req.user);
   }
 }

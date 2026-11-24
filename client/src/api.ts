@@ -186,6 +186,9 @@ export interface Tenancy {
   depositPaid?: boolean | null;
   depositPaymentId?: string | null;
   settlementPaymentId?: string | null;
+  pendingPaymentStage?: 'DEPOSIT_SENT' | 'REFUND_SENT' | string | null;
+  pendingPaymentId?: string | null;
+  pendingPaymentAmount?: number | string | null;
   userId: string;
   createdAt: string;
   items?: Item[];
@@ -356,10 +359,10 @@ export const paymentsApi = {
   createOrder: async (data: {
     tenancyId: string;
     stage: 'DEPOSIT' | 'SETTLEMENT';
-    amount: number;
+    amount?: number;
     landlordToken?: string;
   }) => {
-    const res = await axios.post(`${API_BASE}/payments/create-order`, data);
+    const res = await api.post('/payments/create-order', data);
     return res.data;
   },
   verify: async (data: {
@@ -368,18 +371,38 @@ export const paymentsApi = {
     razorpayOrderId?: string;
     razorpayPaymentId?: string;
     razorpaySignature?: string;
+    method?: string;
+    action?: 'MARK_SENT' | 'CONFIRM_RECEIVED';
     utrNumber?: string;
     landlordToken?: string;
     customQrUrl?: string;
     tenantUpi?: string;
     landlordUpi?: string;
   }) => {
-    const res = await axios.post<{
+    const res = await api.post<{
       success: boolean;
       stage: string;
       paymentId: string;
       tenancy: Tenancy;
-    }>(`${API_BASE}/payments/verify`, data);
+    }>('/payments/verify', data);
+    return res.data;
+  },
+  confirmDirectPayment: async (data: {
+    tenancyId: string;
+    stage: 'DEPOSIT' | 'SETTLEMENT';
+    landlordToken?: string;
+    action?: 'CONFIRM_RECEIVED';
+  }) => {
+    const res = await api.post<{
+      success: boolean;
+      stage: string;
+      paymentId: string;
+      tenancy: Tenancy;
+    }>('/payments/verify', {
+      ...data,
+      method: 'DIRECT_UPI_SCAN',
+      action: 'CONFIRM_RECEIVED',
+    });
     return res.data;
   },
   updateRecipient: async (data: {
@@ -391,7 +414,7 @@ export const paymentsApi = {
     landlordQrUrl?: string;
     tenantQrUrl?: string;
   }) => {
-    const res = await axios.post<Tenancy>(`${API_BASE}/payments/update-recipient`, data);
+    const res = await api.post<Tenancy>('/payments/update-recipient', data);
     return res.data;
   },
 };

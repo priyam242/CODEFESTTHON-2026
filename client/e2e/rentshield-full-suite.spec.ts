@@ -296,7 +296,7 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     expect(qrSrc).toContain('data:image/png;base64');
 
     // Confirm Payment via Instant UPI Confirmation
-    const confirmPaymentBtn = page.locator('button:has-text("I Have Paid on UPI App"), button:has-text("Verify UTR")').first();
+    const confirmPaymentBtn = page.locator('button:has-text("Instant Confirm")');
     await expect(confirmPaymentBtn).toBeVisible();
     await confirmPaymentBtn.click();
     await page.waitForTimeout(1000);
@@ -391,7 +391,7 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     await expect(settlementTitle).toBeVisible();
 
     // Complete refund settlement via Instant UPI Confirmation
-    const confirmBtn = page.locator('button:has-text("I Have Paid on UPI App"), button:has-text("Verify UTR")').first();
+    const confirmBtn = page.locator('button:has-text("Instant Confirm")');
     await expect(confirmBtn).toBeVisible();
     await confirmBtn.click();
     await page.waitForTimeout(1000);

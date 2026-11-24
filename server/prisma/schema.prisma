@@ -45,6 +45,9 @@ model Tenancy {
   depositPaid     Boolean  @default(false)
   depositPaymentId String?
   settlementPaymentId String?
+  pendingPaymentStage String?
+  pendingPaymentId    String?
+  pendingPaymentAmount Decimal? @db.Decimal
 
   userId          String
   user            User     @relation(fields: [userId], references: [id])
