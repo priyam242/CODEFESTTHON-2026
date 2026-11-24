@@ -30,6 +30,7 @@ import { tenancyApi, itemsApi, paymentsApi, Tenancy, Item, authApi, getAssetUrl,
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
+import { getEscrowState } from '../utils/escrowSequence';
 
 export const TenancyDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -393,15 +394,19 @@ export const TenancyDetail: React.FC = () => {
     ? `https://wa.me/${waPhone}?text=${waText}`
     : `https://api.whatsapp.com/send?text=${waText}`;
 
+  // Pure authoritative Escrow sequence state
+  const escrow = getEscrowState(tenancy);
+
   // Strict 6-Step Protocol Sequence
   const isStep1Done = items.length > 0;
   const isStep2Done =
     tenancy.status === 'APPROVED' ||
     tenancy.status === 'LOCKED' ||
     tenancy.status === 'SETTLED' ||
-    Boolean(tenancy.signerAudit);
+    Boolean(tenancy.signerAudit) ||
+    escrow.isOwnerSealed;
   const isStep3Done = Boolean(tenancy.depositPaid);
-  const auditedItemsCount = items.filter((it) => Boolean(it.moveOutPhotoUrl && it.aiVerdict)).length;
+  const auditedItemsCount = items.filter((it) => Boolean((it.moveOutPhotoUrl || it.moveOutPhotoHash) && it.aiVerdict)).length;
   const isStep4Done = isStep3Done && items.length > 0 && auditedItemsCount === items.length;
   const isStep5Done = tenancy.status === 'SETTLED';
   const isStep6Done = tenancy.status === 'SETTLED';

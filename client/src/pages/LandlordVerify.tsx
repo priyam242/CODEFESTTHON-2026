@@ -26,6 +26,7 @@ import { tenancyApi, paymentsApi, Tenancy, getAssetUrl, fallbackFixtureSvg } fro
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
+import { getEscrowState } from '../utils/escrowSequence';
 
 export const LandlordVerify: React.FC = () => {
   const { landlordToken } = useParams<{ landlordToken: string }>();
@@ -228,11 +229,14 @@ export const LandlordVerify: React.FC = () => {
     } catch {}
   }
 
+  // Pure authoritative Escrow sequence state
+  const escrow = getEscrowState(tenancy);
+
   // Strict 6-Step Protocol Tracker for Landlord Portal
   const isStep1Done = items.length > 0;
-  const isStep2Done = isApproved || isSettled || tenancy.status === 'LOCKED' || Boolean(tenancy.signerAudit);
+  const isStep2Done = isApproved || isSettled || tenancy.status === 'LOCKED' || Boolean(tenancy.signerAudit) || escrow.isOwnerSealed;
   const isStep3Done = Boolean(tenancy.depositPaid);
-  const isStep4Done = isStep3Done && (isVacated || isMoveOutCompleted);
+  const isStep4Done = isStep3Done && (isVacated || isMoveOutCompleted || escrow.allItemsAudited);
   const isStep5Done = isSettled || tenancy.status === 'SETTLED';
   const isStep6Done = isSettled || tenancy.status === 'SETTLED';
   const completedStepsCount = [isStep1Done, isStep2Done, isStep3Done, isStep4Done, isStep5Done, isStep6Done].filter(Boolean).length;

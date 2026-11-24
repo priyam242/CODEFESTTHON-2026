@@ -266,7 +266,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       if (orderRes.isZeroSettlement) {
         onClose();
         emitSyncEvent('TENANCY_SETTLED', tenancy.id);
-        navigate('/dashboard');
+        if (!isMagicLink) navigate('/dashboard');
         return;
       }
 
@@ -307,11 +307,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             emitSyncEvent(effectiveStage === 'DEPOSIT' ? 'DEPOSIT_PAID' : 'TENANCY_SETTLED', tenancy.id);
             if (onSettled) onSettled(verifyRes.tenancy);
 
-            if (effectiveStage === 'SETTLEMENT') {
+            if (effectiveStage === 'SETTLEMENT' && !isMagicLink) {
               navigate('/dashboard');
             }
           } catch (err: any) {
-            setPaymentError(err?.response?.data?.message || 'Payment verification failed on backend');
+            alert(err?.response?.data?.message || 'Payment verification failed on backend');
           } finally {
             setVerifyingPayment(false);
           }
@@ -329,6 +329,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         },
       };
 
+      // Close RentShield wrapper modal before launching Razorpay Checkout so there is ZERO backdrop blocking!
+      onClose();
       const razorpayInstance = new (window as any).Razorpay(options);
       razorpayInstance.open();
     } catch (err: any) {
@@ -340,6 +342,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   // Branch 2: Direct Phone QR Scan Submission
   const handleDirectUpiSubmit = async (action: 'MARK_SENT' | 'CONFIRM_RECEIVED' = 'MARK_SENT') => {
+    // GUARANTEED INSTANT MODAL AUTO-CLOSE (<50ms)
+    onClose();
     setVerifyingPayment(true);
     setPaymentError(null);
 
@@ -356,16 +360,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         localStorage.setItem(`rentshield_settled_${tenancy.id}`, 'true');
       }
 
-      // GUARANTEED INSTANT MODAL AUTO-CLOSE (<200ms)
-      onClose();
       emitSyncEvent(effectiveStage === 'DEPOSIT' ? 'DEPOSIT_PAID' : 'TENANCY_SETTLED', tenancy.id);
       if (onSettled) onSettled(verifyRes.tenancy);
 
-      if (effectiveStage === 'SETTLEMENT' && action === 'CONFIRM_RECEIVED') {
+      if (effectiveStage === 'SETTLEMENT' && action === 'CONFIRM_RECEIVED' && !isMagicLink) {
         navigate('/dashboard');
       }
     } catch (err: any) {
-      setPaymentError(err?.response?.data?.message || err?.message || 'Failed to submit payment status');
+      alert(err?.response?.data?.message || err?.message || 'Failed to submit payment status');
+    } finally {
       setVerifyingPayment(false);
     }
   };
@@ -386,7 +389,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       onClose();
       emitSyncEvent('TENANCY_SETTLED', tenancy.id);
       if (onSettled) onSettled(res);
-      navigate('/dashboard');
+      if (!isMagicLink) navigate('/dashboard');
     } catch (err: any) {
       setPaymentError(err?.response?.data?.message || 'Failed to close tenancy');
       setVerifyingPayment(false);

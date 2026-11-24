@@ -53,6 +53,11 @@ model Tenancy {
   user            User     @relation(fields: [userId], references: [id])
   items           Item[]
   createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([landlordEmail])
+  @@index([landlordToken])
+  @@index([status])
 }
 
 model Item {
@@ -71,4 +76,6 @@ model Item {
   tenancyId       String
   tenancy         Tenancy  @relation(fields: [tenancyId], references: [id])
   createdAt       DateTime @default(now())
+
+  @@index([tenancyId])
 }

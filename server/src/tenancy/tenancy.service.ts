@@ -17,6 +17,34 @@ const TENANCY_RELATION_INCLUDE = {
   },
 };
 
+const TENANCY_LIST_INCLUDE = {
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      address: true,
+      upiId: true,
+      avatarUrl: true,
+    },
+  },
+  items: {
+    select: {
+      id: true,
+      roomName: true,
+      itemName: true,
+      moveInNotes: true,
+      moveInPhotoHash: true,
+      moveOutPhotoHash: true,
+      aiVerdict: true,
+      aiExplanation: true,
+      suggestedCut: true,
+      createdAt: true,
+    },
+  },
+};
+
 @Injectable()
 export class TenancyService {
   constructor(private prisma: PrismaService) {}
@@ -58,18 +86,18 @@ export class TenancyService {
               { landlordEmail: email },
             ],
           },
-          include: { items: true, user: true },
+          include: TENANCY_LIST_INCLUDE,
         });
       } catch {
         list = await this.prisma.tenancyClient.findMany({
           where: { landlordEmail: email.toLowerCase() },
-          include: { items: true, user: true },
+          include: TENANCY_LIST_INCLUDE,
         });
       }
     } else {
       list = await this.prisma.tenancyClient.findMany({
         where: { userId: user.id },
-        include: { items: true, user: true },
+        include: TENANCY_LIST_INCLUDE,
       });
     }
     return list.map((t: any) => {

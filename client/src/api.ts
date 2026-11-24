@@ -293,7 +293,20 @@ export const tenancyApi = {
   },
   getAll: async () => {
     const res = await api.get<Tenancy[]>('/tenancy');
+    if (Array.isArray(res.data)) {
+      try {
+        sessionStorage.setItem('rentshield_cached_tenancies', JSON.stringify(res.data));
+      } catch {}
+    }
     return res.data;
+  },
+  getCachedTenancies: (): Tenancy[] | null => {
+    try {
+      const raw = sessionStorage.getItem('rentshield_cached_tenancies');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
   },
   getOne: async (id: string) => {
     const res = await api.get<Tenancy>(`/tenancy/${id}`);

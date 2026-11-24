@@ -23,14 +23,15 @@ import {
   RotateCcw,
   CreditCard,
 } from 'lucide-react';
-import { tenancyApi, Tenancy, authApi, api } from '../api';
+import { Tenancy, tenancyApi, authApi, api } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
+import { getEscrowState } from '../utils/escrowSequence';
 
 export const Dashboard: React.FC = () => {
-  const [tenancies, setTenancies] = useState<Tenancy[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tenancies, setTenancies] = useState<Tenancy[]>(() => tenancyApi.getCachedTenancies() || []);
+  const [loading, setLoading] = useState(() => !tenancyApi.getCachedTenancies()?.length);
   const [error, setError] = useState<string | null>(null);
   const [claimToken, setClaimToken] = useState('');
   const [claiming, setClaiming] = useState(false);
@@ -420,13 +421,14 @@ export const Dashboard: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {activeTenancies.map((tenancy) => {
+            const escrow = getEscrowState(tenancy);
             const hasMoveIn = (tenancy.items?.length || 0) > 0;
-            const isApproved = tenancy.status === 'APPROVED';
+            const isApproved = tenancy.status === 'APPROVED' || escrow.isOwnerSealed;
             const hasAiAudit = tenancy.items?.some((i) => i.aiVerdict);
-            const totalDeductions = (tenancy.items || []).reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
-            const originalDeposit = Number(tenancy.depositAmount || 0);
-            const netRefund = Math.max(0, originalDeposit - totalDeductions);
-            const isVacated = (tenancy.items && tenancy.items.length > 0 && tenancy.items.every((item) => Boolean(item.moveOutPhotoUrl && item.aiVerdict))) || tenancy.status === 'COMPLETED' || tenancy.status === 'VACATED';
+            const totalDeductions = escrow.totalDeductions;
+            const originalDeposit = escrow.originalDeposit;
+            const netRefund = escrow.netRefund;
+            const isVacated = escrow.allItemsAudited || tenancy.status === 'COMPLETED' || tenancy.status === 'VACATED';
 
             // 6-step progress calculation
             const isStep1Done = hasMoveIn;

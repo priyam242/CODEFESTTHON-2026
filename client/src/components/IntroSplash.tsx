@@ -84,9 +84,12 @@ export const IntroSplash: React.FC = () => {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const forceIntro = searchParams.get('intro') === '1';
+    const pathname = window.location.pathname;
+    const isEntryRoute = pathname === '/' || pathname === '/login' || pathname === '';
+    const shouldPlay = (isEntryRoute && !hasPlayedInCurrentSpaBoot) || forceIntro;
 
-    // Play if first time in current SPA session boot OR forced via ?intro=1
-    if (!hasPlayedInCurrentSpaBoot || forceIntro) {
+    // Play ONLY on fresh entry to / or /login, or when explicitly requested via ?intro=1
+    if (shouldPlay) {
       hasPlayedInCurrentSpaBoot = true;
       startAnimation();
     } else {

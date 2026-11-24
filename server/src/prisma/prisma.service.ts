@@ -14,7 +14,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   public memoryItems: Map<string, any> = new Map();
 
   constructor() {
-    super();
+    const url = process.env.DATABASE_URL_POOLED || process.env.DATABASE_URL;
+    super(url ? { datasources: { db: { url } } } : undefined);
     // Neutralize PrismaClient internal property assignment shadowing getters
     Object.defineProperty(this, 'userClient', {
       get: () => this.getUserClient(),
@@ -140,6 +141,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "pendingPaymentStage" TEXT;`,
         `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "pendingPaymentId" TEXT;`,
         `ALTER TABLE "Tenancy" ADD COLUMN IF NOT EXISTS "pendingPaymentAmount" DECIMAL;`,
+        `CREATE INDEX IF NOT EXISTS "idx_tenancy_userId" ON "Tenancy"("userId");`,
+        `CREATE INDEX IF NOT EXISTS "idx_tenancy_landlordEmail" ON "Tenancy"("landlordEmail");`,
+        `CREATE INDEX IF NOT EXISTS "idx_tenancy_landlordToken" ON "Tenancy"("landlordToken");`,
+        `CREATE INDEX IF NOT EXISTS "idx_item_tenancyId" ON "Item"("tenancyId");`,
       ];
       for (const q of alterQueries) {
         try {

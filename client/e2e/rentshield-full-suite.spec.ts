@@ -250,13 +250,13 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     const revisionNotesInput = page.locator('textarea[placeholder*="missing angles"]');
     await revisionNotesInput.fill('Please upload an additional photo of the recliner power adapter cable.');
     await page.locator('button:has-text("Send Revision Request")').click();
-    await page.waitForTimeout(600);
+    await expect(page.locator('text=Revision request dispatched to tenant')).toBeVisible({ timeout: 15000 });
 
     // Switch to Tenant view: assert Revision Requested banner appears
     await page.goto(`/tenancy/${createdTenancyId}`);
     await page.keyboard.press('Escape');
     const revisionBanner = page.locator('text=Revision Requested by Owner').first();
-    await expect(revisionBanner).toBeVisible();
+    await expect(revisionBanner).toBeVisible({ timeout: 15000 });
 
     // Landlord approves & locks baseline
     await page.goto(`/verify/${landlordToken}`);
@@ -269,9 +269,8 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     }
 
     // Click Lock & Approve Baseline
-    const lockApproveBtn = page.locator('button:has-text("Lock & Approve Baseline")');
-    await lockApproveBtn.click();
-    await page.waitForTimeout(1000);
+    await page.locator('button:has-text("Lock & Approve Baseline")').click();
+    await expect(page.locator('text=Inventory cryptographically sealed and approved successfully!')).toBeVisible({ timeout: 15000 });
 
     // Assert green approved state
     const approvedBadge = page.locator('text=Inventory Baseline Approved & Sealed').first();
