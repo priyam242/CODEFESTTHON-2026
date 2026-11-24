@@ -884,17 +884,49 @@ export const TenancyDetail: React.FC = () => {
                         </p>
                       </div>
                     </div>
+                    {hasOwnerPaymentMethod ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalStage('DEPOSIT');
+                          setIsRecipientSettingsOnly(false);
+                          setShowUpiModal(true);
+                        }}
+                        className="py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap flex items-center justify-center space-x-1.5"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>💳 Pay &amp; Lock Deposit (₹{totalDeposit.toLocaleString('en-IN')})</span>
+                      </button>
+                    ) : (
+                      <div className="text-amber-300 text-xs font-mono px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                        ⏳ Waiting for Owner to set Payment UPI / QR
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!tenancy.depositPaid && isLandlord && (
+                  <div className="mt-3.5 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center space-x-2.5">
+                      <Clock className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <div className="text-xs font-bold font-mono text-amber-300 uppercase tracking-wider">
+                          Stage 1: Awaiting Guest Security Deposit
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Guest ({tenancy.user?.name || (tenancy as any).userName || 'Tenant'}) will pay ₹{totalDeposit.toLocaleString('en-IN')} into escrow.
+                        </p>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
                         setPaymentModalStage('DEPOSIT');
-                        setIsRecipientSettingsOnly(false);
+                        setIsRecipientSettingsOnly(true);
                         setShowUpiModal(true);
                       }}
-                      className="py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap flex items-center justify-center space-x-1.5"
+                      className="py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-mono font-semibold transition"
                     >
-                      <CreditCard className="w-3.5 h-3.5" />
-                      <span>💳 Pay &amp; Lock Deposit (₹{totalDeposit.toLocaleString('en-IN')})</span>
+                      ⚙️ Set/Update My Deposit UPI/QR
                     </button>
                   </div>
                 )}
@@ -947,9 +979,9 @@ export const TenancyDetail: React.FC = () => {
                         <span>💸 Pay Net Refund to Tenant (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
                       </button>
                     ) : (
-                      <div className="w-full flex items-center space-x-2">
-                        <div className="flex-1 px-3 py-2 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] font-mono text-emerald-400 text-center font-bold">
-                          ⏳ Awaiting Refund from Owner: ₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')}
+                      <div className="w-full space-y-1.5">
+                        <div className="w-full px-3 py-2 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] font-mono text-emerald-400 text-center font-bold">
+                          ⏳ Awaiting ₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')} Refund from Owner
                         </div>
                         <button
                           type="button"
@@ -959,9 +991,9 @@ export const TenancyDetail: React.FC = () => {
                             setShowUpiModal(true);
                           }}
                           title="Upload or edit your receiving UPI ID / QR"
-                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-semibold transition whitespace-nowrap"
+                          className="w-full py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-semibold transition text-center"
                         >
-                          ⚙️ Receiving QR
+                          ⚙️ Edit My Receiving UPI / Upload QR
                         </button>
                       </div>
                     )
@@ -1000,22 +1032,24 @@ export const TenancyDetail: React.FC = () => {
                     </button>
                   )
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPaymentModalStage('SETTLEMENT');
-                      setIsRecipientSettingsOnly(false);
-                      setShowUpiModal(true);
-                    }}
-                    className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold font-mono transition shadow-sm"
-                  >
-                    <IndianRupee className="w-3.5 h-3.5" />
-                    <span>
-                      {isLandlord
-                        ? `💸 Pay Net Refund via UPI QR (₹${estimatedRefund.toLocaleString('en-IN')})`
-                        : `💰 Expected UPI Refund from Owner (₹${estimatedRefund.toLocaleString('en-IN')})`}
-                    </span>
-                  </button>
+                  isLandlord ? (
+                    <div className="w-full px-3 py-2 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] font-mono text-slate-400 text-center">
+                      ⏳ Awaiting Tenant Move-Out Photos
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentModalStage('SETTLEMENT');
+                        setIsRecipientSettingsOnly(true);
+                        setShowUpiModal(true);
+                      }}
+                      className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 text-xs font-bold font-mono transition shadow-sm"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>⚙️ Edit My Receiving UPI / Upload QR</span>
+                    </button>
+                  )
                 )}
               </div>
             </div>

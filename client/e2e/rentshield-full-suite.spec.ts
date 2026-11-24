@@ -295,11 +295,10 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     const qrSrc = await qrImg.getAttribute('src');
     expect(qrSrc).toContain('data:image/png;base64');
 
-    // Confirm Payment via Test UTR
-    const utrInput = page.locator('input[placeholder*="GPay / PhonePe"]');
-    await utrInput.fill('UTR_TEST_DEPOSIT_99812');
-    const verifyUtrBtn = page.locator('button[type="submit"]:has-text("Verify UTR")').first();
-    await verifyUtrBtn.click();
+    // Confirm Payment via Instant UPI Confirmation
+    const confirmPaymentBtn = page.locator('button:has-text("I Have Paid on UPI App"), button:has-text("Verify UTR")').first();
+    await expect(confirmPaymentBtn).toBeVisible();
+    await confirmPaymentBtn.click();
     await page.waitForTimeout(1000);
 
     // Verify Step 03 is marked Paid
@@ -391,10 +390,9 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     const settlementTitle = page.locator('text=Stage 2: Move-Out Final Net Escrow Refund').first();
     await expect(settlementTitle).toBeVisible();
 
-    // Complete refund settlement via test UTR
-    const utrInput = page.locator('input[placeholder*="GPay / PhonePe"]');
-    await utrInput.fill('UTR_REFUND_SETTLED_8812');
-    const confirmBtn = page.locator('button[type="submit"]:has-text("Verify UTR")').first();
+    // Complete refund settlement via Instant UPI Confirmation
+    const confirmBtn = page.locator('button:has-text("I Have Paid on UPI App"), button:has-text("Verify UTR")').first();
+    await expect(confirmBtn).toBeVisible();
     await confirmBtn.click();
     await page.waitForTimeout(1000);
 

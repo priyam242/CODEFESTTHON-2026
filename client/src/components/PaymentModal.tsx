@@ -76,8 +76,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   let payeeName = '';
   let payerName = '';
 
-  const tenantName = tenancy.user?.name || (tenancy as any).userName || 'Aarav Sharma (Tenant)';
-  const landlordName = tenancy.landlordName || 'Ramesh Malik (Owner)';
+  const rawTenantName = (tenancy as any).tenant?.name || tenancy.user?.name || (tenancy as any).userName;
+  const tenantName = rawTenantName ? `${rawTenantName} (Tenant)` : 'Tenant';
+  const rawLandlordName = tenancy.landlordName || (tenancy.landlordEmail ? tenancy.landlordEmail.split('@')[0] : null);
+  const landlordName = rawLandlordName ? `${rawLandlordName} (Owner)` : 'Property Owner';
 
   if (effectiveStage === 'DEPOSIT') {
     amount = defaultAmount !== undefined ? defaultAmount : totalDeposit;
@@ -118,7 +120,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   // Stage 2 (SETTLEMENT): If netDifference >= 0: Payer = Owner (LANDLORD), Receiver = Guest (TENANT)
   //                      If netDifference < 0: Payer = Guest (TENANT), Receiver = Owner (LANDLORD)
   const isCurrentUserPayer = currentUserRole === (isLandlordPaying ? 'LANDLORD' : 'TENANT');
-  const isReadOnlyPayerView = isCurrentUserPayer && !isRecipientSettingsOnly;
+  const effectiveIsRecipientSettingsOnly = isRecipientSettingsOnly || !isCurrentUserPayer;
+  const isReadOnlyPayerView = isCurrentUserPayer && !effectiveIsRecipientSettingsOnly;
 
   // Receiver's real payment configuration
   const receiverVpa = isLandlordPaying
@@ -143,7 +146,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const [vpa, setVpa] = useState<string>(initialVpa);
   const [activeTab, setActiveTab] = useState<'AUTO_QR' | 'CUSTOM_QR'>(
-    isRecipientSettingsOnly ? 'CUSTOM_QR' : 'AUTO_QR'
+    effectiveIsRecipientSettingsOnly ? 'CUSTOM_QR' : 'AUTO_QR'
   );
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string>('');
   const [customQrImage, setCustomQrImage] = useState<string | null>(initialQrImage);
@@ -175,8 +178,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
       setVpa(freshMyVpa);
       setCustomQrImage(freshMyQr);
+      if (effectiveIsRecipientSettingsOnly) {
+        setActiveTab('CUSTOM_QR');
+      }
     }
-  }, [tenancy, isLandlordPaying, isReadOnlyPayerView]);
+  }, [tenancy, isLandlordPaying, isReadOnlyPayerView, effectiveIsRecipientSettingsOnly]);
 
   // Standard NPCI UPI URI with exact .00 amount
   const note = `RentShield Escrow - ${tenancy.propertyTitle.slice(0, 24)}`;
@@ -349,12 +355,43 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  // Branch 2: Direct NPCI UPI UTR Verification Flow
+  // Branch 2: Direct Phone QR Scan Instant Confirmation ("I Have Paid on UPI App — Confirm & Close")
+  const handleDirectUpiConfirm = async () => {
+    setVerifyingPayment(true);
+    setPaymentError(null);
+
+    try {
+      const verifyRes = await paymentsApi.verify({
+        tenancyId: tenancy.id,
+        stage: effectiveStage,
+        method: 'DIRECT_UPI_SCAN',
+        landlordToken,
+        customQrUrl: customQrImage || undefined,
+        tenantQrUrl: isLandlordPaying ? (customQrImage || undefined) : undefined,
+        landlordQrUrl: !isLandlordPaying ? (customQrImage || undefined) : undefined,
+        tenantUpi: isLandlordPaying ? vpa.trim() : undefined,
+        landlordUpi: !isLandlordPaying ? vpa.trim() : undefined,
+      } as any);
+
+      if (typeof window !== 'undefined' && effectiveStage === 'SETTLEMENT') {
+        localStorage.setItem(`rentshield_settled_${tenancy.id}`, 'true');
+      }
+
+      emitSyncEvent(effectiveStage === 'DEPOSIT' ? 'DEPOSIT_PAID' : 'TENANCY_SETTLED', tenancy.id);
+      if (onSettled) onSettled(verifyRes.tenancy);
+      onClose();
+    } catch (err: any) {
+      setPaymentError(err?.response?.data?.message || err?.message || 'Failed to verify payment on server');
+    } finally {
+      setVerifyingPayment(false);
+    }
+  };
+
+  // Branch 3: Legacy/Direct NPCI UPI UTR Verification Flow (Fallback)
   const handleVerifyUtr = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!utrInput.trim()) {
-      setPaymentError('Please enter the 12-digit UPI UTR / Reference No. from your bank app.');
-      return;
+      return handleDirectUpiConfirm();
     }
 
     setVerifyingPayment(true);
@@ -445,6 +482,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             <span>Recipient: <strong className="text-emerald-400">{payeeName}</strong></span>
           </div>
         </div>
+
+        {/* Receiver Notice if viewer is not the payer */}
+        {!isCurrentUserPayer && (
+          <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono text-center">
+            <div className="font-bold flex items-center justify-center space-x-1.5 mb-1">
+              <AlertCircle className="w-4 h-4 text-amber-400" />
+              <span>
+                {effectiveStage === 'DEPOSIT'
+                  ? `⏳ Waiting for Guest (${payerName}) to Pay ₹${amount.toLocaleString('en-IN')} Deposit`
+                  : `⏳ Awaiting ₹${amount.toLocaleString('en-IN')} Refund from Owner (${payerName})`}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300">
+              Configure your receiving UPI ID or upload your QR code below so the payment reaches your account directly.
+            </p>
+          </div>
+        )}
 
         {/* ZERO BALANCE SPECIAL CASE */}
         {amount === 0 && effectiveStage === 'SETTLEMENT' ? (
@@ -597,32 +651,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   </a>
                 </div>
 
-                {/* 12-Digit UPI UTR / Reference Verification Form */}
-                <form onSubmit={handleVerifyUtr} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-left space-y-2 mt-2">
-                  <label className="text-slate-300 block text-xs font-mono font-semibold">
-                    Confirm Scanned Payment via 12-Digit Bank UTR:
-                  </label>
-                  <div className="flex space-x-2">
-                    <input
-                      type="text"
-                      value={utrInput}
-                      onChange={(e) => setUtrInput(e.target.value)}
-                      placeholder="e.g. 432109876543 (from GPay / PhonePe receipt)"
-                      className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-emerald-400 text-xs font-mono focus:outline-none focus:border-emerald-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={verifyingPayment || !utrInput.trim()}
-                      className="py-2 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-xs font-extrabold font-mono transition flex items-center space-x-1"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>{verifyingPayment ? 'Verifying...' : 'Verify UTR'}</span>
-                    </button>
-                  </div>
-                  <span className="text-[10px] text-slate-500 block">
-                    Once verified, the payment is cryptographically stamped on PostgreSQL and the tenancy updates instantly.
-                  </span>
-                </form>
+                {/* Auto-Close Direct Phone QR Confirmation */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleDirectUpiConfirm}
+                    disabled={verifyingPayment}
+                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 disabled:opacity-50 text-slate-950 font-extrabold font-mono text-xs transition shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 active:scale-[0.99]"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>{verifyingPayment ? 'Confirming Payment...' : '✅ I Have Paid on UPI App — Confirm & Close'}</span>
+                  </button>
+                  <p className="text-[10px] text-slate-400 font-mono mt-1.5 text-center">
+                    Scanned the QR with GPay / PhonePe / Paytm? Click to auto-verify escrow and close immediately.
+                  </p>
+                </div>
               </div>
             )}
 

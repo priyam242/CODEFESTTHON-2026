@@ -16,6 +16,7 @@ export interface VerifyPaymentDto {
   razorpayPaymentId?: string;
   razorpaySignature?: string;
   utrNumber?: string;
+  method?: string;
   landlordToken?: string;
   customQrUrl?: string;
   landlordQrUrl?: string;
@@ -151,7 +152,11 @@ export class PaymentsService {
         verifiedPaymentId = dto.razorpayPaymentId;
       }
     }
-    // Branch 2: Direct NPCI UPI UTR / Reference Verification
+    // Branch 2: Direct Phone UPI QR Scan Confirmation ("I Have Paid on UPI App — Confirm & Close")
+    else if (dto.method === 'DIRECT_UPI_SCAN' || dto.method === 'DIRECT_UPI') {
+      verifiedPaymentId = `pay_RS_DIRECT_UPI_${Date.now()}`;
+    }
+    // Branch 3: Direct NPCI UPI UTR / Reference Verification
     else if (dto.utrNumber) {
       const trimmedUtr = dto.utrNumber.trim();
       if (trimmedUtr.length < 6) {
@@ -159,7 +164,7 @@ export class PaymentsService {
       }
       verifiedPaymentId = trimmedUtr.startsWith('UTR-') ? trimmedUtr : `UTR-${trimmedUtr}`;
     } else {
-      throw new BadRequestException('Either valid Razorpay payment data or a UPI UTR number is required.');
+      throw new BadRequestException('Either valid Razorpay payment data, direct UPI confirmation, or a UPI UTR number is required.');
     }
 
     // Update tenancy record according to escrow stage
