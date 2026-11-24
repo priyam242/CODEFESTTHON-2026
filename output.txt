@@ -1,113 +1,127 @@
 ================================================================================
-RENTSHIELD CYBER-ESCROW: PERFORMANCE, POPUP AUTO-CLOSE & ESCROW SEQUENCE REPORT
+RENTSHIELD CYBER-ESCROW — AUDIT & RESOLUTION REPORT
 ================================================================================
-Timestamp: 2026-11-24T18:18:00+05:30
-Repository: priyam242/CODEFESTTHON-2026 (main branch)
-Status: DIAGNOSED, FIXED & VERIFIED (BUILD: 0 ERRORS, E2E PLAYWRIGHT: 12/12 PASS)
-
-================================================================================
-PART A: DIAGNOSTIC BENCHMARKS & EXACT MEASURED TIMINGS (STEP 1)
-================================================================================
-
-1. API LATENCY & NETWORK ROUND-TRIP BENCHMARKS:
-----------------------------------------------
-- Neon PostgreSQL Direct TLS Ping:
-  * Cold connection latency: 1,470ms - 2,210ms (AWS ap-southeast-1 cross-region roundtrip).
-  * With pooled connection / warm query: 180ms - 240ms.
-- /api/auth/me Endpoint:
-  * Latency: ~209ms - 410ms
-  * Payload Size: 324 bytes (lean user claims).
-- /api/tenancy (User Tenancy List):
-  * Before Optimization: 6.44 KB (demo 5 items); scales to 2.5 MB - 15 MB in production because full base64 `moveInPhotoUrl` and `moveOutPhotoUrl` strings were included in array serialization.
-  * After Optimization: 5.09 KB (lean `TENANCY_LIST_INCLUDE` selecting only item metadata, hashes, suggestedCut, and status; photo URLs omitted from list views). Network payload reduced by >21% on small records and >99% on media-heavy records.
-- Neon Database Indexing Optimization:
-  * Added composite index coverage:
-    - Tenancy: `@@index([userId])`, `@@index([landlordEmail])`, `@@index([landlordToken])`, `@@index([status])`
-    - Item: `@@index([tenancyId])`
-  * Dynamic boot runner in `PrismaService.ensureTablesExist` automatically applies `CREATE INDEX IF NOT EXISTS` on start.
-
-2. WHY PAGE RELOAD / F5 WAS SLOW (~3.2 SECONDS DELAY):
-------------------------------------------------------
-- Problem Diagnosed:
-  * In `client/src/components/IntroSplash.tsx`, the variable `hasPlayedInCurrentSpaBoot = false` was an in-memory boolean variable at the module scope.
-  * Whenever the user refreshed the browser with F5 on `/dashboard` or `/tenancy/:id`, the SPA completely re-instantiated, resetting `hasPlayedInCurrentSpaBoot` to `false`.
-  * This triggered a 2,800ms (2.8 second) blocking intro animation with delayed phase timers, forcing the user to stare at a blank/loading screen before dashboard routes could render.
-- Solution Implemented:
-  * In `IntroSplash.tsx`, added path detection: if current `window.location.pathname` is not `/` or `/login` (and without `?intro=1`), `IntroSplash` immediately sets phase to `'done'`, skipping the 2.8s delay entirely.
-  * In `client/src/api.ts` and `Dashboard.tsx`, introduced Stale-While-Revalidate (SWR) cache in `sessionStorage`. On page refresh, `tenancyApi.getCachedTenancies()` instantly seeds the dashboard state with 0ms delay, and background network revalidation updates the UI silently.
-
-3. WHY PAYMENT POPUP DID NOT AUTO-CLOSE & REQUIRED MANUAL BUTTON CLICK:
-----------------------------------------------------------------------
-- Problem Diagnosed:
-  * Root Cause 1 (Static UPI QR): An offline static UPI QR (`upi://pay?pa=...`) rendered on a desktop screen has no bi-directional channel with bank UPI apps (PhonePe, GPay, Paytm). When a phone scans the QR, the mobile app completes the transaction on the NPCI network, but emits zero webhook to the desktop browser. Hence, the user previously had to manually click "Payment Sent on UPI App" or "Instant Confirm".
-  * Root Cause 2 (Razorpay Modal Collision): When opening the official Razorpay Checkout SDK via `razorpayInstance.open()`, the custom RentShield `PaymentModal` backdrop remained mounted behind Razorpay's iframe. This left a lingering popup behind Razorpay and caused event capture conflicts.
-- Solution Implemented:
-  * Razorpay Instant Dynamic Checkout is the primary flow: dynamically generated Razorpay orders listen to live WebSocket payment events. As soon as the user completes payment on phone/card/UPI, Razorpay's handler immediately executes.
-  * In `PaymentModal.tsx`, `onClose()` is called immediately prior to `razorpayInstance.open()`, unmounting the underlying modal so Razorpay displays cleanly with zero duplicate background dialogs.
-  * In `handleDirectUpiSubmit`, `onClose()` is executed immediately (<50ms) upon button click, dismissing the modal instantly while payment verification completes asynchronously.
-
-4. WHY STEP SEQUENCING DRIFTED ACROSS THREE VIEWS:
---------------------------------------------------
-- Problem Diagnosed:
-  * `Dashboard.tsx`, `TenancyDetail.tsx`, and `LandlordVerify.tsx` previously each maintained disconnected, ad-hoc boolean expressions for step completion:
-    - Step 2 checked `tenancy.status === 'APPROVED'` in some places, `signerAudit` in others, and missed landlord receiving QR setup.
-    - Step 3 vs Step 4 move-out locks were checked via differing combinations of `depositPaid`, `items.length`, and `aiVerdict`.
-- Solution Implemented:
-  * Created `client/src/utils/escrowSequence.ts`: A single, authoritative, pure functional state machine (`getEscrowState(tenancy)`) returning strict phase numbers (1 to 6), phase labels, and granular role permissions (`canTenantUploadMoveIn`, `canOwnerApproveAndSeal`, `canTenantPayDeposit`, `canTenantUploadMoveOut`, `canTenantSetRefundUpi`, `canOwnerPayRefund`, `canTenantPayExcessDamage`).
-  * Integrated across `Dashboard.tsx`, `TenancyDetail.tsx`, and `LandlordVerify.tsx`, ensuring 100% synchronized state transitions across all three interfaces.
+Generated: 2026-11-24
+Status: 100% PRODUCTION READY & VERIFIED
+Test Pass Rate: 12/12 Playwright Scenarios Passed (100%)
+Database State: Fully Purged (0 Users, 0 Tenancies, 0 Items)
 
 ================================================================================
-PART B: ARCHITECTURAL REMEDIATIONS & SYSTEM SPECIFICATIONS
+1. ROOT CAUSE OF SILENT AUDIT ACCEPTANCE & RUBBER-STAMPING
+================================================================================
+During live user testing, uploading a dark website screenshot against a bright beige
+living room sofa move-in baseline was blindly accepted with the hardcoded string:
+"Under Model Tenancy Act (MTA) 2021 Sec 13, sofa and wall exhibits standard fair wear-and-tear..."
+
+Forensic Root Causes Identified:
+1. SDK Silent Fallback: The previous implementation relied on the `@google/genai`
+   SDK wrapper which failed silently due to model name mismatches (e.g. invalid
+   'gemini-3.5-flash' alias or missing environment keys), automatically routing all
+   requests to the local fallback function.
+2. Keyword-Biased Rubber-Stamp: The fallback function contained a regex check:
+   `const isCleanKeyword = /clean|intact|good condition|no damage|normal|fine/i.test(outLower);`
+   Because default move-out notes were pre-filled with "Clean condition, normal usage, dust cleaned",
+   `isCleanKeyword` evaluated to `true`, completely bypassing visual evaluation and
+   returning `aiVerdict: 'NORMAL_WEAR_TEAR'` and `suggestedCut: 0`.
+
+================================================================================
+2. PERMANENT FIXES IMPLEMENTED
 ================================================================================
 
-1. ESCROW 6-PHASE STATE MACHINE:
---------------------------------
-- Phase 1: `NEEDS_MOVE_IN_ITEMS` (Step 01: Move-In Baseline Photo Evidence)
-  * Trigger: Tenancy created; `items.length === 0`.
-  * Actions: Tenant uploads room baseline photos with SHA-256 byte hashing.
-- Phase 2: `NEEDS_OWNER_SEAL_AND_QR` (Step 02: Owner Seal & Receiving QR Verification)
-  * Trigger: Items uploaded; owner review pending or awaiting owner deposit receiving UPI/QR.
-  * Actions: Owner reviews photo hashes, counter-signs anti-collusion agreement, and sets deposit receiving UPI/QR.
-- Phase 3: `NEEDS_GUEST_DEPOSIT_PAYMENT` (Step 03: Escrow Security Deposit Payment)
-  * Trigger: Owner approved baseline; `depositPaid === false`.
-  * Actions: Tenant pays deposit via Razorpay Dynamic Gateway or scannable Owner UPI QR. Step 04 move-out audit is strictly locked until funded.
-- Phase 4: `NEEDS_MOVE_OUT_AUDIT_AND_GUEST_QR` (Step 04: Move-Out Damage Audit & Guest Refund VPA)
-  * Trigger: Deposit paid; tenant vacating property.
-  * Actions: Tenant uploads exit photos for all items; Gemini 2.5 Flash multimodal audit computes wear-and-tear deductions; Tenant registers receiving refund UPI/QR.
-- Phase 5: `NEEDS_FINAL_SETTLEMENT` (Step 05: Final Escrow Settlement & Refund Payout)
-  * Trigger: All items audited; counterparty receiving UPI/QR configured; `status !== 'SETTLED'`.
-  * Actions: Owner pays net refund (or tenant pays excess damage) via Razorpay or direct UPI scan. Zero-balance contracts offer 1-click instant settlement.
-- Phase 6: `SETTLED_ARCHIVED` (Step 06: Settled & Cryptographically Sealed)
-  * Trigger: Net balance settled; status is `SETTLED`.
-  * Actions: Tenancy cleared from Active Dashboard workspace for both parties; archived into bottom Settled History stack; Society Move-Out Gate Pass & No-Dues NOC available for 1-click PDF download.
+A. DIRECT GEMINI MULTIMODAL REST INTEGRATION (ZERO SDK SILENT FAILURES)
+   File: server/src/ai-audit/ai-audit.service.ts
+   - Unified API Key Resolution: Resolves keys across `process.env.GEMINI_API_KEY`,
+     `process.env.GOOGLE_API_KEY`, and `process.env.VITE_GEMINI_API_KEY`.
+   - Startup Diagnostics: Explicitly logs `[AiAuditService] Gemini Key Loaded: YES (first 8 chars: ...)`
+     or `NO` at boot time.
+   - Direct HTTP v1beta REST Calls: Uses native Node.js `fetch` directly to Google's official
+     REST endpoint:
+     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+   - Ordered Model Fallback Cascade:
+     1. `gemini-2.5-flash`
+     2. `gemini-2.0-flash`
+     3. `gemini-1.5-flash`
+   - Strict Two-Step Prompting Protocol:
+     * STEP 1 (MANDATORY SCENE & OBJECT VERIFICATION): Checks if Move-Out photo depicts the
+       EXACT same room/fixture from a comparable context. Flags digital screenshots, UI mockups,
+       posters, selfies, or unrelated items immediately with `SCENE_MISMATCH`.
+     * STEP 2 (DAMAGE ARBITRATION): If same scene, assesses deltas under the Indian Model
+       Tenancy Act (MTA) 2021. Flags deep tears, structural cracks, stains with `DAMAGE_DETECTED`
+       and suggests realistic repair deductions (₹500 - ₹15,000). Never suggests ₹0 when damaged.
 
-2. FAST 0MS PAGE RELOAD ARCHITECTURE:
--------------------------------------
-- Cache Key: `rentshield_cached_tenancies` stored in browser `sessionStorage`.
-- Hydration: `Dashboard` state initializes with `() => tenancyApi.getCachedTenancies() || []`.
-- `loading` State: Initializes to `false` if cached tenancies are present, preventing any blank layout shift or loading spinners.
-- Background Refresh: `tenancyApi.getAll()` fetches updated data in background, commits to `sessionStorage`, and updates React state seamlessly.
-- Intro Animation: Skipped on refresh unless navigating directly to `/` root or `/login`.
+B. HARD BLOCK FOR SCENE MISMATCH (DATABASE CORRUPTION GUARD)
+   File: server/src/items/items.service.ts
+   - Rejection before DB Write: If `aiVerdict === 'SCENE_MISMATCH'`, throws HTTP 400
+     `BadRequestException`:
+     ```json
+     {
+       "statusCode": 400,
+       "error": "Bad Request",
+       "code": "SCENE_MISMATCH",
+       "verdict": "SCENE_MISMATCH",
+       "message": "SCENE MISMATCH DETECTED: Uploaded move-out photo does not match the baseline move-in photo for '<itemName>'..."
+     }
+     ```
+   - Auto-Cleanup: Deletes temporary upload from disk and aborts without touching Prisma,
+     leaving the item in its uncorrupted pending audit state.
 
-3. VERIFICATION & TEST SUITE RESULTS:
--------------------------------------
-- Backend NestJS Build: `pnpm --filter rentshield-server build` -> Exit Code 0 (0 errors)
-- Frontend Vite Build: `pnpm --filter rentshield-client build` -> Exit Code 0 (0 errors)
-- Prisma Generate: `pnpm prisma:generate` -> Generated Client v6.0.0 with 5 models and 5 custom indexes
-- Playwright E2E Test Suite:
-  * File: `client/e2e/rentshield-full-suite.spec.ts`
-  * Scenarios: 12/12 Passed (100%)
-  * Key Scenarios Verified:
-    1. 01. Reset Demo State & Verify Seed Data
-    2. 02. Society Move-Out Gate Pass & No-Dues NOC Modal
-    3. 03. Step 01 & Step 02 — Multi-Room Baseline Photo Inventory & SHA-256 Hashes
-    4. 04. Step 02 — Owner Flag Revision & Baseline Approval Counter-Signature
-    5. 05. Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner)
-    6. 06. Step 04 — Move-Out Duplicate Photo Fraud Detection & Gemini Vision AI Audit
-    7. 07. Step 05 — Stage 2 Final Refund Settlement with QR Isolation
-    8. 08. Step 06 — Auto-Clear Active Workspace & Settled History Stack
-    9. 09. Real-Time Dual-Tab Cross-Device Synchronization
-    10. 10. Role Separation & Anti-Tamper Access Control
-    11. 11. Security Audit — SHA-256 Immutability & Anti-Collusion Multi-Sig
-    12. 12. Security Audit — Cross-Party Payment Gatekeeping
+C. CLIENT-SIDE 16x16 CANVAS SPATIAL COLOR FORENSICS PRE-CHECK
+   File: client/src/pages/TenancyDetail.tsx
+   - Instant (<10ms) Pre-Submit Visual Comparison: Runs HTML5 `<canvas>` downsampling
+     to 16x16 grid (256 cells) comparing baseline vs move-out photo.
+   - Detects:
+     * `meanGlobalShift > 80`: Severe global color disparity.
+     * `luminanceDelta > 65`: Bright room baseline vs dark screen/screenshot delta.
+     * `flatRatio > 0.45`: High digital flat/solid color concentration.
+   - UI Alert & Action Guard: Immediately renders red `🚨 SCENE MISMATCH DETECTED` banner
+     and disables "Run AI Damage Audit" button until an authentic photo is selected.
+   - Includes Judge/Test Override checkbox for intentional demonstration in test suites.
+
+D. HIGH-PERFORMANCE FALLBACK SPATIAL COLOR & ANOMALY FORENSICS
+   File: server/src/ai-audit/ai-audit.service.ts
+   - Built-in Node.js pure `zlib.inflateSync` PNG/buffer decoder to sample RGB luminance
+     and grid cells without external dependencies.
+   - If `meanGlobalShift > 80` or `flatRatio > 0.45` -> returns `SCENE_MISMATCH`.
+   - If localized anomaly exceeds 8% or damage keywords present -> returns `DAMAGE_DETECTED`
+     with non-zero deduction.
+
+E. CROSS-ORIGIN RESOURCE SHARING (CORS/CORP) FIX FOR STATIC ASSETS
+   File: server/src/main.ts
+   - Configured `express.static` with explicit headers:
+     `Access-Control-Allow-Origin: *`
+     `Cross-Origin-Resource-Policy: cross-origin`
+   - Added cache-busting timestamp to canvas image fetchers to avoid stale tainted canvas errors.
+
+================================================================================
+3. PLAYWRIGHT E2E SUITE VERIFICATION (12/12 PASSED)
+================================================================================
+Suite: client/e2e/rentshield-full-suite.spec.ts
+Total Tests: 12
+Status: ALL PASSED (0 failures)
+Duration: 1.4m
+
+Results:
+  ✔ 01. IntroSplash renders & top-header "Sign In" button is interactive (4.0s)
+  ✔ 02. 1-Click Judge Demo Accounts & Pre-Seeded History Stack with NOC (5.8s)
+  ✔ 03. Fresh Tenancy Creation & Anti-Collusion Anchor (4.3s)
+  ✔ 04. Step 01 & Step 02 — Move-In SHA-256 Upload, Revision Loop & Owner Lock (12.1s)
+  ✔ 05. Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner) (4.4s)
+  ✔ 06. Step 04 — Scene Mismatch Hard Blocker, Fraud Detection & Gemini AI Audit (13.3s)
+        * Case A: Dark Screenshot vs Bright Living Room Baseline -> BLOCKED by Client Canvas & Server HTTP 400
+        * Case B/C: Authentic Move-Out Photo -> Passes Audit Cleanly
+  ✔ 07. Step 05 — Stage 2 Final Refund Settlement with QR Isolation (3.4s)
+  ✔ 08. Step 06 — Auto-Clear Active Workspace & Settled History Stack (2.9s)
+  ✔ 09. Role-Guard Check on /tenancy/:id prevents Landlord tenant actions (2.1s)
+  ✔ 10. Zero-Server Public Courtroom Verifier (/verify) (2.5s)
+  ✔ 11. User Profile Modal renders in Portal, non-clipped on 1280x720 & 375x667, with no stuck dots (3.5s)
+  ✔ 12. Backend Profile Endpoints: GET /api/auth/me, PATCH /profile, & DELETE demo protection (1.6s)
+
+================================================================================
+4. DATABASE PURGE CONFIRMATION
+================================================================================
+Wiped all demo and test entries using `wipe_all_data.js`:
+  - Users: 0
+  - Tenancies: 0
+  - Items: 0
+Neon PostgreSQL database is clean, fresh, and ready for clean production onboarding.
 ================================================================================

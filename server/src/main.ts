@@ -71,9 +71,17 @@ async function bootstrap() {
     next();
   });
 
-  // Serve uploaded move-in / move-out images statically
+  // Serve uploaded move-in / move-out images statically with explicit CORS & CORP headers
   const uploadsPath = path.join(process.cwd(), 'uploads');
-  app.use('/uploads', express.static(uploadsPath));
+  app.use(
+    '/uploads',
+    express.static(uploadsPath, {
+      setHeaders: (res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      },
+    })
+  );
   
   const port = process.env.PORT || 4000;
   await app.listen(port);

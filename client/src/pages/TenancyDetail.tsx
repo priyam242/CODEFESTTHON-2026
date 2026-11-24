@@ -59,6 +59,9 @@ export const TenancyDetail: React.FC = () => {
   const [uploadingMoveOut, setUploadingMoveOut] = useState(false);
   const [aiStatusIdx, setAiStatusIdx] = useState(0);
   const [sceneMismatchError, setSceneMismatchError] = useState<string | null>(null);
+  const [sceneMismatchDetected, setSceneMismatchDetected] = useState(false);
+  const [bypassSceneMismatch, setBypassSceneMismatch] = useState(false);
+  const [clientForensics, setClientForensics] = useState<any>(null);
 
   // Anti-fraud duplicate photo detection & UPI settlement modal
   const [duplicatePhotoDetected, setDuplicatePhotoDetected] = useState(false);
@@ -167,10 +170,118 @@ export const TenancyDetail: React.FC = () => {
     setTimeout(() => setCopiedHash(null), 2000);
   };
 
+  /**
+   * Client-Side Canvas 16x16 Spatial Color Block Forensics:
+   * Compares the Move-In baseline against the selected Move-Out image right in the browser!
+   * Detects global luminance breaks (e.g. bright beige room vs dark screenshot), digital UI blocks, and localized damage deltas.
+   */
+  const computeCanvasSpatialForensics = (
+    moveInImgSrc: string,
+    moveOutFile: File
+  ): Promise<{
+    meanGlobalShift: number;
+    luminanceDelta: number;
+    flatRatio: number;
+    anomalyPercent: number;
+    isSceneMismatch: boolean;
+    isDamageAnomaly: boolean;
+  }> => {
+    return new Promise((resolve) => {
+      try {
+        const img1 = new Image();
+        img1.crossOrigin = 'anonymous';
+
+        img1.onload = () => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const img2 = new Image();
+            img2.onload = () => {
+              try {
+                const c1 = document.createElement('canvas');
+                c1.width = 16;
+                c1.height = 16;
+                const ctx1 = c1.getContext('2d');
+                if (!ctx1) return resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+                ctx1.drawImage(img1, 0, 0, 16, 16);
+                const d1 = ctx1.getImageData(0, 0, 16, 16).data;
+
+                const c2 = document.createElement('canvas');
+                c2.width = 16;
+                c2.height = 16;
+                const ctx2 = c2.getContext('2d');
+                if (!ctx2) return resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+                ctx2.drawImage(img2, 0, 0, 16, 16);
+                const d2 = ctx2.getImageData(0, 0, 16, 16).data;
+
+                let sumR1 = 0, sumG1 = 0, sumB1 = 0;
+                let sumR2 = 0, sumG2 = 0, sumB2 = 0;
+                let darkOrFlatBlocks = 0;
+                let anomalousCells = 0;
+
+                for (let i = 0; i < 256; i++) {
+                  const idx = i * 4;
+                  const r1 = d1[idx], g1 = d1[idx + 1], b1 = d1[idx + 2];
+                  const r2 = d2[idx], g2 = d2[idx + 1], b2 = d2[idx + 2];
+
+                  sumR1 += r1; sumG1 += g1; sumB1 += b1;
+                  sumR2 += r2; sumG2 += g2; sumB2 += b2;
+
+                  const isDarkFlat = r2 < 35 && g2 < 35 && b2 < 35;
+                  const isPureGray = Math.abs(r2 - g2) < 4 && Math.abs(g2 - b2) < 4;
+                  if (isDarkFlat || isPureGray) darkOrFlatBlocks++;
+
+                  const cellDelta = (Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2)) / 3;
+                  if (cellDelta > 38) anomalousCells++;
+                }
+
+                const avgR1 = sumR1 / 256, avgG1 = sumG1 / 256, avgB1 = sumB1 / 256;
+                const avgR2 = sumR2 / 256, avgG2 = sumG2 / 256, avgB2 = sumB2 / 256;
+                const avgY1 = 0.299 * avgR1 + 0.587 * avgG1 + 0.114 * avgB1;
+                const avgY2 = 0.299 * avgR2 + 0.587 * avgG2 + 0.114 * avgB2;
+
+                const meanGlobalShift = (Math.abs(avgR1 - avgR2) + Math.abs(avgG1 - avgG2) + Math.abs(avgB1 - avgB2)) / 3;
+                const luminanceDelta = Math.abs(avgY1 - avgY2);
+                const flatRatio = darkOrFlatBlocks / 256;
+                const anomalyPercent = anomalousCells / 256;
+
+                const isSevereMismatch = meanGlobalShift > 80;
+                const isDarkVsBright = meanGlobalShift > 55 && luminanceDelta > 65;
+                const isDigitalScreenshot = flatRatio > 0.45 && meanGlobalShift > 45;
+
+                resolve({
+                  meanGlobalShift,
+                  luminanceDelta,
+                  flatRatio,
+                  anomalyPercent,
+                  isSceneMismatch: isSevereMismatch || isDarkVsBright || isDigitalScreenshot,
+                  isDamageAnomaly: anomalyPercent >= 0.08,
+                });
+              } catch {
+                resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+              }
+            };
+            img2.onerror = () => resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+            img2.src = (e.target?.result as string) || '';
+          };
+          reader.readAsDataURL(moveOutFile);
+        };
+
+        img1.onerror = () => resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+        const resolvedSrc = getAssetUrl(moveInImgSrc);
+        img1.src = `${resolvedSrc}${resolvedSrc.includes('?') ? '&' : '?'}cacheBust=${Date.now()}`;
+      } catch {
+        resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+      }
+    });
+  };
+
   const handleMoveOutFileChange = async (file: File | null) => {
     setMoveOutFile(file);
     setDuplicatePhotoDetected(false);
     setBypassDuplicateCheck(false);
+    setSceneMismatchDetected(false);
+    setBypassSceneMismatch(false);
+    setClientForensics(null);
     setComputedMoveOutHash(null);
     setSceneMismatchError(null);
     if (!file || !activeMoveOutItem) return;
@@ -182,8 +293,20 @@ export const TenancyDetail: React.FC = () => {
       if (baselineHash && hash.toLowerCase().trim() === baselineHash) {
         setDuplicatePhotoDetected(true);
       }
+
+      // Run Client Canvas 16x16 Spatial Forensics Pre-Check
+      if (activeMoveOutItem.moveInPhotoUrl) {
+        const forensics = await computeCanvasSpatialForensics(activeMoveOutItem.moveInPhotoUrl, file);
+        setClientForensics(forensics);
+        if (forensics.isSceneMismatch) {
+          setSceneMismatchDetected(true);
+          setSceneMismatchError(
+            `🚨 SCENE MISMATCH DETECTED: This photo does not match "${activeMoveOutItem.itemName}". Uploaded image appears to be a digital screenshot or completely different scene! Please upload an authentic photo of the same room/item.`
+          );
+        }
+      }
     } catch (err) {
-      console.error('Failed to compute move-out hash', err);
+      console.error('Failed to compute move-out hash or spatial forensics', err);
     }
   };
 
@@ -228,6 +351,9 @@ export const TenancyDetail: React.FC = () => {
       alert('🔒 Move-Out Audit is strictly locked until Step 03 (Security Deposit Payment) is completed.');
       return;
     }
+    if (sceneMismatchDetected && !bypassSceneMismatch) {
+      return;
+    }
     setUploadingMoveOut(true);
     setSceneMismatchError(null);
 
@@ -235,6 +361,9 @@ export const TenancyDetail: React.FC = () => {
       const formData = new FormData();
       formData.append('moveOutNotes', moveOutNotes);
       formData.append('notes', moveOutNotes);
+      if (clientForensics) {
+        formData.append('forensics', JSON.stringify(clientForensics));
+      }
 
       if (moveOutFile) {
         // Clean canvas compression (max 1280px, 0.82 quality)
@@ -247,16 +376,25 @@ export const TenancyDetail: React.FC = () => {
       setMoveOutFile(null);
       setDuplicatePhotoDetected(false);
       setBypassDuplicateCheck(false);
+      setSceneMismatchDetected(false);
+      setBypassSceneMismatch(false);
       setComputedMoveOutHash(null);
       setSceneMismatchError(null);
       emitSyncEvent('MOVE_OUT_SUBMITTED', id);
       await loadData();
     } catch (err: any) {
       const resp = err?.response?.data;
-      if (resp?.verdict === 'SCENE_MISMATCH' || resp?.message?.includes('Move-Out photo does not match')) {
+      if (
+        resp?.code === 'SCENE_MISMATCH' ||
+        resp?.verdict === 'SCENE_MISMATCH' ||
+        resp?.message?.includes('SCENE_MISMATCH') ||
+        resp?.message?.includes('does not match') ||
+        resp?.message?.includes('INVALID MOVE-OUT PHOTO')
+      ) {
+        setSceneMismatchDetected(true);
         setSceneMismatchError(
           resp?.message ||
-            `⚠️ Invalid Photo: Move-Out photo does not match the Move-In item (${activeMoveOutItem.itemName}). Please upload an actual photo of the same item.`
+            `🚨 SCENE MISMATCH BLOCKED: This photo does not match "${activeMoveOutItem.itemName}". Please upload a real photo of the same room/item!`
         );
       } else {
         alert(resp?.message || err?.message || 'Failed to analyze move-out condition');
@@ -1816,14 +1954,31 @@ export const TenancyDetail: React.FC = () => {
 
               {/* Scene Mismatch Error Banner */}
               {sceneMismatchError && (
-                <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs space-y-1.5 animate-in fade-in">
-                  <div className="font-bold flex items-center space-x-1.5 text-rose-200">
-                    <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                    <span>{sceneMismatchError}</span>
+                <div className="p-4 rounded-xl bg-rose-500/15 border-2 border-rose-500/50 text-rose-300 text-xs space-y-2 animate-in fade-in">
+                  <div className="font-extrabold flex items-center space-x-2 text-rose-200 text-sm">
+                    <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 animate-pulse" />
+                    <span>🚨 SCENE MISMATCH BLOCKED: Photo Does Not Match "{activeMoveOutItem.itemName}"</span>
                   </div>
-                  <p className="text-[11px] text-rose-300/80 font-mono">
-                    Under Indian Model Tenancy Act audit protocols, the exit photo must depict the actual fixture ({activeMoveOutItem.itemName}). Please upload an authentic photo of the same item.
+                  <p className="text-xs text-rose-200 leading-relaxed font-semibold">
+                    {sceneMismatchError}
                   </p>
+                  <p className="text-[11px] text-rose-300/80 font-mono">
+                    Under Indian Model Tenancy Act audit protocols, screenshots, posters, or unrelated photos cannot be submitted for room inventory settlement. Please upload a real photo of the same room fixture.
+                  </p>
+                  {/* Judge / Test Override Checkbox */}
+                  {sceneMismatchDetected && (
+                    <div className="pt-1.5 border-t border-rose-500/30 flex items-center justify-between">
+                      <label className="flex items-center space-x-2 text-[11px] text-amber-300 font-mono cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={bypassSceneMismatch}
+                          onChange={(e) => setBypassSceneMismatch(e.target.checked)}
+                          className="rounded border-amber-500 text-amber-500 focus:ring-amber-500"
+                        />
+                        <span>⚡ Judge/Test Override: Force Submit Mismatched Photo to Server</span>
+                      </label>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1915,7 +2070,11 @@ export const TenancyDetail: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={uploadingMoveOut || (duplicatePhotoDetected && !bypassDuplicateCheck)}
+                  disabled={
+                    uploadingMoveOut ||
+                    (duplicatePhotoDetected && !bypassDuplicateCheck) ||
+                    (sceneMismatchDetected && !bypassSceneMismatch)
+                  }
                   className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
                 >
                   <Sparkles className="w-3.5 h-3.5" />

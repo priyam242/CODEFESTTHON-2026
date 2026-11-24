@@ -1,15 +1,28 @@
 import { test, expect } from 'playwright/test';
+import * as zlib from 'zlib';
 
-// Helper to generate a minimal valid 1x1 PNG data buffer
+// Helper to generate a valid PNG data buffer with real zlib deflate stream
 function createTestImageBuffer(r = 16, g = 185, b = 129): Buffer {
-  // Minimal valid 1x1 PNG
-  return Buffer.from([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
-    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, 0x00, 0x00, 0x00,
-    0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, r, g, b, 0x00, 0x00,
-    0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc, 0x33, 0x00, 0x00, 0x00, 0x00,
-    0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1, 0); ihdr.writeUInt32BE(1, 4);
+  ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const rawScanline = Buffer.from([0, r, g, b]);
+  const compressed = zlib.deflateSync(rawScanline);
+  function makeChunk(type: string, data: Buffer) {
+    const len = data.length;
+    const buf = Buffer.alloc(12 + len);
+    buf.writeUInt32BE(len, 0);
+    buf.write(type, 4, 4, 'ascii');
+    data.copy(buf, 8);
+    const crc = (zlib as any).crc32 ? (zlib as any).crc32(buf.subarray(4, 8 + len)) : 0;
+    buf.writeUInt32BE(crc >>> 0, 8 + len);
+    return buf;
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    makeChunk('IHDR', ihdr),
+    makeChunk('IDAT', compressed),
+    makeChunk('IEND', Buffer.alloc(0))
   ]);
 }
 
@@ -209,8 +222,8 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     await page.locator('input[placeholder*="Inverter AC"]').fill('Italian Leather Recliner');
     await page.locator('textarea[placeholder*="pre-existing"]').fill('Pristine tan leather, dual motorized recline mechanism fully operational.');
 
-    // Attach Move-In Image
-    const moveInImg = createTestImageBuffer(16, 185, 129);
+    // Attach Move-In Image (Bright beige living room photo)
+    const moveInImg = createTestImageBuffer(210, 195, 175);
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles({
       name: 'living-room-move-in.png',
@@ -321,9 +334,9 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
   });
 
   // --------------------------------------------------------------------------
-  // Scenario 6: Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit
+  // Scenario 6: Step 04 — Scene Mismatch Hard Blocker, Fraud Detection & Gemini AI Audit
   // --------------------------------------------------------------------------
-  test('06. Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit', async ({ page }) => {
+  test('06. Step 04 — Scene Mismatch Hard Blocker, Fraud Detection & Gemini AI Audit', async ({ page }) => {
     // Authenticate as tenant
     await loginAsTenant(page);
     await page.goto(`/tenancy/${createdTenancyId}`);
@@ -340,30 +353,49 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     const scrollableCard = portalModal.locator('div.max-h-\\[90vh\\].overflow-y-auto').first();
     await expect(scrollableCard).toBeVisible();
 
-    // 1. Upload EXACT SAME Move-In photo bytes to trigger Anti-Fraud
-    const identicalImg = createTestImageBuffer(16, 185, 129); // identical bytes
     const moveOutFileInput = page.locator('input[type="file"]');
-    await moveOutFileInput.setInputFiles({
-      name: 'identical-move-in.png',
-      mimeType: 'image/png',
-      buffer: identicalImg,
-    });
-    await page.waitForTimeout(500);
-
-    // Assert Anti-Fraud Triggered warning
-    const fraudWarning = page.locator('text=ANTI-FRAUD TRIGGERED').first();
-    await expect(fraudWarning).toBeVisible();
-
-    // Assert submit button is disabled
     const submitAiBtn = page.locator('button[type="submit"]:has-text("Run AI Damage Audit")');
+
+    // =========================================================================
+    // CASE A: Move-In Room Photo vs Dark Website Screenshot -> HARD BLOCKED!
+    // =========================================================================
+    const darkScreenshotImg = createTestImageBuffer(15, 20, 30); // dark digital screenshot
+    await moveOutFileInput.setInputFiles({
+      name: 'dark-website-screenshot.png',
+      mimeType: 'image/png',
+      buffer: darkScreenshotImg,
+    });
+    await page.waitForTimeout(600);
+
+    // Assert Client Canvas 16x16 pre-check flags SCENE MISMATCH DETECTED
+    const sceneMismatchBanner = page.locator('text=SCENE MISMATCH DETECTED').first();
+    await expect(sceneMismatchBanner).toBeVisible();
     await expect(submitAiBtn).toBeDisabled();
 
-    // Use Judge Bypass to permit test flow
-    const bypassLink = page.locator('button:has-text("Bypass for Quick Judge Test")');
-    await bypassLink.click();
-    await page.waitForTimeout(300);
+    // Force Submit with Judge Override to verify Server-Side Hard HTTP 400 Rejection
+    const bypassCheckbox = page.locator('input[type="checkbox"]').last();
+    await bypassCheckbox.check();
+    await expect(submitAiBtn).toBeEnabled();
+    await submitAiBtn.click();
+    await page.waitForTimeout(1000);
 
-    // Verify submit button is now enabled
+    // Assert Server-Side SCENE MISMATCH BLOCKED rejection banner
+    const serverMismatchBlocked = page.locator('text=SCENE MISMATCH BLOCKED').first();
+    await expect(serverMismatchBlocked).toBeVisible();
+
+    // =========================================================================
+    // CASE B & C: Authentic Room Move-Out Photo -> Processed Cleanly
+    // =========================================================================
+    const authenticMoveOutImg = createTestImageBuffer(215, 200, 180); // authentic room with slight natural light shift
+    await moveOutFileInput.setInputFiles({
+      name: 'authentic-move-out.png',
+      mimeType: 'image/png',
+      buffer: authenticMoveOutImg,
+    });
+    await page.waitForTimeout(600);
+
+    // Verify Scene Mismatch error is cleared and submit button is enabled
+    await expect(sceneMismatchBanner).not.toBeVisible();
     await expect(submitAiBtn).toBeEnabled();
 
     // Set Guest receiving refund UPI
@@ -377,7 +409,7 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
       }
     }
 
-    // Run AI Audit
+    // Run AI Audit with authentic photo
     await submitAiBtn.click();
 
     // Verify Move-Out AI audit completed

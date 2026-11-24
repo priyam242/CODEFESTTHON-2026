@@ -77,6 +77,7 @@ export class ItemsService {
     moveOutNotes?: string,
     file?: Express.Multer.File,
     base64Data?: string,
+    forensicsData?: any,
   ) {
     const existing = await this.prisma.itemClient.findUnique({ where: { id: itemId } });
     if (!existing) {
@@ -101,7 +102,7 @@ export class ItemsService {
     const tenancy = await this.prisma.tenancyClient.findUnique({ where: { id: existing.tenancyId } });
     const depositAmount = tenancy ? Number(tenancy.depositAmount) : 25000;
 
-    // Call AI Audit with bulletproof multimodal delta comparison
+    // Call AI Audit with bulletproof multimodal delta comparison & spatial forensics
     const audit = await this.aiAuditService.analyzeCondition(
       existing.itemName,
       existing.roomName,
@@ -110,10 +111,11 @@ export class ItemsService {
       existing.moveInPhotoUrl,
       url,
       depositAmount,
+      forensicsData,
     );
 
     // Subject / Room Consistency Check (SCENE_MISMATCH):
-    // If the exit photo depicts an unrelated subject or different room, reject without saving moveOutPhotoUrl!
+    // If the exit photo depicts an unrelated subject, screenshot or different room, reject without saving moveOutPhotoUrl!
     if (audit.verdict === 'SCENE_MISMATCH') {
       try {
         const filePath = path.join(this.uploadsDir, path.basename(url));
@@ -122,8 +124,9 @@ export class ItemsService {
 
       throw new BadRequestException({
         statusCode: 400,
+        code: 'SCENE_MISMATCH',
         verdict: 'SCENE_MISMATCH',
-        message: `⚠️ Invalid Photo: Move-Out photo does not match the Move-In item (${existing.itemName}). Please upload an actual photo of the same item.`,
+        message: `🚨 INVALID MOVE-OUT PHOTO: Uploaded image does not match the Move-In room/item (${existing.itemName}). Screenshots or unrelated photos are strictly blocked!`,
         explanation: audit.explanation,
       });
     }

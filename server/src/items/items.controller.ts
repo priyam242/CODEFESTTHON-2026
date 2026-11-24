@@ -47,8 +47,8 @@ export class ItemsController {
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() body: any,
   ) {
-    const { moveOutNotes, base64Photo } = body || {};
-    return this.itemsService.moveOut(id, moveOutNotes, file, base64Photo);
+    const { moveOutNotes, base64Photo, forensics } = body || {};
+    return this.itemsService.moveOut(id, moveOutNotes, file, base64Photo, forensics);
   }
 
   @Get('tenancy/:tenancyId')
