@@ -2,10 +2,14 @@ import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@
 import { TenancyService } from './tenancy.service';
 import { CreateTenancyDto } from './dto/create-tenancy.dto';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AiAuditService } from '../ai-audit/ai-audit.service';
 
 @Controller(['tenancy', 'tenancies'])
 export class TenancyController {
-  constructor(private tenancyService: TenancyService) {}
+  constructor(
+    private tenancyService: TenancyService,
+    private aiAuditService: AiAuditService,
+  ) {}
 
   // Authenticated tenant endpoints
   @UseGuards(JwtAuthGuard)
@@ -85,6 +89,12 @@ export class TenancyController {
   @Post('claim/:token')
   async claimLandlord(@Request() req: any, @Param('token') token: string) {
     return this.tenancyService.claimByLandlord(req.user, token);
+  }
+
+  // Safe diagnostic endpoint verifying live Gemini Vision status on Render
+  @Get('ai-health')
+  async getAiHealth() {
+    return this.aiAuditService.checkHealth();
   }
 
   @UseGuards(JwtAuthGuard)

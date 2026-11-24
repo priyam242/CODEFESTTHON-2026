@@ -125,8 +125,76 @@ export class AiAuditService {
   }
 
   /**
+   * Safe diagnostic health-check endpoint for Gemini Vision
+   * Returns live status and active model for deployment verification.
+   */
+  async checkHealth(): Promise<{
+    keyConfigured: boolean;
+    workingModel: string | null;
+    status: 'ACTIVE' | 'ERROR' | 'NO_API_KEY';
+    errorIfAny: string | null;
+  }> {
+    if (!this.geminiApiKey) {
+      return {
+        keyConfigured: false,
+        workingModel: null,
+        status: 'NO_API_KEY',
+        errorIfAny: 'No GEMINI_API_KEY, GOOGLE_API_KEY, or VITE_GEMINI_API_KEY found in environment',
+      };
+    }
+
+    const testModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
+    let lastError: string | null = null;
+
+    for (const model of testModels) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: 'Ping: Reply with PONG' }],
+              },
+            ],
+            generationConfig: { temperature: 0.1 },
+          }),
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (res.ok) {
+          const json: any = await res.json();
+          const reply = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (reply) {
+            return {
+              keyConfigured: true,
+              workingModel: model,
+              status: 'ACTIVE',
+              errorIfAny: null,
+            };
+          }
+        } else {
+          const errText = await res.text();
+          lastError = `HTTP ${res.status}: ${errText.substring(0, 160)}`;
+          console.error('[AiAuditService] Gemini Health Ping HTTP Failure:', model, res.status, errText);
+        }
+      } catch (err: any) {
+        lastError = err?.message || 'Network timeout';
+      }
+    }
+
+    return {
+      keyConfigured: true,
+      workingModel: null,
+      status: 'ERROR',
+      errorIfAny: lastError,
+    };
+  }
+
+  /**
    * Directly invokes official Google v1beta REST endpoint with native inline_data: { mime_type, data }
-   * Avoids SDK silent failures and tries models in order: gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash.
+   * Avoids SDK silent failures and tries active 2026 models in order: gemini-2.5-flash, gemini-2.5-flash-lite, gemini-flash-latest.
    */
   private async callGeminiRest(
     prompt: string,
@@ -135,7 +203,7 @@ export class AiAuditService {
   ): Promise<string | null> {
     if (!this.geminiApiKey) return null;
 
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
     const parts: any[] = [{ text: prompt }];
 
     if (moveInPart) {
@@ -159,12 +227,10 @@ export class AiAuditService {
     const payload = {
       contents: [
         {
-          role: 'user',
           parts,
         },
       ],
       generationConfig: {
-        responseMimeType: 'application/json',
         temperature: 0.1,
       },
     };
@@ -176,11 +242,12 @@ export class AiAuditService {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(9000),
         });
 
         if (!response.ok) {
           const errText = await response.text();
+          console.error('[AiAuditService] Gemini HTTP Failure:', model, response.status, errText);
           this.logger.warn(`Gemini REST model ${model} HTTP ${response.status}: ${errText.substring(0, 180)}`);
           continue;
         }
@@ -192,6 +259,7 @@ export class AiAuditService {
           return text.trim();
         }
       } catch (err: any) {
+        console.error('[AiAuditService] Gemini REST model error:', model, err?.message);
         this.logger.warn(`Gemini REST model ${model} error: ${err?.message}`);
       }
     }
@@ -229,8 +297,9 @@ Image 2: Move-Out Exit condition photo.
 MANDATORY TWO-STEP ARBITRATION RULES:
 STEP 1 (MANDATORY SCENE & OBJECT VERIFICATION):
 Compare Image 1 and Image 2. Is Image 2 a real photograph of the EXACT SAME room/item ("${itemName}") from a comparable indoor context?
+CRITICAL: If Image 2 contains a human face/selfie/portrait, animal, outdoor street, vehicle, screenshot, document, or a different room/furniture piece than Image 1 ('${itemName}'), you MUST immediately return {"verdict": "SCENE_MISMATCH"} with suggestedCut: 0!
 If Image 2 is a UI screenshot, website screenshot, computer screen, graphic, poster, selfie, different room, random object, or unrelated image, you MUST return:
-"verdict": "SCENE_MISMATCH", "suggestedCut": 0, "explanation": "Move-Out photo does not depict the Move-In room baseline (${itemName}). Screenshots, unrelated photos, or different scenes are strictly prohibited under MTA 2021 inventory rules."
+"verdict": "SCENE_MISMATCH", "suggestedCut": 0, "explanation": "Move-Out photo does not depict the Move-In room baseline (${itemName}). Human selfies, portraits, screenshots, unrelated photos, or different scenes are strictly prohibited under MTA 2021 inventory rules."
 
 STEP 2 (DAMAGE DELTA):
 Only if Image 2 IS confirmed to be the same room and item:
@@ -449,7 +518,11 @@ Respond ONLY with a JSON object in this exact schema, with no markdown fences:
     let anomalyPercent = 0;
     let metricsExtracted = false;
 
-    // Check client forensics data
+    // Check client forensics data (including 32x32 SSIM-lite & human portrait detector)
+    let isClientMismatch = false;
+    let isHumanPortrait = false;
+    let clientMismatchReason = '';
+
     if (clientForensics) {
       try {
         const cf = typeof clientForensics === 'string' ? JSON.parse(clientForensics) : clientForensics;
@@ -458,6 +531,15 @@ Respond ONLY with a JSON object in this exact schema, with no markdown fences:
           luminanceDelta = cf.luminanceDelta || 0;
           flatRatio = cf.flatRatio || 0;
           anomalyPercent = cf.anomalyPercent || 0;
+          metricsExtracted = true;
+        }
+        if (cf.isHumanPortraitCluster) {
+          isHumanPortrait = true;
+          metricsExtracted = true;
+        }
+        if (cf.isSceneMismatch) {
+          isClientMismatch = true;
+          clientMismatchReason = cf.mismatchReason || '';
           metricsExtracted = true;
         }
       } catch {}
@@ -475,11 +557,33 @@ Respond ONLY with a JSON object in this exact schema, with no markdown fences:
       }
     }
 
-    this.logger.log(`[AiAuditService] Forensics metrics: shift=${meanGlobalShift.toFixed(1)}, lumDelta=${luminanceDelta.toFixed(1)}, flatRatio=${flatRatio.toFixed(2)}, anomaly%=${anomalyPercent.toFixed(1)}`);
+    this.logger.log(`[AiAuditService] Forensics metrics: shift=${meanGlobalShift.toFixed(1)}, lumDelta=${luminanceDelta.toFixed(1)}, flatRatio=${flatRatio.toFixed(2)}, anomaly%=${anomalyPercent.toFixed(1)}, isPortrait=${isHumanPortrait}`);
 
-    // 3. STEP 1: HARD BLOCK SCENE MISMATCH
-    // Bright room photo (e.g. avg RGB ~190) vs dark UI screenshot (avg RGB ~15): meanGlobalShift > 85
-    // Or high luminance delta with dark/flat UI blocks
+    // 3. STEP 1: HARD BLOCK SCENE MISMATCH (Human selfies, UI screenshots, severe color shifts)
+    if (isHumanPortrait) {
+      return {
+        verdict: 'SCENE_MISMATCH',
+        confidence: 0.98,
+        preExistingNotes: 'Move-in room inventory photo on record',
+        newDamageDetected: 'Human selfie / face portrait detected instead of room fixture',
+        legalBasis: 'Model Tenancy Act 2021 Sec 13',
+        explanation: `🚨 SCENE MISMATCH: Exit photo contains a human portrait/selfie instead of the Move-In room baseline (${itemName}). Verification strictly rejected under MTA 2021.`,
+        suggestedCut: 0,
+      };
+    }
+
+    if (isClientMismatch) {
+      return {
+        verdict: 'SCENE_MISMATCH',
+        confidence: 0.95,
+        preExistingNotes: 'Move-in room inventory photo on record',
+        newDamageDetected: clientMismatchReason || 'Structural / spatial scene mismatch detected',
+        legalBasis: 'Model Tenancy Act 2021 Sec 13',
+        explanation: `🚨 SCENE MISMATCH: Exit photo does not match Move-In room baseline (${itemName}). Uploaded image exhibits spatial discorrelation / unrelated scene characteristics.`,
+        suggestedCut: 0,
+      };
+    }
+
     const isDarkScreenshotVsBrightRoom = meanGlobalShift > 55 && luminanceDelta > 65;
     const isDigitalFlatScreenshot = flatRatio > 0.45 && meanGlobalShift > 45;
     const isSevereSceneMismatch = meanGlobalShift > 80;

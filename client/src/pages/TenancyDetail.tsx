@@ -171,9 +171,13 @@ export const TenancyDetail: React.FC = () => {
   };
 
   /**
-   * Client-Side Canvas 16x16 Spatial Color Block Forensics:
+   * Upgraded 32x32 Structural Gradient & Spatial Layout Correlation (SSIM-lite) + Human Portrait Blocker
    * Compares the Move-In baseline against the selected Move-Out image right in the browser!
-   * Detects global luminance breaks (e.g. bright beige room vs dark screenshot), digital UI blocks, and localized damage deltas.
+   * Detects:
+   * 1. Global color & luminance breaks (e.g. bright beige room vs dark screenshot)
+   * 2. Digital screenshot / flat block concentration
+   * 3. Center-frame human skin-tone portrait clusters (selfies, human faces)
+   * 4. Structural Pearson spatial luminance correlation & cell divergence
    */
   const computeCanvasSpatialForensics = (
     moveInImgSrc: string,
@@ -183,10 +187,28 @@ export const TenancyDetail: React.FC = () => {
     luminanceDelta: number;
     flatRatio: number;
     anomalyPercent: number;
+    correlationR: number;
+    cellMatchRatio: number;
+    divergentRatio: number;
+    isHumanPortraitCluster: boolean;
     isSceneMismatch: boolean;
     isDamageAnomaly: boolean;
+    mismatchReason?: string;
   }> => {
     return new Promise((resolve) => {
+      const defaultFail = {
+        meanGlobalShift: 0,
+        luminanceDelta: 0,
+        flatRatio: 0,
+        anomalyPercent: 0,
+        correlationR: 1,
+        cellMatchRatio: 1,
+        divergentRatio: 0,
+        isHumanPortraitCluster: false,
+        isSceneMismatch: false,
+        isDamageAnomaly: false,
+      };
+
       try {
         const img1 = new Image();
         img1.crossOrigin = 'anonymous';
@@ -198,27 +220,44 @@ export const TenancyDetail: React.FC = () => {
             img2.onload = () => {
               try {
                 const c1 = document.createElement('canvas');
-                c1.width = 16;
-                c1.height = 16;
+                c1.width = 32;
+                c1.height = 32;
                 const ctx1 = c1.getContext('2d');
-                if (!ctx1) return resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
-                ctx1.drawImage(img1, 0, 0, 16, 16);
-                const d1 = ctx1.getImageData(0, 0, 16, 16).data;
+                if (!ctx1) return resolve(defaultFail);
+                ctx1.drawImage(img1, 0, 0, 32, 32);
+                const d1 = ctx1.getImageData(0, 0, 32, 32).data;
 
                 const c2 = document.createElement('canvas');
-                c2.width = 16;
-                c2.height = 16;
+                c2.width = 32;
+                c2.height = 32;
                 const ctx2 = c2.getContext('2d');
-                if (!ctx2) return resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
-                ctx2.drawImage(img2, 0, 0, 16, 16);
-                const d2 = ctx2.getImageData(0, 0, 16, 16).data;
+                if (!ctx2) return resolve(defaultFail);
+                ctx2.drawImage(img2, 0, 0, 32, 32);
+                const d2 = ctx2.getImageData(0, 0, 32, 32).data;
 
                 let sumR1 = 0, sumG1 = 0, sumB1 = 0;
                 let sumR2 = 0, sumG2 = 0, sumB2 = 0;
                 let darkOrFlatBlocks = 0;
                 let anomalousCells = 0;
+                let matchingCells = 0;
+                let divergentCells = 0;
 
-                for (let i = 0; i < 256; i++) {
+                // Center 50% skin-tone counters (Selfie / Face detector)
+                // Center quadrant: x in [8..23], y in [6..23] (16 * 18 = 288 cells)
+                let centerSkin1 = 0;
+                let centerSkin2 = 0;
+                const centerTotal = 288;
+
+                const isSkin = (r: number, g: number, b: number) =>
+                  r > 95 && g > 40 && b > 20 &&
+                  (Math.max(r, g, b) - Math.min(r, g, b) > 15) &&
+                  Math.abs(r - g) > 15 &&
+                  r > g && r > b;
+
+                const yVals1: number[] = new Array(1024);
+                const yVals2: number[] = new Array(1024);
+
+                for (let i = 0; i < 1024; i++) {
                   const idx = i * 4;
                   const r1 = d1[idx], g1 = d1[idx + 1], b1 = d1[idx + 2];
                   const r2 = d2[idx], g2 = d2[idx + 1], b2 = d2[idx + 2];
@@ -226,51 +265,103 @@ export const TenancyDetail: React.FC = () => {
                   sumR1 += r1; sumG1 += g1; sumB1 += b1;
                   sumR2 += r2; sumG2 += g2; sumB2 += b2;
 
+                  const y1 = 0.299 * r1 + 0.587 * g1 + 0.114 * b1;
+                  const y2 = 0.299 * r2 + 0.587 * g2 + 0.114 * b2;
+                  yVals1[i] = y1;
+                  yVals2[i] = y2;
+
                   const isDarkFlat = r2 < 35 && g2 < 35 && b2 < 35;
                   const isPureGray = Math.abs(r2 - g2) < 4 && Math.abs(g2 - b2) < 4;
                   if (isDarkFlat || isPureGray) darkOrFlatBlocks++;
 
                   const cellDelta = (Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2)) / 3;
+                  if (cellDelta <= 45) matchingCells++;
+                  if (cellDelta > 55) divergentCells++;
                   if (cellDelta > 38) anomalousCells++;
+
+                  const x = i % 32;
+                  const y = Math.floor(i / 32);
+                  if (x >= 8 && x < 24 && y >= 6 && y < 24) {
+                    if (isSkin(r1, g1, b1)) centerSkin1++;
+                    if (isSkin(r2, g2, b2)) centerSkin2++;
+                  }
                 }
 
-                const avgR1 = sumR1 / 256, avgG1 = sumG1 / 256, avgB1 = sumB1 / 256;
-                const avgR2 = sumR2 / 256, avgG2 = sumG2 / 256, avgB2 = sumB2 / 256;
+                const avgR1 = sumR1 / 1024, avgG1 = sumG1 / 1024, avgB1 = sumB1 / 1024;
+                const avgR2 = sumR2 / 1024, avgG2 = sumG2 / 1024, avgB2 = sumB2 / 1024;
                 const avgY1 = 0.299 * avgR1 + 0.587 * avgG1 + 0.114 * avgB1;
                 const avgY2 = 0.299 * avgR2 + 0.587 * avgG2 + 0.114 * avgB2;
 
                 const meanGlobalShift = (Math.abs(avgR1 - avgR2) + Math.abs(avgG1 - avgG2) + Math.abs(avgB1 - avgB2)) / 3;
                 const luminanceDelta = Math.abs(avgY1 - avgY2);
-                const flatRatio = darkOrFlatBlocks / 256;
-                const anomalyPercent = anomalousCells / 256;
+                const flatRatio = darkOrFlatBlocks / 1024;
+                const anomalyPercent = anomalousCells / 1024;
+                const cellMatchRatio = matchingCells / 1024;
+                const divergentRatio = divergentCells / 1024;
+
+                // Pearson Spatial Luminance Correlation (r)
+                let cov = 0, var1 = 0, var2 = 0;
+                for (let i = 0; i < 1024; i++) {
+                  const dy1 = yVals1[i] - avgY1;
+                  const dy2 = yVals2[i] - avgY2;
+                  cov += dy1 * dy2;
+                  var1 += dy1 * dy1;
+                  var2 += dy2 * dy2;
+                }
+                const stdProd = Math.sqrt(var1 * var2);
+                const correlationR = stdProd > 1e-4 ? cov / stdProd : 0;
+
+                const centerSkinRatio1 = centerSkin1 / centerTotal;
+                const centerSkinRatio2 = centerSkin2 / centerTotal;
+                const isHumanPortraitCluster = centerSkinRatio2 >= 0.20 && centerSkinRatio1 < 0.10;
 
                 const isSevereMismatch = meanGlobalShift > 80;
                 const isDarkVsBright = meanGlobalShift > 55 && luminanceDelta > 65;
-                const isDigitalScreenshot = flatRatio > 0.45 && meanGlobalShift > 45;
+                const isDigitalScreenshot = flatRatio > 0.40 && meanGlobalShift > 45;
+                const isSpatialDiscorrelation = (correlationR < 0.25 && divergentRatio > 0.55) || (divergentRatio > 0.65 && cellMatchRatio < 0.35);
+
+                const isSceneMismatch =
+                  isSevereMismatch ||
+                  isDarkVsBright ||
+                  isDigitalScreenshot ||
+                  isHumanPortraitCluster ||
+                  isSpatialDiscorrelation;
+
+                let mismatchReason = '';
+                if (isHumanPortraitCluster) mismatchReason = 'Human face / selfie portrait detected';
+                else if (isDigitalScreenshot) mismatchReason = 'Digital UI screenshot / flat document detected';
+                else if (isDarkVsBright) mismatchReason = 'Severe luminance disparity (dark screenshot vs bright room)';
+                else if (isSpatialDiscorrelation) mismatchReason = 'Spatial layout discorrelation (different room/subject)';
+                else if (isSevereMismatch) mismatchReason = 'Severe global color spectrum delta';
 
                 resolve({
                   meanGlobalShift,
                   luminanceDelta,
                   flatRatio,
                   anomalyPercent,
-                  isSceneMismatch: isSevereMismatch || isDarkVsBright || isDigitalScreenshot,
+                  correlationR,
+                  cellMatchRatio,
+                  divergentRatio,
+                  isHumanPortraitCluster,
+                  isSceneMismatch,
                   isDamageAnomaly: anomalyPercent >= 0.08,
+                  mismatchReason,
                 });
               } catch {
-                resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+                resolve(defaultFail);
               }
             };
-            img2.onerror = () => resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+            img2.onerror = () => resolve(defaultFail);
             img2.src = (e.target?.result as string) || '';
           };
           reader.readAsDataURL(moveOutFile);
         };
 
-        img1.onerror = () => resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+        img1.onerror = () => resolve(defaultFail);
         const resolvedSrc = getAssetUrl(moveInImgSrc);
         img1.src = `${resolvedSrc}${resolvedSrc.includes('?') ? '&' : '?'}cacheBust=${Date.now()}`;
       } catch {
-        resolve({ meanGlobalShift: 0, luminanceDelta: 0, flatRatio: 0, anomalyPercent: 0, isSceneMismatch: false, isDamageAnomaly: false });
+        resolve(defaultFail);
       }
     });
   };
@@ -294,14 +385,19 @@ export const TenancyDetail: React.FC = () => {
         setDuplicatePhotoDetected(true);
       }
 
-      // Run Client Canvas 16x16 Spatial Forensics Pre-Check
+      // Run Client Canvas 32x32 SSIM-lite & Human Portrait Pre-Check
       if (activeMoveOutItem.moveInPhotoUrl) {
         const forensics = await computeCanvasSpatialForensics(activeMoveOutItem.moveInPhotoUrl, file);
         setClientForensics(forensics);
-        if (forensics.isSceneMismatch) {
+        if (forensics.isHumanPortraitCluster) {
           setSceneMismatchDetected(true);
           setSceneMismatchError(
-            `🚨 SCENE MISMATCH DETECTED: This photo does not match "${activeMoveOutItem.itemName}". Uploaded image appears to be a digital screenshot or completely different scene! Please upload an authentic photo of the same room/item.`
+            `🚨 SCENE MISMATCH DETECTED: Uploaded photo appears to be a human face/selfie portrait rather than the baseline room fixture "${activeMoveOutItem.itemName}"! Human faces, selfies, and portraits are strictly blocked under MTA 2021 inventory audit rules.`
+          );
+        } else if (forensics.isSceneMismatch) {
+          setSceneMismatchDetected(true);
+          setSceneMismatchError(
+            `🚨 SCENE MISMATCH DETECTED: Uploaded photo does not structurally match the baseline room/item "${activeMoveOutItem.itemName}" (faces, selfies, screenshots, and unrelated rooms are strictly blocked!)`
           );
         }
       }

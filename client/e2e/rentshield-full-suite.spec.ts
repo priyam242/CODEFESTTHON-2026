@@ -384,6 +384,21 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     await expect(serverMismatchBlocked).toBeVisible();
 
     // =========================================================================
+    // CASE A2: Human Face / Selfie Portrait vs Room Baseline -> HARD BLOCKED!
+    // =========================================================================
+    const humanSelfieImg = createTestImageBuffer(220, 150, 110); // human skin-tone portrait
+    await moveOutFileInput.setInputFiles({
+      name: 'human-selfie-portrait.png',
+      mimeType: 'image/png',
+      buffer: humanSelfieImg,
+    });
+    await page.waitForTimeout(600);
+
+    // Verify Human Selfie is detected and blocked
+    await expect(sceneMismatchBanner).toBeVisible();
+    await expect(submitAiBtn).toBeDisabled();
+
+    // =========================================================================
     // CASE B & C: Authentic Room Move-Out Photo -> Processed Cleanly
     // =========================================================================
     const authenticMoveOutImg = createTestImageBuffer(215, 200, 180); // authentic room with slight natural light shift

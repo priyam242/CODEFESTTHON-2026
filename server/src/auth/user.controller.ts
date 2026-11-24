@@ -100,6 +100,15 @@ export class UserController {
       emailLower === 'tenant.demo@rentshield.com' ||
       emailLower === 'landlord.demo@rentshield.com';
 
+    if (isDemo) {
+      try {
+        return await this.authService.login({
+          email: emailLower,
+          password: dto.password || 'password123',
+        });
+      } catch {}
+    }
+
     let user = await this.userService.findByEmail(emailLower);
     if (user && isDemo) {
       const token = this.jwtService.sign({

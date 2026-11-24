@@ -214,6 +214,7 @@ export const LandlordVerify: React.FC = () => {
   const totalDeposit = Number(tenancy.depositAmount || 0);
   const totalSuggestedCuts = items.reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
   const netRefund = Math.max(0, totalDeposit - totalSuggestedCuts);
+  const excessDamage = Math.max(0, totalSuggestedCuts - totalDeposit);
   const payeeName = (tenancy as any).userName || (tenancy as any).user?.name || 'Aarav Sharma (Tenant)';
   const upiNote = `RentShield Escrow Refund - ${tenancy.propertyTitle}`;
   const upiUri = `upi://pay?pa=${encodeURIComponent(tenantVpa)}&pn=${encodeURIComponent(payeeName)}&am=${netRefund}&cu=INR&tn=${encodeURIComponent(upiNote)}`;
@@ -318,6 +319,10 @@ export const LandlordVerify: React.FC = () => {
               >
                 <span>🛂 Society Gate Pass & NOC</span>
               </button>
+            </div>
+          ) : excessDamage > 0 ? (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono">
+              ⏳ Guest owes ₹{excessDamage.toLocaleString('en-IN')} Excess Damage Balance • Waiting for Guest Payment
             </div>
           ) : !hasGuestRefundMethod ? (
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono">
@@ -529,6 +534,11 @@ export const LandlordVerify: React.FC = () => {
               <div className="px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono inline-flex items-center space-x-2">
                 <Clock className="w-4 h-4 text-amber-400 animate-spin" />
                 <span>⏳ Net Refund Marked Sent (₹{netRefund.toLocaleString('en-IN')}) • Waiting for Guest Bank Confirmation</span>
+              </div>
+            ) : excessDamage > 0 ? (
+              <div className="px-3.5 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono inline-flex items-center space-x-2">
+                <Clock className="w-4 h-4 text-rose-400" />
+                <span>⏳ Guest owes ₹{excessDamage.toLocaleString('en-IN')} Excess Damage Balance • Waiting for Guest Payment</span>
               </div>
             ) : hasGuestRefundMethod ? (
               <button
