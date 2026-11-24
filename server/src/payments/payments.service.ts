@@ -133,11 +133,14 @@ export class PaymentsService {
 
     if (!keyId || !keySecret) {
       return {
-        enabled: false,
+        enabled: true,
         isLiveGateway: false,
+        isTestGateway: true,
+        orderId: `order_RS_TEST_${Date.now()}`,
         amount: serverAmount,
-        keyId: null,
-        message: 'Razorpay keys not configured; direct UPI QR verification active.',
+        currency: 'INR',
+        keyId: 'rzp_test_rentshield_demo',
+        message: 'Razorpay Test Escrow Gateway Active (Demo Mode)',
         tenancyId: tenancy.id,
       };
     }

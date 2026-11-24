@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
+import QRCode from 'qrcode';
 import {
   Shield,
   CheckCircle2,
@@ -62,6 +63,20 @@ export const LandlordVerify: React.FC = () => {
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [isSettled, setIsSettled] = useState(false);
   const [confirmingDeposit, setConfirmingDeposit] = useState(false);
+  const [ownerQrDataUrl, setOwnerQrDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (!tenancy) return;
+    const payeeUpi = tenancy.landlordUpi || 'rajesh.prajapati@okhdfcbank';
+    const payeeName = tenancy.landlordName || 'Property Owner';
+    const amount = Number(tenancy.depositAmount || 0);
+    const upiUrl = `upi://pay?pa=${encodeURIComponent(payeeUpi)}&pn=${encodeURIComponent(payeeName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(`RentShield Escrow Deposit - ${tenancy.propertyTitle}`)}`;
+    QRCode.toDataURL(upiUrl, {
+      width: 280,
+      margin: 2,
+      color: { dark: '#050912', light: '#ffffff' },
+    }).then(setOwnerQrDataUrl).catch(() => {});
+  }, [tenancy?.landlordUpi, tenancy?.landlordName, tenancy?.depositAmount, tenancy?.propertyTitle]);
   const isInitialLoad = useRef(true);
 
   const handleConfirmDepositReceived = async () => {
@@ -509,31 +524,68 @@ export const LandlordVerify: React.FC = () => {
         </div>
       </div>
 
-      {/* Pending Deposit Payment Action Card for Landlord */}
-      {tenancy.pendingPaymentStage === 'DEPOSIT_SENT' && !tenancy.depositPaid && (
-        <div className="mb-8 p-4 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/60 shadow-lg shadow-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
-              <CreditCard className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs font-bold font-mono text-emerald-300 uppercase tracking-wider">
-                💰 Tenant Sent ₹{Number(tenancy.pendingPaymentAmount || tenancy.depositAmount).toLocaleString('en-IN')} Deposit via Direct UPI
+      {/* Step 03: Owner Receiving Terminal (Real-world Dual-Screen Handshake) */}
+      {!isStep3Done && isStep2Done && (
+        <div id="owner-receiving-terminal" className="mb-8 p-5 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-950 border-2 border-emerald-500/50 shadow-xl shadow-emerald-500/10">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-800/80 mb-4">
+            <div className="flex items-center space-x-3 text-left">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                <Building className="w-5 h-5" />
               </div>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Please check your bank / UPI app ({tenancy.landlordUpi || 'registered account'}). Click below to confirm receipt and lock deposit into escrow.
+              <div>
+                <div className="flex items-center space-x-2 text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Owner Receiving Terminal • Step 03 Escrow</span>
+                </div>
+                <h4 className="text-sm sm:text-base font-bold text-slate-100 mt-0.5">
+                  Awaiting ₹{Number(tenancy.depositAmount || 0).toLocaleString('en-IN')} Security Deposit from Guest
+                </h4>
+              </div>
+            </div>
+
+            {tenancy.pendingPaymentStage === 'DEPOSIT_SENT' && (
+              <button
+                type="button"
+                onClick={handleConfirmDepositReceived}
+                disabled={confirmingDeposit}
+                className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 active:scale-95 text-slate-950 font-extrabold text-xs font-mono shadow-lg shadow-emerald-500/30 transition flex items-center justify-center space-x-2 animate-pulse"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{confirmingDeposit ? 'Confirming...' : `✅ Confirm ₹${Number(tenancy.pendingPaymentAmount || tenancy.depositAmount).toLocaleString('en-IN')} Received in Bank`}</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-5 bg-slate-950/80 p-4 rounded-xl border border-slate-800/60">
+            <div className="p-2.5 bg-white rounded-xl shadow-lg border-2 border-emerald-500/40 shrink-0">
+              {ownerQrDataUrl ? (
+                <img src={ownerQrDataUrl} alt="Owner Receiving Terminal QR" className="w-36 h-36 object-contain rounded" />
+              ) : (
+                <div className="w-36 h-36 flex flex-col items-center justify-center text-slate-800 text-[11px] font-mono">
+                  <QrCode className="w-8 h-8 text-slate-600 mb-1" />
+                  <span>Generating QR...</span>
+                </div>
+              )}
+            </div>
+            <div className="text-left space-y-1.5 flex-1">
+              <div className="text-xs font-mono text-slate-300 font-bold">
+                Owner Receiving VPA: <span className="text-emerald-400 font-mono">{tenancy.landlordUpi || 'rajesh.prajapati@okhdfcbank'}</span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                📱 <strong>Point this terminal screen to the Guest.</strong> The Guest can scan this QR code directly with any UPI App (GPay / PhonePe / Paytm / Cred) or pay via Razorpay Escrow on their device.
               </p>
+              <div className="flex items-center space-x-2 pt-1">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-semibold">
+                  ● Live Receiving Terminal
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  {tenancy.pendingPaymentStage === 'DEPOSIT_SENT'
+                    ? '⚡ Guest sent payment! Click Confirm button above to unlock Step 03.'
+                    : '⏳ Waiting for Guest to scan QR or pay via Razorpay...'}
+                </span>
+              </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleConfirmDepositReceived}
-            disabled={confirmingDeposit}
-            className="shrink-0 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-extrabold text-xs font-mono shadow-md shadow-emerald-500/25 transition flex items-center justify-center space-x-2"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>{confirmingDeposit ? 'Confirming...' : '✅ Confirm Money Received in Bank'}</span>
-          </button>
         </div>
       )}
 

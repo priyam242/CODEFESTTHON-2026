@@ -32,4 +32,9 @@ Thumbs.db
 # Hackathon Temporary Artifacts
 test-results/
 playwright-report/
+*.mp4
+scripts/temp/
+output.txt
+__pycache__/
+*.pyc
 

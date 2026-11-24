@@ -22,31 +22,100 @@ In urban rental markets across India, over **₹1.2 Lakh Crore ($15B+)** in tena
 
 ---
 
-## 🏛️ System Architecture
+## 🏛️ System & Two-Party Escrow Architecture
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Tenant as 👤 Tenant (Payer)
+    participant RS as 🛡️ RentShield Protocol
+    actor Owner as 🏠 Owner (Receiver)
+
+    Note over Tenant, Owner: Stage 1: Security Deposit Handshake (Step 03)
+    Owner->>RS: Lock & Approve Step 02 Baseline
+    RS-->>Owner: Display "🏦 Owner Receiving Terminal" (Owner QR & UPI)
+    RS-->>Tenant: Unlock Step 03 "Pay Security Deposit"
+    alt Razorpay Verified Escrow
+        Tenant->>RS: Pay via Razorpay Gateway
+        RS-->>Tenant: Auto-Verify & Close (<200ms)
+        RS-->>Owner: Live Broadcast: ₹25,000 Escrow Deposit Locked
+    else Direct UPI Handshake
+        Tenant->>Owner: Scan Owner QR & Notify "Payment Sent"
+        RS-->>Owner: Display "Confirm ₹25,000 Received in Bank"
+        Owner->>RS: Confirm Bank Receipt
+        RS-->>Tenant: Step 03 Confirmed & Unlocked
+    end
+
+    Note over Tenant, Owner: Stage 2: Net Refund Handshake (Step 05)
+    Tenant->>RS: Submit Move-Out Evidence (Auto-Save Tenant UPI)
+    RS->>RS: Triple Anti-Fraud & Gemini 3.8 Flash Multimodal Audit
+    RS-->>Tenant: Display "💸 Guest Refund Terminal" (Tenant QR & UPI)
+    RS-->>Owner: Unlock Step 05 "Scan Guest QR / Pay Net Refund"
+    alt Razorpay Verified Escrow
+        Owner->>RS: Release Net Refund
+        RS-->>Tenant: Auto-Verify & Clear Active Tenancy to ₹0
+    else Direct UPI Handshake
+        Owner->>Tenant: Scan Tenant QR & Notify "Refund Sent"
+        RS-->>Tenant: Display "Confirm ₹21,500 Refund Received"
+        Tenant->>RS: Confirm Bank Receipt
+        RS-->>Owner: Tenancy Settled & Moved to History
+    end
+```
 
 ```mermaid
 flowchart TD
     subgraph Client ["Client Layer (React 19 + Vite 6 + Tailwind v4)"]
-        A[Tenant Move-In Capture] -->|Web Crypto API| B[Local SHA-256 Hash]
-        C[Landlord Magic Portal] -->|BroadcastChannel| D[Live Cross-Tab Sync]
-        E[Public Verifier /verify] -->|In-Browser Web Crypto| F[Tamper-Proof Verdict]
+        A["Tenant Move-In Capture"] -->|Web Crypto API| B["Local SHA-256 Hash"]
+        C["Landlord Magic Portal"] -->|BroadcastChannel| D["Live Cross-Tab Sync"]
+        E["Public Verifier /verify"] -->|In-Browser Web Crypto| F["Tamper-Proof Verdict"]
+        T1["🏦 Owner Receiving Terminal"] -->|Dynamic QR| D
+        T2["💸 Guest Refund Terminal"] -->|Dynamic QR| D
     end
 
     subgraph Server ["Backend API (NestJS 11 + Prisma ORM)"]
-        G[Tenancy Controller] --> H[Tenancy Service]
-        I[Items Controller] --> J[Items Service]
-        H & J --> K[(PostgreSQL / Resilient Memory Fallback)]
+        G["Tenancy Controller"] --> H["Tenancy Service"]
+        I["Items Controller"] --> J["Items Service"]
+        P["Payments Controller"] --> PS["Payments Service (Razorpay Escrow)"]
+        H & J & PS --> K[("PostgreSQL Database")]
     end
 
     subgraph AI ["Multimodal AI Engine"]
-        L[Google Gemini 2.5 Flash] -->|Visual Arbitration| M[Itemized Rupee Deduction & Verdict]
+        L["Google Gemini 3.8 / 3.5 Flash"] -->|Visual Arbitration| M["Itemized Rupee Deduction & MTA 2021 Verdict"]
     end
 
     B --> G
     C --> G
     J --> L
     M --> J
+    D --> P
 ```
+
+---
+
+## 🏆 Judge Quick-Test Guide (Dual-Screen Evaluation in 60s)
+
+To evaluate the complete real-world two-party handshake:
+1. **Open Two Browser Windows Side-by-Side:**
+   - **Left Window:** Open `https://rentshield-web.onrender.com/login` and click **"1-Click Demo Login as Tenant"** (`priyam@gmail.com` / `priyam1200`).
+   - **Right Window:** Open `https://rentshield-web.onrender.com/login` and click **"1-Click Demo Login as Landlord"** (`rajesh@gmail.com` / `rajesh6005`).
+2. **Create & Live Sync Tenancy:**
+   - In Left Tab, click `+ New Tenancy`, enter ₹25,000 deposit, and submit.
+   - Watch the Right Tab update **instantly with 0 page refreshes** via HTML5 BroadcastChannel!
+3. **Inspect & Approve Baseline:**
+   - Left Tab: Upload a living room photo under Step 01.
+   - Right Tab: Open Landlord Verify portal, review photo, check the confirmation box, and click **"Lock & Approve Baseline"**.
+4. **Experience Stage 1 Deposit Handshake:**
+   - Right Tab immediately renders the **"🏦 Owner Receiving Terminal"** displaying the Owner's live QR Code and UPI ID.
+   - Left Tab: Click **"Pay Security Deposit"** and choose Razorpay Escrow or Direct UPI. In test mode, it verifies in <200ms!
+5. **Trigger Triple Anti-Fraud & Gemini Multimodal Audit:**
+   - Left Tab: In Step 04 Move-Out, try uploading a duplicate photo (detected!), or a selfie portrait (scene mismatch blocked!), then upload the authentic damaged sofa.
+   - Click **"Run AI Damage Audit"**: Google Gemini arbitrates fair wear-and-tear vs negligence under MTA 2021.
+6. **Experience Stage 2 Net Refund Handshake:**
+   - Left Tab immediately displays the **"💸 Guest Refund Receiving Terminal"** with Tenant's live QR Code.
+   - Right Tab: Click **"Scan Guest QR / Pay Net Refund"** and release payout.
+   - Both screens auto-clear to ₹0 active deposit and transfer the contract into Settled History!
+7. **Download Official Documents:**
+   - Tenant accesses **"Society Gate Pass & NOC"**; Owner downloads/prints **"Official Escrow Settlement Receipt"**.
 
 ---
 

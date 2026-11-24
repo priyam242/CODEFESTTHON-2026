@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import QRCode from 'qrcode';
 import {
   Shield,
   Upload,
@@ -138,6 +139,37 @@ export const TenancyDetail: React.FC = () => {
       setGuestRefundVpa(tenancy.tenantUpi);
     }
   }, [tenancy]);
+
+  const [guestQrDataUrl, setGuestQrDataUrl] = useState<string>('');
+  const [ownerQrDataUrl, setOwnerQrDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (!tenancy) return;
+    const items = tenancy.items || [];
+    const totalDeposit = Number(tenancy.depositAmount || 0);
+    const totalDeductions = items.reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
+    const estRefund = Math.max(0, totalDeposit - totalDeductions);
+
+    // Guest Refund QR
+    const guestUpi = tenancy.tenantUpi || guestRefundVpa || 'priyam.prajapati@okaxis';
+    const guestName = tenancy.user?.name || (tenancy as any).userName || 'Guest';
+    const guestUpiUrl = `upi://pay?pa=${encodeURIComponent(guestUpi)}&pn=${encodeURIComponent(guestName)}&am=${estRefund}&cu=INR&tn=${encodeURIComponent(`RentShield Escrow Refund - ${tenancy.propertyTitle}`)}`;
+    QRCode.toDataURL(guestUpiUrl, {
+      width: 280,
+      margin: 2,
+      color: { dark: '#050912', light: '#ffffff' },
+    }).then(setGuestQrDataUrl).catch(() => {});
+
+    // Owner Receiving QR
+    const ownerUpi = tenancy.landlordUpi || 'rajesh.prajapati@okhdfcbank';
+    const ownerName = tenancy.landlordName || 'Property Owner';
+    const ownerUpiUrl = `upi://pay?pa=${encodeURIComponent(ownerUpi)}&pn=${encodeURIComponent(ownerName)}&am=${totalDeposit}&cu=INR&tn=${encodeURIComponent(`RentShield Escrow Deposit - ${tenancy.propertyTitle}`)}`;
+    QRCode.toDataURL(ownerUpiUrl, {
+      width: 280,
+      margin: 2,
+      color: { dark: '#050912', light: '#ffffff' },
+    }).then(setOwnerQrDataUrl).catch(() => {});
+  }, [tenancy?.tenantUpi, guestRefundVpa, tenancy?.landlordUpi, tenancy?.depositAmount, tenancy?.items, tenancy?.propertyTitle]);
 
   const handleSaveGuestRefundUpi = async () => {
     if (!tenancy || !guestRefundVpa.trim()) return;
@@ -470,6 +502,15 @@ export const TenancyDetail: React.FC = () => {
       }
 
       await itemsApi.uploadMoveOut(activeMoveOutItem.id, formData);
+
+      // Auto-save tenant refund UPI alongside move-out inspection (zero manual friction)
+      const upiToSave = guestRefundVpa?.trim() || (currentUser as any)?.upiId || 'priyam.prajapati@okaxis';
+      if (upiToSave && tenancy && (!tenancy.tenantUpi || tenancy.tenantUpi !== upiToSave)) {
+        await paymentsApi.updateRecipient({
+          tenancyId: tenancy.id,
+          tenantUpi: upiToSave,
+        }).catch(() => {});
+      }
       setActiveMoveOutItem(null);
       setMoveOutFile(null);
       setDuplicatePhotoDetected(false);
@@ -1668,6 +1709,75 @@ export const TenancyDetail: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* Step 05: Guest Refund Receiving Terminal (Real-world Dual-Screen Handshake) */}
+          {isStep4Done && !isStep5Done && !isLandlord && (
+            <div id="guest-refund-terminal" className="mb-6 p-5 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-950 border-2 border-emerald-500/50 shadow-xl shadow-emerald-500/10">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-800/80 mb-4">
+                <div className="flex items-center space-x-3 text-left">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <IndianRupee className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2 text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Guest Refund Receiving Terminal • Step 05 Escrow</span>
+                    </div>
+                    <h4 className="text-sm sm:text-base font-bold text-slate-100 mt-0.5">
+                      Awaiting ₹{estimatedRefund.toLocaleString('en-IN')} Net Refund from Property Owner
+                    </h4>
+                  </div>
+                </div>
+
+                {tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+                  <button
+                    type="button"
+                    onClick={handleConfirmSettlementReceived}
+                    disabled={confirmingSettlement}
+                    className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 active:scale-95 text-slate-950 font-extrabold text-xs font-mono shadow-lg shadow-emerald-500/30 transition flex items-center justify-center space-x-2 animate-pulse"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{confirmingSettlement ? 'Confirming...' : `✅ Confirm ₹${Number(tenancy.pendingPaymentAmount || estimatedRefund).toLocaleString('en-IN')} Received in Bank`}</span>
+                  </button>
+                ) : (
+                  <span className="text-[11px] font-mono px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300">
+                    ⏳ Waiting for Owner Release
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-5 bg-slate-950/80 p-4 rounded-xl border border-slate-800/60">
+                <div className="p-2.5 bg-white rounded-xl shadow-lg border-2 border-emerald-500/40 shrink-0">
+                  {guestQrDataUrl ? (
+                    <img src={guestQrDataUrl} alt="Guest Refund Terminal QR" className="w-36 h-36 object-contain rounded" />
+                  ) : (
+                    <div className="w-36 h-36 flex flex-col items-center justify-center text-slate-800 text-[11px] font-mono">
+                      <QrCode className="w-8 h-8 text-slate-600 mb-1" />
+                      <span>Generating QR...</span>
+                    </div>
+                  )}
+                </div>
+                <div className="text-left space-y-1.5 flex-1">
+                  <div className="text-xs font-mono text-slate-300 font-bold">
+                    Guest Receiving VPA: <span className="text-emerald-400 font-mono">{tenancy.tenantUpi || guestRefundVpa || 'priyam.prajapati@okaxis'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    📱 <strong>Point this terminal screen to the Property Owner.</strong> The Owner can scan this QR code directly with any UPI App or release the net refund via Razorpay Escrow.
+                  </p>
+                  <div className="flex items-center space-x-2 pt-1">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-semibold">
+                      ● Live Refund Terminal
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {tenancy.pendingPaymentStage === 'REFUND_SENT'
+                        ? '⚡ Owner marked refund sent! Click Confirm above to finalize settlement.'
+                        : '⏳ Move-Out condition audited. Ready for Owner payout.'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Strict Gate Lock: Deposit Unpaid Warning Banner */}
           {!tenancy.depositPaid && items.length > 0 && (

@@ -41,6 +41,11 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 export const App: React.FC = () => {
+  React.useEffect(() => {
+    // Silently pre-warm Gemini AI model in background on app load
+    fetch('/api/tenancy/ai-health').catch(() => {});
+  }, []);
+
   return (
     <BrowserRouter>
       <IntroSplash />
