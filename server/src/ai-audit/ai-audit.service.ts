@@ -140,12 +140,12 @@ Respond ONLY with a JSON object in this exact schema, with no markdown fences:
       if (moveInPart) contents.push(moveInPart);
       if (moveOutPart) contents.push(moveOutPart);
 
-      // Automatic retry pipeline: gemini-3.5-flash with fallback to gemini-3.8-flash and gemini-flash-latest
-      const modelsToTry = ['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
+      // Fast AI execution: gemini-3.5-flash with crisp 6s timeout and immediate deterministic fallback
+      const modelsToTry = ['gemini-3.5-flash'];
       for (const modelName of modelsToTry) {
         try {
           const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Gemini API ${modelName} call timed out after 8s`)), 8000),
+            setTimeout(() => reject(new Error(`Gemini API ${modelName} call timed out after 6s`)), 6000),
           );
 
           const generatePromise = ai.models.generateContent({

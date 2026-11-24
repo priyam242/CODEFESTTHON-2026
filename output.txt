@@ -1,7 +1,7 @@
 ================================================================================
-RENTSHIELD 5-POINT CRITICAL ESCROW, MODAL AUTO-CLOSE & AI AUDIT VERIFICATION
+RENTSHIELD 6-POINT HARDENING, EYE PASSWORD TOGGLE & CLEAN DEMO STATE AUDIT
 ================================================================================
-Timestamp: 2026-11-24T14:24:00+05:30
+Timestamp: 2026-11-24T14:57:00+05:30
 Repository: https://github.com/priyam242/CODEFESTTHON-2026.git
 Branch: main
 Playwright Spec: client/e2e/rentshield-full-suite.spec.ts
@@ -9,48 +9,52 @@ Playwright Spec: client/e2e/rentshield-full-suite.spec.ts
 ALL 12 CRITICAL REAL-WORLD ESCROW SCENARIOS PASSED (12/12 PASS - 100%)
 
 --------------------------------------------------------------------------------
-5-POINT FIX & HARDENING AUDIT:
+COMPLETED HARDENING & AUDIT DELIVERABLES:
 --------------------------------------------------------------------------------
-1. STRICT PAYER-ONLY PAYMENT POPUP & ROLE ISOLATION:
-   - Stage 1 (Move-In Security Deposit Escrow: Guest -> Owner):
-     * Guest (TENANT) ONLY can see "💳 Pay Security Deposit" / "Pay & Lock Deposit" and open the payment popup.
-     * Owner (LANDLORD) NEVER sees a Pay button or Payment QR popup for Stage 1. Owner sees only "⏳ Stage 1: Awaiting Guest Security Deposit" and "⚙️ Set/Update My Deposit UPI/QR".
-     * In PaymentModal.tsx, if currentUserRole !== payerRole, `effectiveIsRecipientSettingsOnly` is strictly forced to true, completely preventing payer QR/gateway render on receiver accounts.
-   - Stage 2 (Move-Out Net Refund: Owner -> Guest, when netRefund > 0):
-     * Owner (LANDLORD) ONLY can see "💸 Pay Net Refund to Guest" and open the payment popup.
-     * Guest (TENANT) NEVER sees the Refund Payment QR popup. Guest sees a clean status card: "⏳ Awaiting ₹X Refund from Owner" + "⚙️ Edit My Receiving UPI / Upload QR".
+1. DATABASE WIPED TO PRISTINE DEMO BASELINE ("sara data remove kar de demo ko chhod ke"):
+   - Safely executed cleanup script removing all test tenancies, test items, and non-demo accounts.
+   - Preserved ONLY the official Judge Demo Accounts:
+     * Tenant: `tenant.demo@rentshield.com` (Aarav Sharma)
+     * Landlord: `landlord.demo@rentshield.com` (Ramesh Malik)
+     * Active Tenancy: `demo-tenancy-indiranagar-001` (2BHK Luxury Apt - Indiranagar, Bangalore - ₹50,000 Deposit)
+     * Settled History Stack: `koramangala-settled-002` (3BHK Garden Villa - Koramangala, Bangalore - ₹75,000 Deposit with verified NOC & Gate Pass)
 
-2. REMOVED 12-DIGIT BANK UTR COMPLETELY & INSTANT AUTO-CLOSE (<300ms):
-   - Deleted the confusing "Confirm Scanned Payment via 12-Digit Bank UTR" input box and "Verify UTR" button from PaymentModal.tsx.
-   - Auto-Close #1 (Razorpay Gateway): When paying via "Pay via Razorpay (Cards / UPI / Netbanking)", once /api/payments/verify returns 200 OK, immediately invokes onSettled() and onClose() to dismiss the modal automatically, trigger realtime sync, and refresh tenancy state.
-   - Auto-Close #2 (Direct Phone QR Scan): Right beneath the Direct QR code, added a clean emerald button: "✅ I Have Paid on UPI App — Confirm & Close". Calls /api/payments/verify with method: 'DIRECT_UPI_SCAN', generates verified payment ID (pay_RS_DIRECT_UPI_...), immediately closes the modal in <300ms, marks deposit paid or tenancy SETTLED, and archives settled property to history.
+2. INTERACTIVE PASSWORD EYE TOGGLES ("password ki row me eye laga de jisse ki password dekha sake"):
+   - Login / Register Page (`Login.tsx`):
+     * Password row features an interactive Lucide `Eye` / `EyeOff` button with `z-10 cursor-pointer` and accessible aria labels.
+     * Toggles seamlessly between `type="password"` and `type="text"`.
+   - User Profile Modal (`UserProfileModal.tsx`):
+     * Independent eye toggles added across all security password rows (Current Password, New Password, Confirm New Password).
 
-3. DYNAMIC RECIPIENT & PAYER NAMES (REMOVED HARDCODED "Aarav Sharma" BUG):
-   - Replaced all hardcoded "Aarav Sharma (Tenant)" and "Ramesh Malik (Owner)" fallback strings in PaymentModal.tsx.
-   - Payer and Recipient titles dynamically resolve to:
-     * Tenant: `tenancy.tenant?.name || tenancy.user?.name || (tenancy as any).userName || 'Tenant'`
-     * Owner: `tenancy.landlordName || tenancy.landlordEmail?.split('@')[0] || 'Property Owner'`
+3. DYNAMIC COUNTERPARTY DATA IN GATE PASS & NOC MODAL:
+   - Updated `server/src/tenancy/tenancy.service.ts`: attached `user` and mapped `t.tenant = t.user` across all query methods (`findAllForUser`, `findOne`, `findByLandlordToken`, `settle`).
+   - `SocietyGatePassModal.tsx`:
+     * Tenant name and email dynamically populated from real tenancy records (`(tenancy as any).tenant?.name || tenancy.user?.name`).
+     * Owner details dynamically display landlord name, email, and UPI ID.
+     * Prominent "🖨️ Print / Save PDF Gate Pass" button embedded in both modal header and footer controls.
 
-4. GEMINI VISION DAMAGE DETECTION & MULTIMODAL AUDIT WITH ACCURATE FALLBACK:
-   - Synced working GEMINI_API_KEY & GOOGLE_API_KEY to server/.env.
-   - Configured active model pipeline: `gemini-3.5-flash` (with automated retry on `gemini-3.8-flash`, `gemini-flash-latest`, and `gemini-3.1-flash-lite`).
-   - Enhanced parseImageToInlineData with safe index-based base64 comma extraction and raw base64 support (preventing regex stack issues on large payloads).
-   - Upgraded deterministic image difference heuristic: samples structural/pixel deltas between baseline and exit images. Visibly damaged fixtures (wall plaster holes, broken switchboards, torn sofa cushions, cracks, deep gouges) reliably trigger `DAMAGE_DETECTED` with realistic Indian market repair costs (₹1,200 to ₹3,500), capped at depositAmount for deduction math while displaying estimated restoration cost in the explanation (even during ₹1 deposit testing).
+4. POST-SETTLEMENT STATE CLEANUP & STALE BUTTON REMOVAL:
+   - `TenancyDetail.tsx` & `LandlordVerify.tsx`:
+     * On settled tenancies (`status === 'SETTLED'`), the actionable "Pay Net Refund" button is strictly hidden and replaced with a solid emerald read-only badge: "✅ Net Refund Paid & Cleared".
+     * Stale "Lock & Approve Move-In" yellow prompt is hidden on locked/vacated/settled tenancies and replaced with "🔒 Baseline Inventory Cryptographically Signed by Owner".
+     * In `TenancyDetail.tsx`, settlement payment auto-navigates to `/dashboard` to archive the property into the bottom history cards.
 
-5. BUILD VERIFICATION & E2E AUTOMATION (12/12 PASSED):
-   - Backend Build (NestJS + Prisma): 0 errors
-   - Frontend Build (Vite + TypeScript): 0 errors
-   - Playwright E2E Suite: 12/12 passed (1.5m runtime)
-     ✓ 01. IntroSplash renders & top-header "Sign In" button is interactive (5.7s)
-     ✓ 02. 1-Click Judge Demo Accounts & Pre-Seeded History Stack with NOC (4.7s)
-     ✓ 03. Fresh Tenancy Creation & Anti-Collusion Anchor (3.6s)
-     ✓ 04. Step 01 & Step 02 — Move-In SHA-256 Upload, Revision Loop & Owner Lock (8.7s)
-     ✓ 05. Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner) (4.3s)
-     ✓ 06. Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit (27.9s)
-     ✓ 07. Step 05 — Stage 2 Final Refund Settlement with QR Isolation (2.7s)
-     ✓ 08. Step 06 — Auto-Clear Active Workspace & Settled History Stack (3.4s)
-     ✓ 09. Role-Guard Check on /tenancy/:id prevents Landlord tenant actions (2.0s)
-     ✓ 10. Zero-Server Public Courtroom Verifier (/verify) (2.1s)
-     ✓ 11. User Profile Modal renders in Portal, non-clipped on 1280x720 & 375x667 (3.5s)
-     ✓ 12. Backend Profile Endpoints: GET /api/auth/me, PATCH /profile, & DELETE demo protection (1.5s)
+5. DASHBOARD PARTITIONING & ACTIVE CLEARING:
+   - Active KPIs and deposit values strictly compute only from non-settled properties.
+   - When all tenancies are settled, renders clean state banner "All Active Tenancies Cleared! Workspace Ready for Your Next Property" with "+ Protect New Home Deposit" CTA.
+   - Chronological Settled History & Past Locations stack renders newest first with full financial breakdown (Gross Deposit, AI Damage Cut, Net Refund Paid, and verified UTR references).
+
+6. 12/12 PLAYWRIGHT E2E AUTOMATION PASSED:
+   ✓ 01. IntroSplash renders & top-header "Sign In" button is interactive (6.8s)
+   ✓ 02. 1-Click Judge Demo Accounts & Pre-Seeded History Stack with NOC (6.1s)
+   ✓ 03. Fresh Tenancy Creation & Anti-Collusion Anchor (4.4s)
+   ✓ 04. Step 01 & Step 02 — Move-In SHA-256 Upload, Revision Loop & Owner Lock (11.5s)
+   ✓ 05. Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner) (4.2s)
+   ✓ 06. Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit (11.1s)
+   ✓ 07. Step 05 — Stage 2 Final Refund Settlement with QR Isolation (3.2s)
+   ✓ 08. Step 06 — Auto-Clear Active Workspace & Settled History Stack (2.8s)
+   ✓ 09. Role-Guard Check on /tenancy/:id prevents Landlord tenant actions (2.1s)
+   ✓ 10. Zero-Server Public Courtroom Verifier (/verify) (1.6s)
+   ✓ 11. User Profile Modal renders in Portal, non-clipped on 1280x720 & 375x667 (3.3s)
+   ✓ 12. Backend Profile Endpoints: GET /api/auth/me, PATCH /profile, & DELETE demo protection (1.5s)
 ================================================================================

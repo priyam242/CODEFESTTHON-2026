@@ -32,10 +32,11 @@ export class TenancyService {
   }
 
   async findAllForUser(user: { id: string; email: string; role: string }) {
+    let list: any[] = [];
     if (user.role === 'LANDLORD') {
       const email = user.email || '';
       try {
-        return await this.prisma.tenancyClient.findMany({
+        list = await this.prisma.tenancyClient.findMany({
           where: {
             OR: [
               { landlordEmail: { equals: email, mode: 'insensitive' } },
@@ -46,15 +47,22 @@ export class TenancyService {
           include: { items: true, user: true },
         });
       } catch {
-        return this.prisma.tenancyClient.findMany({
+        list = await this.prisma.tenancyClient.findMany({
           where: { landlordEmail: email.toLowerCase() },
           include: { items: true, user: true },
         });
       }
+    } else {
+      list = await this.prisma.tenancyClient.findMany({
+        where: { userId: user.id },
+        include: { items: true, user: true },
+      });
     }
-    return this.prisma.tenancyClient.findMany({
-      where: { userId: user.id },
-      include: { items: true, user: true },
+    return list.map((t: any) => {
+      if (t && t.user) {
+        t.tenant = t.user;
+      }
+      return t;
     });
   }
 
@@ -74,7 +82,7 @@ export class TenancyService {
   async findOne(id: string, user?: { id: string; email?: string; role?: string } | string) {
     const tenancy = await this.prisma.tenancyClient.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, user: true },
     });
     if (!tenancy) {
       throw new NotFoundException(`Tenancy ${id} not found`);
@@ -95,6 +103,9 @@ export class TenancyService {
         }
       }
     }
+    if (tenancy && (tenancy as any).user) {
+      (tenancy as any).tenant = (tenancy as any).user;
+    }
     return tenancy;
   }
 
@@ -109,10 +120,13 @@ export class TenancyService {
   async findByLandlordToken(token: string) {
     const tenancy = await this.prisma.tenancyClient.findUnique({
       where: { landlordToken: token },
-      include: { items: true },
+      include: { items: true, user: true },
     });
     if (!tenancy) {
       throw new NotFoundException('Invalid or expired landlord verification link');
+    }
+    if (tenancy && (tenancy as any).user) {
+      (tenancy as any).tenant = (tenancy as any).user;
     }
     return tenancy;
   }
@@ -248,7 +262,7 @@ export class TenancyService {
   async settle(id: string, data?: { customQrUrl?: string; tenantUpi?: string; landlordUpi?: string }) {
     const tenancy = await this.prisma.tenancyClient.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, user: true },
     });
     if (!tenancy) {
       throw new NotFoundException('Tenancy not found');
@@ -262,11 +276,15 @@ export class TenancyService {
     if (data?.tenantUpi) updatePayload.tenantUpi = data.tenantUpi;
     if (data?.landlordUpi) updatePayload.landlordUpi = data.landlordUpi;
 
-    return this.prisma.tenancyClient.update({
+    const updated = await this.prisma.tenancyClient.update({
       where: { id },
       data: updatePayload,
-      include: { items: true },
+      include: { items: true, user: true },
     });
+    if (updated && (updated as any).user) {
+      (updated as any).tenant = (updated as any).user;
+    }
+    return updated;
   }
 
   async settleByToken(token: string, data?: { customQrUrl?: string; tenantUpi?: string; landlordUpi?: string }) {

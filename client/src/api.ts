@@ -190,6 +190,7 @@ export interface Tenancy {
   createdAt: string;
   items?: Item[];
   user?: User;
+  tenant?: User;
 }
 
 export interface PublicCertificate {

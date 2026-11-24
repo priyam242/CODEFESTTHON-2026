@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Shield,
   Upload,
@@ -32,6 +32,7 @@ import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
 
 export const TenancyDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [tenancy, setTenancy] = useState<Tenancy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -966,36 +967,50 @@ export const TenancyDetail: React.FC = () => {
                   totalDeductions < totalDeposit ? (
                     // Case A: Landlord Refunds Tenant
                     isLandlord ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPaymentModalStage('SETTLEMENT');
-                          setIsRecipientSettingsOnly(false);
-                          setShowUpiModal(true);
-                        }}
-                        className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold font-mono transition shadow-md shadow-emerald-500/20"
-                      >
-                        <IndianRupee className="w-3.5 h-3.5" />
-                        <span>💸 Pay Net Refund to Tenant (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
-                      </button>
-                    ) : (
-                      <div className="w-full space-y-1.5">
-                        <div className="w-full px-3 py-2 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] font-mono text-emerald-400 text-center font-bold">
-                          ⏳ Awaiting ₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')} Refund from Owner
+                      tenancy.status === 'SETTLED' ? (
+                        <div className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>✅ Net Refund Paid &amp; Cleared (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
                         </div>
+                      ) : (
                         <button
                           type="button"
                           onClick={() => {
                             setPaymentModalStage('SETTLEMENT');
-                            setIsRecipientSettingsOnly(true);
+                            setIsRecipientSettingsOnly(false);
                             setShowUpiModal(true);
                           }}
-                          title="Upload or edit your receiving UPI ID / QR"
-                          className="w-full py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-semibold transition text-center"
+                          className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold font-mono transition shadow-md shadow-emerald-500/20"
                         >
-                          ⚙️ Edit My Receiving UPI / Upload QR
+                          <IndianRupee className="w-3.5 h-3.5" />
+                          <span>💸 Pay Net Refund to Tenant (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
                         </button>
-                      </div>
+                      )
+                    ) : (
+                      tenancy.status === 'SETTLED' ? (
+                        <div className="w-full inline-flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>✅ Net Refund Received &amp; Cleared (₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')})</span>
+                        </div>
+                      ) : (
+                        <div className="w-full space-y-1.5">
+                          <div className="w-full px-3 py-2 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] font-mono text-emerald-400 text-center font-bold">
+                            ⏳ Awaiting ₹{(totalDeposit - totalDeductions).toLocaleString('en-IN')} Refund from Owner
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentModalStage('SETTLEMENT');
+                              setIsRecipientSettingsOnly(true);
+                              setShowUpiModal(true);
+                            }}
+                            title="Upload or edit your receiving UPI ID / QR"
+                            className="w-full py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-semibold transition text-center"
+                          >
+                            ⚙️ Edit My Receiving UPI / Upload QR
+                          </button>
+                        </div>
+                      )
                     )
                   ) : totalDeductions > totalDeposit ? (
                     // Case B: Tenant Pays Excess Damage
@@ -1149,15 +1164,22 @@ export const TenancyDetail: React.FC = () => {
                     )}
                   </>
                 )}
-                {isLandlord && tenancy.status !== 'APPROVED' && (
-                  <button
-                    onClick={handleOwnerDirectApprove}
-                    disabled={approving}
-                    className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>{approving ? 'Approving...' : 'Lock & Approve Move-In'}</span>
-                  </button>
+                {isLandlord && (
+                  tenancy.status === 'APPROVED' || tenancy.status === 'LOCKED' || tenancy.status === 'VACATED' || tenancy.status === 'SETTLED' || tenancy.status === 'COMPLETED' || Boolean(tenancy.signerAudit) ? (
+                    <span className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-bold">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>🔒 Baseline Inventory Cryptographically Signed by Owner</span>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handleOwnerDirectApprove}
+                      disabled={approving}
+                      className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-md shadow-emerald-500/20"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{approving ? 'Approving...' : 'Lock & Approve Move-In'}</span>
+                    </button>
+                  )
                 )}
                 <button
                   onClick={handleCopyLandlordLink}
@@ -1779,6 +1801,11 @@ export const TenancyDetail: React.FC = () => {
           onSettled={(updated) => {
             setTenancy(updated);
             loadData();
+            if (updated.status === 'SETTLED') {
+              setTimeout(() => {
+                navigate('/dashboard');
+              }, 1200);
+            }
           }}
         />
       )}

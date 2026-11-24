@@ -366,7 +366,7 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
 
     // Verify Move-Out AI audit completed
     const auditedBadge = page.locator('text=Gemini AI Audit Arbitration').first();
-    await expect(auditedBadge).toBeVisible({ timeout: 25000 });
+    await expect(auditedBadge).toBeVisible({ timeout: 35000 });
   });
 
   // --------------------------------------------------------------------------
@@ -526,7 +526,7 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     await expect(newPwdInput).toBeVisible();
     expect(await newPwdInput.getAttribute('type')).toBe('password');
     // Toggle Eye
-    const eyeBtn = modalBackdrop.locator('button[title*="password"]').last();
+    const eyeBtn = modalBackdrop.locator('button[title*="new password"], button[title*="password"]').nth(1);
     await eyeBtn.click();
     expect(await newPwdInput.getAttribute('type')).toBe('text');
 

@@ -182,7 +182,7 @@ export const LandlordVerify: React.FC = () => {
   }
 
   const items = tenancy.items || [];
-  const isApproved = tenancy.status === 'APPROVED';
+  const isApproved = tenancy.status === 'APPROVED' || tenancy.status === 'LOCKED' || tenancy.status === 'VACATED' || tenancy.status === 'SETTLED' || tenancy.status === 'COMPLETED' || Boolean(tenancy.signerAudit);
   const isRevisionRequested = tenancy.status === 'REVISION_REQUESTED';
   const isMoveOutCompleted = items.length > 0 && items.every((i) => Boolean(i.moveOutPhotoUrl && i.aiVerdict));
   const hasMoveOut = items.some((i) => Boolean(i.moveOutPhotoUrl && i.aiVerdict));
@@ -466,7 +466,12 @@ export const LandlordVerify: React.FC = () => {
               </div>
               <h3 className="text-lg font-bold text-slate-100">Deposit Arbitrated by Gemini 2.5</h3>
             </div>
-            {hasGuestRefundMethod ? (
+            {isSettled || tenancy.status === 'SETTLED' ? (
+              <div className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>✅ Net Refund Paid &amp; Cleared (₹{netRefund.toLocaleString('en-IN')})</span>
+              </div>
+            ) : hasGuestRefundMethod ? (
               <button
                 type="button"
                 onClick={() => {
@@ -482,7 +487,7 @@ export const LandlordVerify: React.FC = () => {
             ) : (
               <div className="px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono inline-flex items-center space-x-2">
                 <Clock className="w-4 h-4 text-amber-400 animate-spin" />
-                <span>⏳ Waiting for Guest ({tenancy.user?.name || 'Tenant'}) to upload their Refund QR Code or UPI ID</span>
+                <span>⏳ Waiting for Guest ({tenancy.user?.name || (tenancy as any).userName || 'Tenant'}) to upload their Refund QR Code or UPI ID</span>
               </div>
             )}
           </div>

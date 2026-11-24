@@ -33,8 +33,8 @@ export const SocietyGatePassModal: React.FC<SocietyGatePassModalProps> = ({
   const totalDeposit = Number(tenancy.depositAmount || 0);
   const totalDeductions = items.reduce((acc, it) => acc + Number(it.suggestedCut || 0), 0);
   const netRefund = Math.max(0, totalDeposit - totalDeductions);
-  const tenantName = tenancy.user?.name || (tenancy as any).userName || 'Aarav Sharma';
-  const tenantEmail = tenancy.user?.email || (tenancy as any).userEmail || 'tenant.demo@rentshield.com';
+  const tenantName = (tenancy as any).tenant?.name || tenancy.user?.name || (tenancy as any).userName || 'Resident (Tenant)';
+  const tenantEmail = (tenancy as any).tenant?.email || tenancy.user?.email || (tenancy as any).userEmail || 'tenant@rentshield.com';
   const agreementRef = tenancy.agreementRef || 'BLR-IND-2026-KA-4892';
   const settledDate = tenancy.settledAt
     ? new Date(tenancy.settledAt).toLocaleDateString('en-IN', {
@@ -205,7 +205,9 @@ export const SocietyGatePassModal: React.FC<SocietyGatePassModalProps> = ({
                   Property Owner (Landlord):
                 </div>
                 <div className="font-bold text-slate-950">{tenancy.landlordName}</div>
-                <div className="text-slate-600 text-[11px] font-mono">{tenancy.landlordPhone}</div>
+                <div className="text-slate-600 text-[11px] font-mono">
+                  {tenancy.landlordEmail ? (tenancy.landlordUpi ? `${tenancy.landlordEmail} • UPI: ${tenancy.landlordUpi}` : tenancy.landlordEmail) : (tenancy.landlordPhone || 'Property Owner')}
+                </div>
               </div>
             </div>
           </div>
@@ -293,15 +295,25 @@ export const SocietyGatePassModal: React.FC<SocietyGatePassModalProps> = ({
         </div>
 
         {/* Modal Footer Controls */}
-        <div className="mt-6 flex items-center justify-between text-xs font-mono text-slate-400 no-print">
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-mono text-slate-400 no-print">
           <span>This Gate Pass is accepted across Indian RWAs &amp; gated societies.</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold transition"
-          >
-            Close Pass
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
+            >
+              <Printer className="w-4 h-4" />
+              <span>🖨️ Print / Save PDF Gate Pass</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold transition"
+            >
+              Close Pass
+            </button>
+          </div>
         </div>
       </div>
     </div>
