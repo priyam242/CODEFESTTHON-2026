@@ -728,4 +728,86 @@ Respond ONLY with a JSON object in this exact schema, with no markdown fences:
       suggestedCut: 0,
     };
   }
+
+  /**
+   * Generates native Gemini TTS audio (PCM base64) using the active Gemini API key.
+   * Auto-discovers *-tts models from /v1beta/models if primary preview model is unavailable.
+   */
+  async generateSpeech(text: string, voiceName = 'Puck'): Promise<{ model: string; mimeType: string; data: string }> {
+    if (!this.geminiApiKey) {
+      throw new Error('GEMINI_API_KEY not configured in environment');
+    }
+
+    const ttsCandidates = [
+      'gemini-2.5-flash-preview-tts',
+      'gemini-2.5-pro-preview-tts',
+      'gemini-3.8-flash-tts',
+      'gemini-3.8-flash-lite-tts',
+    ];
+
+    try {
+      const listRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${this.geminiApiKey}`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (listRes.ok) {
+        const listJson: any = await listRes.json();
+        const discoveredTts = (listJson.models || [])
+          .filter((m: any) => (m.supportedGenerationMethods || []).includes('generateContent'))
+          .map((m: any) => String(m.name || '').replace(/^models\//, ''))
+          .filter((n: string) => n.toLowerCase().includes('tts'));
+        for (const m of discoveredTts) {
+          if (!ttsCandidates.includes(m)) ttsCandidates.push(m);
+        }
+      }
+    } catch {
+      // ignore discovery failure, proceed with known candidates
+    }
+
+    let lastErr = 'No TTS model succeeded';
+    for (const model of ttsCandidates) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text }] }],
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName },
+                },
+              },
+            },
+          }),
+          signal: AbortSignal.timeout(25000),
+        });
+
+        if (!res.ok) {
+          const errBody = await res.text();
+          lastErr = `${model} HTTP ${res.status}: ${errBody.slice(0, 200)}`;
+          continue;
+        }
+
+        const json: any = await res.json();
+        const parts = json?.candidates?.[0]?.content?.parts || [];
+        for (const p of parts) {
+          if (p?.inlineData?.data) {
+            return {
+              model,
+              mimeType: p.inlineData.mimeType || 'audio/L16;rate=24000',
+              data: p.inlineData.data,
+            };
+          }
+        }
+        lastErr = `${model} returned no inlineData audio`;
+      } catch (e: any) {
+        lastErr = `${model} error: ${e?.message || String(e)}`;
+      }
+    }
+
+    throw new Error(`Gemini TTS failed across models (${ttsCandidates.join(', ')}): ${lastErr}`);
+  }
 }

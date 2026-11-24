@@ -97,6 +97,11 @@ export class TenancyController {
     return this.aiAuditService.checkHealth();
   }
 
+  @Post('ai-tts')
+  async generateAiTts(@Body() body: { text: string; voiceName?: string }) {
+    return this.aiAuditService.generateSpeech(body.text, body.voiceName || 'Puck');
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get(':id')
   async findOne(@Request() req: any, @Param('id') id: string) {

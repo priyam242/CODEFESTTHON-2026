@@ -1539,7 +1539,11 @@ export const TenancyDetail: React.FC = () => {
               </div>
             )}
 
-            {/* Landlord Verification Link Banner / Owner Actions */}
+            {/* Landlord Verification Link Banner / Owner Actions (Hidden once Step 02 sealed without revision, or once Vacated/Settled) */}
+            {tenancy.status !== 'VACATED' &&
+              tenancy.status !== 'SETTLED' &&
+              tenancy.status !== 'COMPLETED' &&
+              (!isStep2Done || tenancy.status === 'REVISION_REQUESTED') && (
             <div className="mt-6 p-4 rounded-xl bg-slate-950/80 border border-slate-800/90 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-start space-x-3">
                 <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 mt-0.5">
@@ -1631,6 +1635,7 @@ export const TenancyDetail: React.FC = () => {
                 </a>
               </div>
             </div>
+            )}
 
             {/* In-App Dispatch Toast Notification */}
             {toastMessage && (
@@ -1698,7 +1703,9 @@ export const TenancyDetail: React.FC = () => {
                   <span>🏁 Property Vacated &amp; AI Audited</span>
                 </span>
               )}
-              {!isLandlord && tenancy.status !== 'APPROVED' && tenancy.status !== 'LOCKED' && tenancy.status !== 'SETTLED' && (
+              {!isLandlord &&
+                !['APPROVED', 'LOCKED', 'VACATED', 'SETTLED', 'COMPLETED'].includes(tenancy.status) &&
+                (!isStep2Done || tenancy.status === 'REVISION_REQUESTED') && (
                 <button
                   onClick={() => setShowAddModal(true)}
                   className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-lg shadow-emerald-500/20"
