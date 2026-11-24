@@ -41,13 +41,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
       // Auto-ensure core tables exist on Neon PostgreSQL even on fresh blank database
       await this.ensureTablesExist();
-      // Ensure 1-click Judge demo data exists if not already present
-      await this.seedDemoData(false);
+      // Clean startup: Do not automatically re-seed demo data on boot so DB remains empty
     } catch (err: any) {
       this.isConnected = false;
       this.logger.warn(` PostgreSQL not reachable (${err?.message || 'Offline'}). Operating with in-memory fallback store for offline continuity.`);
     }
-    // Clean startup: Do not automatically re-seed demo data on boot so DB remains empty
   }
 
   async clearAllData() {
@@ -476,8 +474,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           landlordName: data.landlordName,
           landlordPhone: data.landlordPhone,
           landlordEmail: data.landlordEmail || null,
-          landlordUpi: data.landlordUpi || 'ramesh.malik@okhdfcbank',
-          agreementRef: data.agreementRef || 'BLR-IND-2026-KA-4892',
+          landlordUpi: data.landlordUpi || null,
+          agreementRef: data.agreementRef || null,
+          landlordQrUrl: data.landlordQrUrl || null,
+          tenantUpi: data.tenantUpi || null,
+          tenantQrUrl: data.tenantQrUrl || null,
           signerAudit: data.signerAudit || null,
           revisionNotes: data.revisionNotes || null,
           landlordToken: data.landlordToken || randomUUID(),

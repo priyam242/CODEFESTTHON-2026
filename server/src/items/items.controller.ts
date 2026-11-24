@@ -24,7 +24,7 @@ export class ItemsController {
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() body: any,
   ) {
-    const { tenancyId, roomName, itemName, moveInNotes, base64Photo } = body;
+    const { tenancyId, roomName, itemName, moveInNotes, base64Photo, photoHash } = body;
     if (!tenancyId || !roomName || !itemName) {
       throw new BadRequestException('tenancyId, roomName, and itemName are required');
     }
@@ -35,6 +35,7 @@ export class ItemsController {
       moveInNotes,
       file,
       base64Photo,
+      photoHash,
     );
   }
 

@@ -25,7 +25,7 @@ import {
   QrCode,
   CreditCard,
 } from 'lucide-react';
-import { tenancyApi, itemsApi, paymentsApi, Tenancy, Item, authApi, getAssetUrl, fallbackFixtureSvg } from '../api';
+import { tenancyApi, itemsApi, paymentsApi, Tenancy, Item, authApi, getAssetUrl, fallbackFixtureSvg, compressImageOnCanvas } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
@@ -55,6 +55,7 @@ export const TenancyDetail: React.FC = () => {
   const [moveOutFile, setMoveOutFile] = useState<File | null>(null);
   const [uploadingMoveOut, setUploadingMoveOut] = useState(false);
   const [aiStatusIdx, setAiStatusIdx] = useState(0);
+  const [sceneMismatchError, setSceneMismatchError] = useState<string | null>(null);
 
   // Anti-fraud duplicate photo detection & UPI settlement modal
   const [duplicatePhotoDetected, setDuplicatePhotoDetected] = useState(false);
@@ -168,6 +169,7 @@ export const TenancyDetail: React.FC = () => {
     setDuplicatePhotoDetected(false);
     setBypassDuplicateCheck(false);
     setComputedMoveOutHash(null);
+    setSceneMismatchError(null);
     if (!file || !activeMoveOutItem) return;
 
     try {
@@ -193,7 +195,15 @@ export const TenancyDetail: React.FC = () => {
       formData.append('roomName', roomName);
       formData.append('itemName', itemName);
       if (moveInNotes) formData.append('moveInNotes', moveInNotes);
-      if (moveInFile) formData.append('photo', moveInFile);
+
+      if (moveInFile) {
+        // Raw byte hash before compression for authentic duplicate detection
+        const rawHash = await computeLocalHash(moveInFile);
+        formData.append('photoHash', rawHash);
+        // Clean canvas compression (max 1280px, 0.82 quality)
+        const compressed = await compressImageOnCanvas(moveInFile);
+        formData.append('photo', compressed);
+      }
 
       await itemsApi.uploadMoveIn(formData);
       setShowAddModal(false);
@@ -216,12 +226,18 @@ export const TenancyDetail: React.FC = () => {
       return;
     }
     setUploadingMoveOut(true);
+    setSceneMismatchError(null);
 
     try {
       const formData = new FormData();
       formData.append('moveOutNotes', moveOutNotes);
       formData.append('notes', moveOutNotes);
-      if (moveOutFile) formData.append('photo', moveOutFile);
+
+      if (moveOutFile) {
+        // Clean canvas compression (max 1280px, 0.82 quality)
+        const compressed = await compressImageOnCanvas(moveOutFile);
+        formData.append('photo', compressed);
+      }
 
       await itemsApi.uploadMoveOut(activeMoveOutItem.id, formData);
       setActiveMoveOutItem(null);
@@ -229,10 +245,19 @@ export const TenancyDetail: React.FC = () => {
       setDuplicatePhotoDetected(false);
       setBypassDuplicateCheck(false);
       setComputedMoveOutHash(null);
+      setSceneMismatchError(null);
       emitSyncEvent('MOVE_OUT_SUBMITTED', id);
       await loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to analyze move-out condition');
+      const resp = err?.response?.data;
+      if (resp?.verdict === 'SCENE_MISMATCH' || resp?.message?.includes('Move-Out photo does not match')) {
+        setSceneMismatchError(
+          resp?.message ||
+            `⚠️ Invalid Photo: Move-Out photo does not match the Move-In item (${activeMoveOutItem.itemName}). Please upload an actual photo of the same item.`
+        );
+      } else {
+        alert(resp?.message || err?.message || 'Failed to analyze move-out condition');
+      }
     } finally {
       setUploadingMoveOut(false);
     }
@@ -345,6 +370,10 @@ export const TenancyDetail: React.FC = () => {
     isStep5Done,
     isStep6Done,
   ].filter(Boolean).length;
+
+  // Strict Cross-Party UPI/QR Method Gatekeeping
+  const hasOwnerPaymentMethod = Boolean(tenancy.landlordUpi?.trim() || tenancy.landlordQrUrl?.trim());
+  const hasGuestRefundMethod = Boolean(tenancy.tenantUpi?.trim() || tenancy.tenantQrUrl?.trim());
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -517,31 +546,48 @@ export const TenancyDetail: React.FC = () => {
                 </p>
                 {!isStep3Done && isStep1Done && (
                   !isLandlord ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentModalStage('DEPOSIT');
-                        setIsRecipientSettingsOnly(false);
-                        setShowUpiModal(true);
-                      }}
-                      className="mt-2 w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1.5 active:scale-95"
-                    >
-                      <CreditCard className="w-3.5 h-3.5" />
-                      <span>💳 Pay Security Deposit</span>
-                    </button>
+                    hasOwnerPaymentMethod ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalStage('DEPOSIT');
+                          setIsRecipientSettingsOnly(false);
+                          setShowUpiModal(true);
+                        }}
+                        className="mt-2 w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1.5 active:scale-95"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>💳 Pay Security Deposit to Owner</span>
+                      </button>
+                    ) : (
+                      <div className="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-mono leading-relaxed">
+                        ⏳ Waiting for Owner ({tenancy.landlordEmail || tenancy.landlordName || 'Owner'}) to set their Payment UPI ID / QR Code before you can pay.
+                      </div>
+                    )
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentModalStage('DEPOSIT');
-                        setIsRecipientSettingsOnly(true);
-                        setShowUpiModal(true);
-                      }}
-                      className="mt-2 w-full py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 font-mono text-[11px] transition flex items-center justify-center space-x-1"
-                    >
-                      <QrCode className="w-3 h-3" />
-                      <span>⚙️ Set/Upload My Deposit QR</span>
-                    </button>
+                    <div className="mt-2 space-y-1.5">
+                      {!hasOwnerPaymentMethod && (
+                        <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-mono font-bold">
+                          ⚠️ Action Required: Set your UPI ID or upload QR code so guest can pay deposit
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalStage('DEPOSIT');
+                          setIsRecipientSettingsOnly(true);
+                          setShowUpiModal(true);
+                        }}
+                        className={`w-full py-1.5 px-2.5 rounded-lg text-emerald-400 font-mono text-[11px] transition flex items-center justify-center space-x-1 ${
+                          !hasOwnerPaymentMethod
+                            ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold'
+                            : 'bg-slate-800 hover:bg-slate-700'
+                        }`}
+                      >
+                        <QrCode className="w-3 h-3" />
+                        <span>⚙️ {hasOwnerPaymentMethod ? 'Update My Deposit QR/UPI' : 'Set My Deposit UPI ID & QR'}</span>
+                      </button>
+                    </div>
                   )
                 )}
                 {isStep3Done && (
@@ -637,37 +683,67 @@ export const TenancyDetail: React.FC = () => {
                 {isStep4Done && !isStep5Done && (
                   totalDeductions <= totalDeposit ? (
                     isLandlord ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPaymentModalStage('SETTLEMENT');
-                          setIsRecipientSettingsOnly(false);
-                          setShowUpiModal(true);
-                        }}
-                        className="mt-2 w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1 active:scale-95"
-                      >
-                        <QrCode className="w-3.5 h-3.5" />
-                        <span>💸 Scan Guest QR / Pay ₹{estimatedRefund.toLocaleString('en-IN')}</span>
-                      </button>
+                      hasGuestRefundMethod ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('SETTLEMENT');
+                            setIsRecipientSettingsOnly(false);
+                            setShowUpiModal(true);
+                          }}
+                          className="mt-2 w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1 active:scale-95"
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          <span>💸 Pay Net Refund to Guest (₹{estimatedRefund.toLocaleString('en-IN')})</span>
+                        </button>
+                      ) : (
+                        <div className="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-mono leading-relaxed">
+                          ⏳ Waiting for Guest ({tenancy.user?.name || (tenancy as any).userName || 'Guest'}) to upload their Refund QR Code or UPI ID.
+                        </div>
+                      )
                     ) : (
-                      <div className="mt-2 p-2 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-400 text-center font-bold">
-                        ⏳ Awaiting Owner Refund (₹{estimatedRefund.toLocaleString('en-IN')})
+                      <div className="mt-2 space-y-1.5">
+                        <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-400 text-center font-bold">
+                          ⏳ Awaiting Owner Refund (₹{estimatedRefund.toLocaleString('en-IN')})
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('SETTLEMENT');
+                            setIsRecipientSettingsOnly(true);
+                            setShowUpiModal(true);
+                          }}
+                          className={`w-full py-1.5 px-2 rounded-lg font-mono text-[10px] transition flex items-center justify-center space-x-1 ${
+                            !hasGuestRefundMethod
+                              ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <QrCode className="w-3 h-3 text-emerald-400" />
+                          <span>{hasGuestRefundMethod ? '⚙️ Update My Refund Receiving UPI/QR' : '💰 Set Your Refund Receiving UPI / QR'}</span>
+                        </button>
                       </div>
                     )
                   ) : (
                     !isLandlord ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPaymentModalStage('SETTLEMENT');
-                          setIsRecipientSettingsOnly(false);
-                          setShowUpiModal(true);
-                        }}
-                        className="mt-2 w-full py-2 px-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs font-mono shadow-md transition flex items-center justify-center space-x-1"
-                      >
-                        <CreditCard className="w-3.5 h-3.5" />
-                        <span>💳 Pay Excess Damage (₹{(totalDeductions - totalDeposit).toLocaleString('en-IN')})</span>
-                      </button>
+                      hasOwnerPaymentMethod ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('SETTLEMENT');
+                            setIsRecipientSettingsOnly(false);
+                            setShowUpiModal(true);
+                          }}
+                          className="mt-2 w-full py-2 px-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs font-mono shadow-md transition flex items-center justify-center space-x-1"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>💳 Pay Excess Damage (₹{(totalDeductions - totalDeposit).toLocaleString('en-IN')})</span>
+                        </button>
+                      ) : (
+                        <div className="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-mono">
+                          ⏳ Waiting for Owner to set Payment UPI ID for excess damage settlement.
+                        </div>
+                      )
                     ) : (
                       <div className="mt-2 p-2 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-amber-400 text-center font-bold">
                         ⏳ Awaiting Tenant Payment (₹{(totalDeductions - totalDeposit).toLocaleString('en-IN')})
@@ -972,7 +1048,7 @@ export const TenancyDetail: React.FC = () => {
                       <span>🛡️ Counterparty Identity Bound &amp; Verified</span>
                     </div>
                     <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
-                      Owner Rent UPI: <span className="text-emerald-300">{tenancy.landlordUpi || 'ramesh.malik@okhdfcbank'}</span> • Agreement Ref: <span className="text-slate-200">{tenancy.agreementRef || 'BLR-IND-2026-KA-4892'}</span>
+                      Owner Rent UPI: <span className="text-emerald-300">{tenancy.landlordUpi || 'Not set'}</span> • Agreement Ref: <span className="text-slate-200">{tenancy.agreementRef || 'None'}</span>
                     </div>
                   </div>
                 </div>
@@ -1166,18 +1242,24 @@ export const TenancyDetail: React.FC = () => {
                 </div>
               </div>
               {!isLandlord && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaymentModalStage('DEPOSIT');
-                    setIsRecipientSettingsOnly(false);
-                    setShowUpiModal(true);
-                  }}
-                  className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap self-start sm:self-center"
-                >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>Pay Deposit Now</span>
-                </button>
+                hasOwnerPaymentMethod ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentModalStage('DEPOSIT');
+                      setIsRecipientSettingsOnly(false);
+                      setShowUpiModal(true);
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap self-start sm:self-center"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Pay Deposit Now</span>
+                  </button>
+                ) : (
+                  <span className="px-3 py-1.5 rounded-xl bg-slate-900 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold">
+                    ⏳ Waiting for Owner Payment Setup
+                  </span>
+                )
               )}
             </div>
           )}
@@ -1537,6 +1619,19 @@ export const TenancyDetail: React.FC = () => {
                   className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-500 file:text-slate-950 hover:file:bg-emerald-400 cursor-pointer"
                 />
               </div>
+
+              {/* Scene Mismatch Error Banner */}
+              {sceneMismatchError && (
+                <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs space-y-1.5 animate-in fade-in">
+                  <div className="font-bold flex items-center space-x-1.5 text-rose-200">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                    <span>{sceneMismatchError}</span>
+                  </div>
+                  <p className="text-[11px] text-rose-300/80 font-mono">
+                    Under Indian Model Tenancy Act audit protocols, the exit photo must depict the actual fixture ({activeMoveOutItem.itemName}). Please upload an authentic photo of the same item.
+                  </p>
+                </div>
+              )}
 
               {/* Anti-Fraud Duplicate Photo Warning */}
               {duplicatePhotoDetected && !bypassDuplicateCheck && (

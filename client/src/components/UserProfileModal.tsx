@@ -116,7 +116,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         setAvatarUrl(fresh.avatarUrl || '');
         if (fresh.upiId) setDefaultUpi(fresh.upiId);
       })
-      .catch(() => {});
+      .catch(() => { });
 
     // Fetch live tenancy stats with immediate fallback to 0 (never stuck on ...)
     let isCancelled = false;
@@ -361,11 +361,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('IDENTITY')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === 'IDENTITY'
-                ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
+            className={`px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 whitespace-nowrap ${activeTab === 'IDENTITY'
+              ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
           >
             <UserIcon className="w-3.5 h-3.5" />
             <span>Identity &amp; UPI</span>
@@ -374,11 +373,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('SECURITY')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === 'SECURITY'
-                ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
+            className={`px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 whitespace-nowrap ${activeTab === 'SECURITY'
+              ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
           >
             <KeyRound className="w-3.5 h-3.5" />
             <span>Security</span>
@@ -387,11 +385,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('STATS')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === 'STATS'
-                ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
+            className={`px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 whitespace-nowrap ${activeTab === 'STATS'
+              ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
           >
             <Layers className="w-3.5 h-3.5" />
             <span>Activity &amp; Vault</span>
@@ -400,11 +397,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('DANGER')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === 'DANGER'
-                ? 'bg-rose-500 text-white font-bold shadow-md shadow-rose-500/20'
-                : 'text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/10'
-            }`}
+            className={`px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 whitespace-nowrap ${activeTab === 'DANGER'
+              ? 'bg-rose-500 text-white font-bold shadow-md shadow-rose-500/20'
+              : 'text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/10'
+              }`}
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Danger Zone</span>

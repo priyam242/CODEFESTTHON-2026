@@ -18,8 +18,11 @@ export class TenancyService {
         landlordName: dto.landlordName,
         landlordPhone: dto.landlordPhone,
         landlordEmail: dto.landlordEmail || null,
-        landlordUpi: dto.landlordUpi || 'ramesh.malik@okhdfcbank',
-        agreementRef: dto.agreementRef || 'BLR-IND-2026-KA-4892',
+        landlordUpi: dto.landlordUpi ? dto.landlordUpi.trim() : null,
+        agreementRef: dto.agreementRef ? dto.agreementRef.trim() : null,
+        landlordQrUrl: null,
+        tenantUpi: null,
+        tenantQrUrl: null,
         landlordToken,
         status: 'ACTIVE',
         estimatedRefund: dto.depositAmount,
@@ -137,18 +140,23 @@ export class TenancyService {
         signerFingerprint: createHash('sha256').update(token + ':signer').digest('hex'),
         signedAt: new Date().toISOString(),
         ownerConfirmed: true,
-        agreementRef: tenancy.agreementRef || 'BLR-IND-2026-KA-4892',
-        landlordUpi: tenancy.landlordUpi || 'ramesh.malik@okhdfcbank',
+        agreementRef: tenancy.agreementRef || null,
+        landlordUpi: tenancy.landlordUpi || signerData?.landlordUpi || null,
       });
+    }
+
+    const updateData: any = {
+      status: 'APPROVED',
+      moveInHash: moveInHash || createHash('sha256').update(tenancy.id + ':sealed-baseline').digest('hex'),
+      signerAudit: signerAuditStr,
+    };
+    if (!tenancy.landlordUpi && signerData?.landlordUpi) {
+      updateData.landlordUpi = signerData.landlordUpi;
     }
 
     return this.prisma.tenancyClient.update({
       where: { landlordToken: token },
-      data: {
-        status: 'APPROVED',
-        moveInHash: moveInHash || createHash('sha256').update(tenancy.id + ':sealed-baseline').digest('hex'),
-        signerAudit: signerAuditStr,
-      },
+      data: updateData,
     });
   }
 

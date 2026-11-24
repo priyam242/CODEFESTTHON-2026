@@ -107,26 +107,37 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   }
 
-  // Dynamic Initial UPI IDs
+  // Dynamic Initial UPI IDs (Strict Cross-Party Isolation: zero hardcoded fake fallbacks)
   const user = authApi.getCurrentUser();
   const savedUserUpi = user?.email
     ? localStorage.getItem(`rentshield_default_upi_${user.email.toLowerCase()}`)
     : null;
 
-  const defaultTenantUpi =
-    tenancy.tenantUpi ||
-    (isRecipientSettingsOnly && currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : null) ||
-    (currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : null) ||
-    (tenancy.user?.email ? tenancy.user.email.split('@')[0] + '@okaxis' : 'tenant.aarav@okhdfcbank');
-  const defaultLandlordUpi =
-    tenancy.landlordUpi ||
-    (isRecipientSettingsOnly && currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : null) ||
-    (currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : null) ||
-    'ramesh.malik@okhdfcbank';
-  const initialVpa = isLandlordPaying ? defaultTenantUpi : defaultLandlordUpi;
+  // Determine if the current viewer is the PAYER
+  // Stage 1 (DEPOSIT): Payer = Guest (TENANT), Receiver = Owner (LANDLORD)
+  // Stage 2 (SETTLEMENT): If netDifference >= 0: Payer = Owner (LANDLORD), Receiver = Guest (TENANT)
+  //                      If netDifference < 0: Payer = Guest (TENANT), Receiver = Owner (LANDLORD)
+  const isCurrentUserPayer = currentUserRole === (isLandlordPaying ? 'LANDLORD' : 'TENANT');
+  const isReadOnlyPayerView = isCurrentUserPayer && !isRecipientSettingsOnly;
 
-  // Separate Owner vs Guest QR code storage to prevent collision
-  const initialQrImage = isLandlordPaying
+  // Receiver's real payment configuration
+  const receiverVpa = isLandlordPaying
+    ? (tenancy.tenantUpi || (currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : ''))
+    : (tenancy.landlordUpi || (currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : ''));
+
+  const receiverQrImage = isLandlordPaying
+    ? (tenancy.tenantQrUrl || null)
+    : (tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null);
+
+  const initialVpa = isReadOnlyPayerView
+    ? receiverVpa
+    : isLandlordPaying
+    ? tenancy.tenantUpi || (currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : '')
+    : tenancy.landlordUpi || (currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : '');
+
+  const initialQrImage = isReadOnlyPayerView
+    ? receiverQrImage
+    : isLandlordPaying
     ? tenancy.tenantQrUrl || null
     : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
 
@@ -147,15 +158,25 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const freshVpa = isLandlordPaying
-      ? tenancy.tenantUpi || defaultTenantUpi
-      : tenancy.landlordUpi || defaultLandlordUpi;
-    setVpa(freshVpa);
-    const targetQr = isLandlordPaying
-      ? tenancy.tenantQrUrl || null
-      : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
-    setCustomQrImage(targetQr);
-  }, [tenancy, isLandlordPaying]);
+    if (isReadOnlyPayerView) {
+      const freshReceiverVpa = isLandlordPaying ? tenancy.tenantUpi || '' : tenancy.landlordUpi || '';
+      const freshReceiverQr = isLandlordPaying
+        ? tenancy.tenantQrUrl || null
+        : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
+      setVpa(freshReceiverVpa);
+      setCustomQrImage(freshReceiverQr);
+      setActiveTab('AUTO_QR');
+    } else {
+      const freshMyVpa = isLandlordPaying
+        ? tenancy.tenantUpi || (currentUserRole === 'TENANT' && savedUserUpi ? savedUserUpi : '')
+        : tenancy.landlordUpi || (currentUserRole === 'LANDLORD' && savedUserUpi ? savedUserUpi : '');
+      const freshMyQr = isLandlordPaying
+        ? tenancy.tenantQrUrl || null
+        : tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null;
+      setVpa(freshMyVpa);
+      setCustomQrImage(freshMyQr);
+    }
+  }, [tenancy, isLandlordPaying, isReadOnlyPayerView]);
 
   // Standard NPCI UPI URI with exact .00 amount
   const note = `RentShield Escrow - ${tenancy.propertyTitle.slice(0, 24)}`;
@@ -444,33 +465,35 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
         ) : (
           <>
-            {/* Tab Navigation: Razorpay/UPI vs Custom QR Settings */}
-            <div className="flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl mb-4 text-xs font-medium">
-              <button
-                type="button"
-                onClick={() => setActiveTab('AUTO_QR')}
-                className={`flex-1 py-1.5 rounded-lg font-mono transition flex items-center justify-center space-x-1.5 ${
-                  activeTab === 'AUTO_QR'
-                    ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>⚡ Live QR &amp; Gateway</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('CUSTOM_QR')}
-                className={`flex-1 py-1.5 rounded-lg font-mono transition flex items-center justify-center space-x-1.5 ${
-                  activeTab === 'CUSTOM_QR'
-                    ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>📷 Upload QR / Edit UPI</span>
-              </button>
-            </div>
+            {/* Tab Navigation: Razorpay/UPI vs Custom QR Settings (Hidden in Read-Only Payer View) */}
+            {!isReadOnlyPayerView && (
+              <div className="flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl mb-4 text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('AUTO_QR')}
+                  className={`flex-1 py-1.5 rounded-lg font-mono transition flex items-center justify-center space-x-1.5 ${
+                    activeTab === 'AUTO_QR'
+                      ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>⚡ Live QR Preview</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('CUSTOM_QR')}
+                  className={`flex-1 py-1.5 rounded-lg font-mono transition flex items-center justify-center space-x-1.5 ${
+                    activeTab === 'CUSTOM_QR'
+                      ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>📷 Upload My QR / Set My UPI</span>
+                </button>
+              </div>
+            )}
 
             {/* TAB 1: Real Razorpay Gateway + Real NPCI QR + 12-Digit UTR */}
             {activeTab === 'AUTO_QR' && (
@@ -533,15 +556,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       className="w-48 h-48 mx-auto rounded"
                     />
                   ) : (
-                    <div className="w-48 h-48 flex items-center justify-center text-slate-400 text-xs font-mono">
-                      Generating real QR...
+                    <div className="w-48 h-48 flex flex-col items-center justify-center p-3 text-slate-700 text-xs font-mono text-center">
+                      <AlertCircle className="w-8 h-8 text-amber-500 mb-2" />
+                      <span>No QR or UPI ID configured by recipient ({payeeName})</span>
                     </div>
                   )}
                 </div>
 
                 <div className="text-[10px] text-emerald-400 font-mono font-semibold flex items-center justify-center space-x-1">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>100% Real Phone-Scannable NPCI QR • Payee VPA: {vpa}</span>
+                  <span>
+                    {customQrImage
+                      ? `Verified Official Recipient QR Code (${payeeName})`
+                      : vpa.trim()
+                      ? `100% Real Phone-Scannable NPCI QR • Payee VPA: ${vpa}`
+                      : `Awaiting Recipient Payment Details (${payeeName})`}
+                  </span>
                 </div>
 
                 {/* Direct UPI URI Action Buttons */}

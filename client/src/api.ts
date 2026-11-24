@@ -92,12 +92,74 @@ export interface Item {
   moveInPhotoHash?: string | null;
   moveOutPhotoUrl?: string | null;
   moveOutPhotoHash?: string | null;
-  aiVerdict?: 'NORMAL_WEAR_TEAR' | 'DAMAGE_DETECTED' | null;
+  aiVerdict?: 'CLEAN' | 'NORMAL_WEAR_TEAR' | 'DAMAGE_DETECTED' | 'SCENE_MISMATCH' | null;
   aiExplanation?: string | null;
   suggestedCut?: number | string | null;
   tenancyId: string;
   createdAt: string;
 }
+
+/**
+ * Clean HTML5 Canvas Image Compressor (max dimension 1280px, 0.82 JPEG quality)
+ * Prevents huge mobile camera photos from failing payload limits or timing out Gemini.
+ */
+export const compressImageOnCanvas = async (
+  file: File,
+  maxDim = 1280,
+  quality = 0.82
+): Promise<File> => {
+  if (!file || !file.type.startsWith('image/')) return file;
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width <= maxDim && height <= maxDim && file.size < 400 * 1024) {
+          return resolve(file);
+        }
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(file);
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return resolve(file);
+            const compressedFile = new File(
+              [blob],
+              file.name.replace(/\.[^/.]+$/, '.jpg'),
+              {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              }
+            );
+            resolve(compressedFile);
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+};
 
 export interface Tenancy {
   id: string;

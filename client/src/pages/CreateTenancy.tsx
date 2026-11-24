@@ -11,7 +11,7 @@ export const CreateTenancy: React.FC = () => {
   const [landlordName, setLandlordName] = useState('Ramesh Malik');
   const [landlordPhone, setLandlordPhone] = useState('+91 98765 43210');
   const [landlordEmail, setLandlordEmail] = useState('landlord.demo@rentshield.com');
-  const [landlordUpi, setLandlordUpi] = useState('ramesh.malik@okhdfcbank');
+  const [landlordUpi, setLandlordUpi] = useState('');
   const [agreementRef, setAgreementRef] = useState('BLR-IND-2026-KA-4892');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -208,7 +208,7 @@ export const CreateTenancy: React.FC = () => {
                     type="text"
                     value={landlordUpi}
                     onChange={(e) => setLandlordUpi(e.target.value)}
-                    placeholder="ramesh.malik@okhdfcbank"
+                    placeholder="e.g. landlord@okhdfcbank (Optional - Owner can set in review)"
                     className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs font-mono focus:outline-none focus:border-emerald-500"
                   />
                 </div>

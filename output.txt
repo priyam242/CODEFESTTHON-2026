@@ -1,7 +1,7 @@
 ================================================================================
 RENTSHIELD 12-SCENARIO COMPREHENSIVE E2E VERIFICATION AUDIT
 ================================================================================
-Timestamp: 2026-11-24T01:48:30+05:30
+Timestamp: 2026-11-24T13:16:00+05:30
 Repository: https://github.com/priyam242/CODEFESTTHON-2026.git
 Branch: main
 Playwright Spec: client/e2e/rentshield-full-suite.spec.ts
@@ -9,82 +9,57 @@ Playwright Spec: client/e2e/rentshield-full-suite.spec.ts
 ALL 12 CRITICAL REAL-WORLD ESCROW SCENARIOS PASSED (12/12 PASS - 100%)
 
 --------------------------------------------------------------------------------
-TEST RESULTS SUMMARY:
+PART A & B VERIFICATION & HARDENING SUMMARY:
 --------------------------------------------------------------------------------
-✓ 01. IntroSplash renders & top-header "Sign In" button is interactive (3.2s)
-  - Asserted IntroSplash cyber-escrow logo and wordmark on SPA load.
-  - Asserted header "Sign In" button is interactive and focuses email input smoothly on /login.
-  - Verified navigation from /verify back to /login with zero click interception.
+1. STRICT CROSS-PARTY QR GATEKEEPING & OWNERSHIP ISOLATION:
+   - Stage 1 Deposit: Payer = Guest (Tenant) | Receiver = Owner (Landlord).
+     * If Owner has not set receiving UPI / QR:
+       - Owner view displays amber action card: "⚠️ Action Required: Set Your UPI ID or Upload QR Code".
+       - Guest view gates payment button and displays waiting banner: "⏳ Waiting for Owner (${email}) to set their Payment UPI ID / QR Code".
+       - When configured, Guest opens READ-ONLY Owner QR / UPI modal with Razorpay checkout. Guest cannot modify Owner's payment credentials.
+   - Stage 2 Settlement (Refund): Payer = Owner (Landlord) | Receiver = Guest (Tenant).
+     * If Guest has not set refund UPI / QR:
+       - Owner view gates refund button with waiting banner: "⏳ Waiting for Guest to upload their Refund QR Code or UPI ID".
+       - Guest view provides dedicated "💰 Set Your Refund Receiving UPI / QR Code" card.
+       - When configured, Owner opens READ-ONLY Guest QR / UPI modal to scan and pay net refund.
+   - Removed all hardcoded fake fallback UPI IDs ("ramesh.malik@okhdfcbank" / "aarav@okaxis") on newly created tenancies.
+   - Preserved pre-seeded records strictly on demo tenancies (`demo-tenancy-indiranagar-001` & `koramangala-settled-002`).
 
-✓ 02. 1-Click Judge Demo Accounts & Pre-Seeded History Stack with NOC (4.9s)
-  - Demo as Tenant auto-login: active tenancy (Indiranagar) loads with 0 errors.
-  - Settled History Stack: Koramangala settled card renders with "Society Gate Pass & NOC".
-  - Gate Pass NOC Modal: verified statutory Model Tenancy Act 2021 exit clearance and QR.
-  - Demo as Landlord auto-login: verified role badge and linked properties.
+2. MULTIMODAL GEMINI VISION DELTA ARBITRATION & SCENE MISMATCH GUARD:
+   - Client canvas compression: Resizes Move-In & Move-Out photos on HTML5 canvas (max dim 1280px, quality 0.82) strictly AFTER computing local SHA-256 byte-hash (preserving duplicate photo anti-fraud integrity).
+   - Multimodal Gemini Vision: Server parses both Baseline photo and Exit photo, passing both together as inlineData parts to `gemini-2.5-flash` (auto-fallback to `gemini-2.0-flash` on transient quota).
+   - Strict Arbitration Prompt:
+     * Enforces Scene Mismatch detection (`verdict: "SCENE_MISMATCH"`). Unrelated photo uploads trigger red validation error banner in Move-Out modal and abort without persisting.
+     * Enforces Pre-Existing Damage Immunity: defects present in Baseline photo yield ₹0 deduction.
+     * Enforces Model Tenancy Act 2021 (Sec 13/15) standards (`NORMAL_WEAR_TEAR` vs `DAMAGE_DETECTED`).
+     * Returns structured JSON: `{ verdict, confidence, preExistingNotes, newDamageDetected, legalBasis, explanation, suggestedCut }`.
 
-✓ 03. Fresh Tenancy Creation & Anti-Collusion Anchor (3.3s)
-  - Tenant registration with fresh credentials.
-  - Creation form: filled property title, address, deposit (₹25,000), landlord contact,
-    receiving UPI VPA (anand.singhania@okhdfcbank), and agreement ref (BLR-IND-2026-KA-9912).
-  - Protocol Progress tracker initializes at "0/6 Sealed", Step 03 marked Action Required.
+3. DATABASE CLEANUP & DEMO PROTECTION:
+   - Executed full database hygiene pass on Neon PostgreSQL.
+   - Deleted all 10 non-demo tenancies, 8 test items, and 12 E2E test users.
+   - Preserved pristine demo state: 2 Demo Users (`tenant.demo@rentshield.com`, `landlord.demo@rentshield.com`), 2 Demo Tenancies (`demo-tenancy-indiranagar-001`, `koramangala-settled-002`), and 5 demo fixtures.
 
-✓ 04. Step 01 & Step 02 — Move-In SHA-256 Upload, Revision Loop & Owner Lock (6.7s)
-  - Step 01: uploaded baseline room fixture (Italian Leather Recliner) with WebCrypto SHA-256 hash.
-  - Step 04 (Move-Out Audit) verified strictly locked because deposit is unpaid.
-  - Landlord magic link: extracted review URL and verified landlord portal access.
-  - Revision Loop: landlord flagged missing angle; verified "Revision Requested" banner on tenant side.
-  - Anti-collusion identity confirmation checkbox checked and baseline approved & sealed.
-
-✓ 05. Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner) (3.6s)
-  - Payment Modal: verified Stage 1 deposit escrow modal with Owner's receiving VPA.
-  - Real Phone-Scannable UPI QR verified generated as valid base64 PNG data URI.
-  - Settled payment via simulated bank UTR (UTR_TEST_DEPOSIT_99812).
-  - Step 03 marked "Deposit Escrow Locked", unlocking Step 04 Move-Out condition audit.
-
-✓ 06. Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit (5.2s)
-  - Anti-Fraud: uploaded identical byte-hash image as Move-In baseline.
-  - Verified "ANTI-FRAUD TRIGGERED" alert and verified submit button is disabled.
-  - Activated Judge Demonstration Bypass; configured tenant refund UPI.
-  - Gemini AI arbitration executed: normal wear-and-tear assessed under MTA Sec 13.
-  - Marked property vacated and AI audited.
-
-✓ 07. Step 05 — Stage 2 Final Refund Settlement with QR Isolation (2.1s)
-  - Landlord opens Step 05 Refund Modal.
-  - Verified Guest's Refund UPI QR is displayed (strictly isolated; zero landlord QR collision).
-  - Settled net refund (₹24,000) with UTR_REFUND_SETTLE_11204.
-  - Tenancy status transitioned to SETTLED.
-
-✓ 08. Step 06 — Auto-Clear Active Workspace & Settled History Stack (2.7s)
-  - Active workspace automatically cleared; settled property archived into history stack.
-  - Opened certified Society Gate Pass & No-Dues NOC.
-  - Asserted MTA 2021 statutory seal and phone-scannable gate clearance QR.
-
-✓ 09. Role-Guard Check on /tenancy/:id prevents Landlord tenant actions (1.8s)
-  - Landlord verified strictly prohibited from uploading tenant room items or paying deposit.
-
-✓ 10. Zero-Server Public Courtroom Verifier (/verify) (1.5s)
-  - Loaded sample offline certificate.
-  - Authenticated SHA-256 root cryptographic proof in zero-trust browser execution.
-
-✓ 11. User Profile Modal renders in Portal, non-clipped on 1280x720 & 375x667, with no stuck dots (3.3s)
-  - Modal rendered via ReactDOM.createPortal(..., document.body) escaping <nav> backdrop-filter containing block.
-  - Verified on 1280x720 (Laptop/Desktop): bounding box y >= 0 (no top clipping), fits within viewport.
-  - Verified live account summary statistics render real numbers immediately without stuck "..." dots.
-  - Tested Security Tab: password eye toggles switch input type between password and text.
-  - Tested Danger Zone: displays "Demo Account Protected" banner for demo accounts.
-  - Verified on 375x667 (Mobile): modal panel width <= 375px, bounding box y >= 0, fully accessible.
-  - Verified clean modal closure with no leftover backdrop.
-
-✓ 12. Backend Profile Endpoints: GET /api/auth/me, PATCH /profile, & DELETE demo protection (1.4s)
-  - GET /api/auth/me returns latest authenticated user profile with avatarUrl, address, upiId.
-  - PATCH /api/auth/profile updates profile fields (address, default receiving upiId) and issues updated JWT.
-  - DELETE /api/auth/account enforces DEMO PROTECTION (returns 403 Forbidden with "Judge Demo accounts are protected from deletion").
+--------------------------------------------------------------------------------
+TEST RESULTS SUMMARY (12/12 PASSED):
+--------------------------------------------------------------------------------
+✓ 01. IntroSplash renders & top-header "Sign In" button is interactive (5.3s)
+✓ 02. 1-Click Judge Demo Accounts & Pre-Seeded History Stack with NOC (4.8s)
+✓ 03. Fresh Tenancy Creation & Anti-Collusion Anchor (3.9s)
+✓ 04. Step 01 & Step 02 — Move-In SHA-256 Upload, Revision Loop & Owner Lock (7.8s)
+✓ 05. Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner) (3.4s)
+✓ 06. Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit (6.0s)
+✓ 07. Step 05 — Stage 2 Final Refund Settlement with QR Isolation (2.7s)
+✓ 08. Step 06 — Auto-Clear Active Workspace & Settled History Stack (2.8s)
+✓ 09. Role-Guard Check on /tenancy/:id prevents Landlord tenant actions (2.2s)
+✓ 10. Zero-Server Public Courtroom Verifier (/verify) (1.6s)
+✓ 11. User Profile Modal renders in Portal, non-clipped on 1280x720 & 375x667 (3.3s)
+✓ 12. Backend Profile Endpoints: GET /api/auth/me, PATCH /profile, & DELETE demo protection (1.5s)
 
 --------------------------------------------------------------------------------
 VERIFICATION GATES STATUS:
 --------------------------------------------------------------------------------
 - Gate 1 (Backend API & Seed Verification): 100% PASS (NestJS compile & Prisma generate 0 errors)
 - Gate 2 (Frontend Build): 100% PASS (Vite & TypeScript 0 errors, 1706 modules transformed)
-- Gate 3 (Full E2E Playwright Automation): 12/12 PASSED (0 failures, 54.2s runtime)
+- Gate 3 (Full E2E Playwright Automation): 12/12 PASSED (0 failures, 1.4m runtime)
 - Gate 4 (Git Status & Integrity): Clean, ready for commit & push
 ================================================================================

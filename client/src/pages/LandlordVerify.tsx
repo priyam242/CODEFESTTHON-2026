@@ -21,7 +21,7 @@ import {
   Sparkles,
   Camera,
 } from 'lucide-react';
-import { tenancyApi, Tenancy, getAssetUrl, fallbackFixtureSvg } from '../api';
+import { tenancyApi, paymentsApi, Tenancy, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
@@ -49,7 +49,10 @@ export const LandlordVerify: React.FC = () => {
   const [showGatePassModal, setShowGatePassModal] = useState(false);
   const [payoutModalStage, setPayoutModalStage] = useState<'DEPOSIT' | 'SETTLEMENT'>('SETTLEMENT');
   const [isRecipientSettingsOnly, setIsRecipientSettingsOnly] = useState(false);
-  const [tenantVpa, setTenantVpa] = useState('tenant.aarav@okhdfcbank');
+  const [tenantVpa, setTenantVpa] = useState('');
+  const [ownerUpiInput, setOwnerUpiInput] = useState('');
+  const [savingOwnerUpi, setSavingOwnerUpi] = useState(false);
+  const [ownerUpiSavedMsg, setOwnerUpiSavedMsg] = useState<string | null>(null);
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [isSettled, setIsSettled] = useState(false);
   const isInitialLoad = useRef(true);
@@ -61,8 +64,9 @@ export const LandlordVerify: React.FC = () => {
       setTenancy(data);
       if (typeof window !== 'undefined' && data?.id) {
         setIsSettled(data.status === 'SETTLED' || localStorage.getItem(`rentshield_settled_${data.id}`) === 'true');
-        const defaultVpa = (data as any).tenantUpi || ((data as any).user?.email ? (data as any).user.email.split('@')[0] + '@okaxis' : 'tenant.aarav@okhdfcbank');
+        const defaultVpa = (data as any).tenantUpi || '';
         setTenantVpa(defaultVpa);
+        if (data.landlordUpi) setOwnerUpiInput(data.landlordUpi);
       }
     } catch (err: any) {
       if (isInitialLoad.current) {
@@ -75,6 +79,26 @@ export const LandlordVerify: React.FC = () => {
       }
     }
   }, [landlordToken]);
+
+  const handleSaveOwnerUpi = async () => {
+    if (!tenancy || !ownerUpiInput.trim() || !landlordToken) return;
+    setSavingOwnerUpi(true);
+    try {
+      const updated = await paymentsApi.updateRecipient({
+        tenancyId: tenancy.id,
+        landlordToken,
+        landlordUpi: ownerUpiInput.trim(),
+      });
+      setTenancy(updated);
+      emitSyncEvent('TENANCY_UPDATED', tenancy.id);
+      setOwnerUpiSavedMsg('Receiving UPI ID saved!');
+      setTimeout(() => setOwnerUpiSavedMsg(null), 3000);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to save receiving UPI ID');
+    } finally {
+      setSavingOwnerUpi(false);
+    }
+  };
 
   // Real-time synchronization across browser tabs (with modal pause shield & zero flicker)
   const isModalOpen = showRevisionModal || showPayoutModal || approving;
@@ -98,8 +122,8 @@ export const LandlordVerify: React.FC = () => {
         signerFingerprint: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
         signedAt: new Date().toISOString(),
         ownerConfirmed: true,
-        agreementRef: tenancy?.agreementRef || 'BLR-IND-2026-KA-4892',
-        landlordUpi: tenancy?.landlordUpi || 'ramesh.malik@okhdfcbank',
+        agreementRef: tenancy?.agreementRef || 'None',
+        landlordUpi: tenancy?.landlordUpi || ownerUpiInput.trim() || '',
       };
 
       const updated = await tenancyApi.approveLandlordReview(landlordToken, signerData);
@@ -191,6 +215,10 @@ export const LandlordVerify: React.FC = () => {
   const isStep6Done = isSettled || tenancy.status === 'SETTLED';
   const completedStepsCount = [isStep1Done, isStep2Done, isStep3Done, isStep4Done, isStep5Done, isStep6Done].filter(Boolean).length;
 
+  // Strict Cross-Party Payment Gatekeeping
+  const hasOwnerPaymentMethod = Boolean(tenancy?.landlordUpi?.trim() || tenancy?.landlordQrUrl?.trim() || ownerUpiInput.trim());
+  const hasGuestRefundMethod = Boolean(tenancy?.tenantUpi?.trim() || tenancy?.tenantQrUrl?.trim());
+
   return (
     <div className="min-h-screen py-10 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
       {/* Top Header */}
@@ -264,6 +292,10 @@ export const LandlordVerify: React.FC = () => {
               >
                 <span>🛂 Society Gate Pass & NOC</span>
               </button>
+            </div>
+          ) : !hasGuestRefundMethod ? (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono">
+              ⏳ Waiting for Guest ({tenancy.user?.name || (tenancy as any).userName || 'Guest'}) to upload their Refund QR Code or UPI ID.
             </div>
           ) : (
             <button
@@ -385,11 +417,11 @@ export const LandlordVerify: React.FC = () => {
           </div>
           <div>
             <span className="text-slate-400 block font-mono text-[11px]">Registered UPI:</span>
-            <span className="font-mono text-emerald-400">{tenancy.landlordUpi || 'ramesh.malik@okhdfcbank'}</span>
+            <span className="font-mono text-emerald-400">{tenancy.landlordUpi || 'Not set'}</span>
           </div>
           <div>
             <span className="text-slate-400 block font-mono text-[11px]">Agreement Ref:</span>
-            <span className="font-mono text-slate-200">{tenancy.agreementRef || 'BLR-IND-2026-KA-4892'}</span>
+            <span className="font-mono text-slate-200">{tenancy.agreementRef || 'None'}</span>
           </div>
         </div>
 
@@ -434,18 +466,25 @@ export const LandlordVerify: React.FC = () => {
               </div>
               <h3 className="text-lg font-bold text-slate-100">Deposit Arbitrated by Gemini 2.5</h3>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setPayoutModalStage('SETTLEMENT');
-                setIsRecipientSettingsOnly(false);
-                setShowPayoutModal(true);
-              }}
-              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-mono transition shadow-lg shadow-emerald-500/20"
-            >
-              <QrCode className="w-4 h-4" />
-              <span>💸 Scan Guest QR / Pay Net Refund (₹{netRefund.toLocaleString('en-IN')})</span>
-            </button>
+            {hasGuestRefundMethod ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setPayoutModalStage('SETTLEMENT');
+                  setIsRecipientSettingsOnly(false);
+                  setShowPayoutModal(true);
+                }}
+                className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-mono transition shadow-lg shadow-emerald-500/20"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>💸 Scan Guest QR / Pay Net Refund (₹{netRefund.toLocaleString('en-IN')})</span>
+              </button>
+            ) : (
+              <div className="px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono inline-flex items-center space-x-2">
+                <Clock className="w-4 h-4 text-amber-400 animate-spin" />
+                <span>⏳ Waiting for Guest ({tenancy.user?.name || 'Tenant'}) to upload their Refund QR Code or UPI ID</span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-center mb-4">
@@ -619,8 +658,8 @@ export const LandlordVerify: React.FC = () => {
                 <span>Counterparty Identity Binding Cryptographically Anchored</span>
               </div>
               <div className="text-[11px] font-mono text-slate-300 space-y-1">
-                <div>Owner Rent-Receiving VPA: <span className="text-emerald-300">{tenancy.landlordUpi || 'ramesh.malik@okhdfcbank'}</span></div>
-                <div>Rental Agreement Ref ID: <span className="text-slate-100">{tenancy.agreementRef || 'BLR-IND-2026-KA-4892'}</span></div>
+                <div>Owner Rent-Receiving VPA: <span className="text-emerald-300">{tenancy.landlordUpi || 'Not set'}</span></div>
+                <div>Rental Agreement Ref ID: <span className="text-slate-100">{tenancy.agreementRef || 'None'}</span></div>
                 <div>Signer Fingerprint: <span className="text-slate-400 truncate block">{signerAuditData?.signerFingerprint || '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08'}</span></div>
                 <div>Signer IP &amp; Geolocation: <span className="text-slate-300">{signerAuditData?.signerIp || '103.212.154.42 (Bangalore, KA)'}</span></div>
                 <div>Timestamp: <span className="text-slate-400">{signerAuditData?.signedAt || new Date().toISOString()}</span></div>
@@ -641,6 +680,50 @@ export const LandlordVerify: React.FC = () => {
               </p>
             </div>
 
+            {/* Owner UPI/QR Setup Card if not configured yet */}
+            {!hasOwnerPaymentMethod && (
+              <div className="max-w-md mx-auto text-left p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+                <div className="flex items-center space-x-2 text-amber-300 font-mono text-xs font-semibold">
+                  <AlertCircle className="w-4 h-4 text-amber-400" />
+                  <span>⚠️ Action Required: Set Your UPI ID or Upload QR Code</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
+                  The guest cannot pay the ₹{Number(tenancy.depositAmount).toLocaleString('en-IN')} security deposit until you set your receiving UPI ID or upload your QR code.
+                </p>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={ownerUpiInput}
+                    onChange={(e) => setOwnerUpiInput(e.target.value)}
+                    placeholder="e.g. owner@okhdfcbank"
+                    className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-mono focus:outline-none focus:border-amber-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveOwnerUpi}
+                    disabled={savingOwnerUpi || !ownerUpiInput.trim()}
+                    className="px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs font-mono transition"
+                  >
+                    {savingOwnerUpi ? 'Saving...' : 'Save UPI'}
+                  </button>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayoutModalStage('DEPOSIT');
+                      setIsRecipientSettingsOnly(true);
+                      setShowPayoutModal(true);
+                    }}
+                    className="text-xs text-amber-400 hover:text-amber-300 underline font-mono flex items-center space-x-1"
+                  >
+                    <QrCode className="w-3.5 h-3.5 inline mr-1" />
+                    <span>Or upload your custom payment QR image</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Anti-Collusion Confirmation Checkbox */}
             <div className="max-w-md mx-auto text-left p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
               <label className="flex items-start space-x-3 cursor-pointer">
@@ -651,7 +734,7 @@ export const LandlordVerify: React.FC = () => {
                   className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-400"
                 />
                 <span className="text-xs text-slate-300 leading-relaxed font-mono">
-                  I confirm I am the legal property owner matching UPI VPA <strong className="text-emerald-400">{tenancy.landlordUpi || 'ramesh.malik@okhdfcbank'}</strong> and Rental Agreement Ref <strong className="text-slate-200">{tenancy.agreementRef || 'BLR-IND-2026-KA-4892'}</strong>.
+                  I confirm I am the legal property owner matching UPI VPA <strong className="text-emerald-400">{tenancy.landlordUpi || ownerUpiInput.trim() || 'Not set'}</strong> and Rental Agreement Ref <strong className="text-slate-200">{tenancy.agreementRef || 'None'}</strong>.
                 </span>
               </label>
             </div>
@@ -659,7 +742,7 @@ export const LandlordVerify: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
               <button
                 onClick={handleApprove}
-                disabled={approving || !ownerConfirmed}
+                disabled={approving || !ownerConfirmed || (!hasOwnerPaymentMethod && !ownerUpiInput.trim())}
                 className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-sm transition shadow-lg shadow-emerald-500/25 inline-flex items-center justify-center space-x-2"
               >
                 <FileCheck2 className="w-4 h-4" />
