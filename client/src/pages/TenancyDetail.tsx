@@ -30,6 +30,7 @@ import { tenancyApi, itemsApi, paymentsApi, Tenancy, Item, authApi, getAssetUrl,
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
+import { EscrowReceiptModal } from '../components/EscrowReceiptModal';
 import { getEscrowState } from '../utils/escrowSequence';
 
 export const TenancyDetail: React.FC = () => {
@@ -69,6 +70,7 @@ export const TenancyDetail: React.FC = () => {
   const [computedMoveOutHash, setComputedMoveOutHash] = useState<string | null>(null);
   const [showUpiModal, setShowUpiModal] = useState(false);
   const [showGatePassModal, setShowGatePassModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [paymentModalStage, setPaymentModalStage] = useState<'DEPOSIT' | 'SETTLEMENT'>('SETTLEMENT');
   const [isRecipientSettingsOnly, setIsRecipientSettingsOnly] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
@@ -462,8 +464,8 @@ export const TenancyDetail: React.FC = () => {
       }
 
       if (moveOutFile) {
-        // Clean canvas compression (max 1280px, 0.82 quality)
-        const compressed = await compressImageOnCanvas(moveOutFile);
+        // Fast 3x optimized canvas compression (max 640px, 0.68 quality) ~35-50KB for fast Gemini 3.8 Flash analysis
+        const compressed = await compressImageOnCanvas(moveOutFile, 640, 0.68);
         formData.append('photo', compressed);
       }
 
@@ -1101,13 +1103,23 @@ export const TenancyDetail: React.FC = () => {
                   <ExternalLink className="w-3 h-3 ml-0.5" />
                 </Link>
                 {(isStep6Done || tenancy.status === 'SETTLED') && (
-                  <button
-                    type="button"
-                    onClick={() => setShowGatePassModal(true)}
-                    className="mt-2 w-full inline-flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 text-xs font-mono font-bold transition shadow-md shadow-emerald-500/20 active:scale-95"
-                  >
-                    <span>🛂 Society Gate Pass &amp; NOC</span>
-                  </button>
+                  <div className="mt-2 space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowGatePassModal(true)}
+                      className="w-full inline-flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 text-xs font-mono font-bold transition shadow-md shadow-emerald-500/20 active:scale-95"
+                    >
+                      <span>🛂 Society Gate Pass &amp; NOC</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowReceiptModal(true)}
+                      className="w-full inline-flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/35 text-cyan-300 text-xs font-mono font-bold transition shadow-sm active:scale-95"
+                    >
+                      <Receipt className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>🧾 Download / Print Settlement Receipt</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -1173,13 +1185,23 @@ export const TenancyDetail: React.FC = () => {
                         </span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowGatePassModal(true)}
-                      className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap self-start sm:self-center"
-                    >
-                      <span>🛂 View / Print Society Gate Pass &amp; NOC</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowGatePassModal(true)}
+                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs transition shadow-md shadow-emerald-500/20 whitespace-nowrap"
+                      >
+                        <span>🛂 View / Print Society Gate Pass &amp; NOC</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowReceiptModal(true)}
+                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 font-bold font-mono text-xs transition shadow-sm whitespace-nowrap"
+                      >
+                        <Receipt className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>🧾 Download / Print Settlement Receipt</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -2209,6 +2231,15 @@ export const TenancyDetail: React.FC = () => {
         <SocietyGatePassModal
           isOpen={true}
           onClose={() => setShowGatePassModal(false)}
+          tenancy={tenancy}
+        />
+      )}
+
+      {/* Official Escrow Settlement Receipt Modal */}
+      {showReceiptModal && (
+        <EscrowReceiptModal
+          isOpen={true}
+          onClose={() => setShowReceiptModal(false)}
           tenancy={tenancy}
         />
       )}

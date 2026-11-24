@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
   Shield,
   CheckCircle2,
@@ -21,11 +21,14 @@ import {
   Copy,
   Sparkles,
   Camera,
+  ArrowLeft,
+  Receipt,
 } from 'lucide-react';
 import { tenancyApi, paymentsApi, Tenancy, getAssetUrl, fallbackFixtureSvg } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
+import { EscrowReceiptModal } from '../components/EscrowReceiptModal';
 import { getEscrowState } from '../utils/escrowSequence';
 
 export const LandlordVerify: React.FC = () => {
@@ -49,6 +52,7 @@ export const LandlordVerify: React.FC = () => {
   // Owner Payout UPI Modal & Settlement State
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [showGatePassModal, setShowGatePassModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [payoutModalStage, setPayoutModalStage] = useState<'DEPOSIT' | 'SETTLEMENT'>('SETTLEMENT');
   const [isRecipientSettingsOnly, setIsRecipientSettingsOnly] = useState(false);
   const [tenantVpa, setTenantVpa] = useState('');
@@ -247,7 +251,18 @@ export const LandlordVerify: React.FC = () => {
   const hasGuestRefundMethod = Boolean(tenancy?.tenantUpi?.trim() || tenancy?.tenantQrUrl?.trim());
 
   return (
-    <div className="min-h-screen py-10 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+    <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+      {/* Top Navigation: Back to Dashboard */}
+      <div className="flex items-center justify-between mb-6">
+        <Link
+          to={localStorage.getItem('token') ? '/dashboard' : '/login'}
+          className="inline-flex items-center space-x-2 text-xs font-semibold text-slate-400 hover:text-emerald-400 transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>← Back to Dashboard</span>
+        </Link>
+      </div>
+
       {/* Top Header */}
       <div className="text-center mb-8">
         <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 mb-3 shadow-lg shadow-emerald-500/10">
@@ -318,6 +333,14 @@ export const LandlordVerify: React.FC = () => {
                 className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-semibold transition"
               >
                 <span>🛂 Society Gate Pass & NOC</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowReceiptModal(true)}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-semibold transition"
+              >
+                <Receipt className="w-3.5 h-3.5 text-cyan-400" />
+                <span>🧾 Download / Print Settlement Receipt</span>
               </button>
             </div>
           ) : excessDamage > 0 ? (
@@ -911,6 +934,15 @@ export const LandlordVerify: React.FC = () => {
         <SocietyGatePassModal
           isOpen={showGatePassModal}
           onClose={() => setShowGatePassModal(false)}
+          tenancy={tenancy}
+        />
+      )}
+
+      {/* Official Escrow Settlement Receipt Modal */}
+      {showReceiptModal && (
+        <EscrowReceiptModal
+          isOpen={showReceiptModal}
+          onClose={() => setShowReceiptModal(false)}
           tenancy={tenancy}
         />
       )}

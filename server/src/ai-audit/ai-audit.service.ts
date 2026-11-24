@@ -33,6 +33,7 @@ export class AiAuditService {
   private readonly logger = new Logger(AiAuditService.name);
   private geminiApiKey: string | null = null;
   private discoveredModels: string[] | null = null;
+  private cachedWorkingModel: string | null = null;
 
   constructor() {
     const rawKey =
@@ -205,7 +206,10 @@ export class AiAuditService {
 
     const discovered = await this.discoverAvailableModels();
     const primaryModels = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-hydrogen', 'gemini-2.5-flash-lite'];
-    const candidateModels = Array.from(new Set([...primaryModels, ...discovered]));
+    const allCandidates = Array.from(new Set([...primaryModels, ...discovered]));
+    const candidateModels = this.cachedWorkingModel
+      ? [this.cachedWorkingModel, ...allCandidates.filter((m) => m !== this.cachedWorkingModel)]
+      : allCandidates;
     let lastError: string | null = null;
 
     for (const model of candidateModels) {
@@ -220,6 +224,10 @@ export class AiAuditService {
                 parts: [{ text: 'Ping: Reply with PONG' }],
               },
             ],
+            generationConfig: {
+              maxOutputTokens: 20,
+              temperature: 0.1,
+            },
           }),
           signal: AbortSignal.timeout(5000),
         });
@@ -228,6 +236,7 @@ export class AiAuditService {
           const json: any = await res.json();
           const reply = json?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (reply) {
+            this.cachedWorkingModel = model;
             return {
               ok: true,
               keyConfigured: true,
@@ -270,7 +279,10 @@ export class AiAuditService {
 
     const discovered = await this.discoverAvailableModels();
     const primaryModels = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-hydrogen', 'gemini-2.5-flash-lite'];
-    const modelsToTry = Array.from(new Set([...primaryModels, ...discovered]));
+    const candidateModels = Array.from(new Set([...primaryModels, ...discovered]));
+    const modelsToTry = this.cachedWorkingModel
+      ? [this.cachedWorkingModel, ...candidateModels.filter((m) => m !== this.cachedWorkingModel)]
+      : candidateModels;
 
     const parts: any[] = [{ text: prompt }];
 
@@ -292,13 +304,17 @@ export class AiAuditService {
       });
     }
 
-    // Standard Gemini 3.8 / 3.5+ clean REST payload without deprecated sampling parameters
+    // Standard Gemini 3.8 / 3.5+ clean REST payload with fast output token cap (<2.5s response)
     const payload = {
       contents: [
         {
           parts,
         },
       ],
+      generationConfig: {
+        maxOutputTokens: 350,
+        temperature: 0.1,
+      },
     };
 
     for (const model of modelsToTry) {
@@ -315,18 +331,26 @@ export class AiAuditService {
           const errText = await response.text();
           console.error('[AiAuditService] Gemini HTTP Failure:', model, response.status, errText);
           this.logger.warn(`Gemini REST model ${model} HTTP ${response.status}: ${errText.substring(0, 180)}`);
+          // If the cached model failed, clear it so next model can be tried
+          if (this.cachedWorkingModel === model) {
+            this.cachedWorkingModel = null;
+          }
           continue;
         }
 
         const json: any = await response.json();
         const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text && typeof text === 'string') {
-          this.logger.log(`[AiAuditService] Real Gemini REST (${model}) successfully generated verdict!`);
+          this.cachedWorkingModel = model;
+          this.logger.log(`[AiAuditService] Real Gemini REST (${model}) successfully generated verdict! (Cached)`);
           return text.trim();
         }
       } catch (err: any) {
         console.error('[AiAuditService] Gemini REST model error:', model, err?.message);
         this.logger.warn(`Gemini REST model ${model} error: ${err?.message}`);
+        if (this.cachedWorkingModel === model) {
+          this.cachedWorkingModel = null;
+        }
       }
     }
 
@@ -382,7 +406,7 @@ Respond ONLY with a JSON object in this exact schema, with no markdown fences:
   "preExistingNotes": "Baseline notes",
   "newDamageDetected": "Specific damage or None",
   "legalBasis": "Model Tenancy Act 2021 Sec 13 / Sec 15",
-  "explanation": "Clear professional ruling under 45 words citing MTA 2021",
+  "explanation": "Clear professional ruling in 1-2 concise sentences under 30 words citing MTA 2021",
   "suggestedCut": number
 }`;
 

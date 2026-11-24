@@ -27,6 +27,7 @@ import { Tenancy, tenancyApi, authApi, api } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
+import { EscrowReceiptModal } from '../components/EscrowReceiptModal';
 import { getEscrowState } from '../utils/escrowSequence';
 
 export const Dashboard: React.FC = () => {
@@ -41,6 +42,10 @@ export const Dashboard: React.FC = () => {
   // Society Move-Out Gate Pass & No-Dues NOC Modal State
   const [showGatePassModal, setShowGatePassModal] = useState(false);
   const [gatePassTenancy, setGatePassTenancy] = useState<Tenancy | null>(null);
+
+  // Escrow Settlement Receipt Modal State
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptTenancy, setReceiptTenancy] = useState<Tenancy | null>(null);
 
   // Real Phone-Scannable Payment & Settlement Modal State
   const [selectedPaymentTenancy, setSelectedPaymentTenancy] = useState<Tenancy | null>(null);
@@ -833,6 +838,17 @@ export const Dashboard: React.FC = () => {
                       <ShieldCheck className="w-3.5 h-3.5" />
                       <span>🛂 View / Print Society Gate Pass &amp; NOC</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReceiptTenancy(tenancy);
+                        setShowReceiptModal(true);
+                      }}
+                      className="w-full py-2 px-3 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 text-cyan-300 hover:text-slate-950 border border-cyan-500/35 text-xs font-bold font-mono transition text-center flex items-center justify-center space-x-1.5 shadow-sm"
+                    >
+                      <Receipt className="w-3.5 h-3.5" />
+                      <span>🧾 Download / Print Settlement Receipt</span>
+                    </button>
                     <Link
                       to={`/verify?id=${tenancy.id}`}
                       className="flex-1 py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-semibold font-mono transition text-center flex items-center justify-center space-x-1 shadow-sm"
@@ -880,6 +896,18 @@ export const Dashboard: React.FC = () => {
             setGatePassTenancy(null);
           }}
           tenancy={gatePassTenancy}
+        />
+      )}
+
+      {/* Official Escrow Settlement Receipt Modal */}
+      {showReceiptModal && receiptTenancy && (
+        <EscrowReceiptModal
+          isOpen={showReceiptModal}
+          onClose={() => {
+            setShowReceiptModal(false);
+            setReceiptTenancy(null);
+          }}
+          tenancy={receiptTenancy}
         />
       )}
     </div>
