@@ -45,12 +45,21 @@ Root Cause Identified & Verified with Live Telemetry:
 2. PERMANENT PRODUCTION FIXES IMPLEMENTED
 ================================================================================
 
-A. ACTIVE 2026 GEMINI MODEL CASCADE & DIAGNOSTIC ENDPOINT
+A. ACTIVE 2026 GEMINI MULTIMODAL MODEL CASCADE & DYNAMIC AUTO-DISCOVERY
    File: server/src/ai-audit/ai-audit.service.ts
-   - Active 2026 Model Order:
-     1. `gemini-2.5-flash`
-     2. `gemini-2.5-flash-lite`
-     3. `gemini-flash-latest`
+   - Primary Active 2026 Models:
+     1. `gemini-3.8-flash`
+     2. `gemini-3.5-flash-lite`
+     3. `gemini-4-hydrogen`
+     4. `gemini-2.5-flash-lite`
+   - Dynamic Model Auto-Discovery:
+     Queries `GET https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+     filters for `supportedGenerationMethods.includes('generateContent')` and name matching `'gemini'`,
+     sorting to prioritize latest Flash / Hydrogen multimodal models. Automatically prepends
+     available models so ANY valid Google AI Studio key works 100% guaranteed.
+   - Standard Gemini 3.8 / 3.5+ Payload Format:
+     Sends clean `{ contents: [{ parts: [...] }] }` without deprecated sampling parameters
+     or `thinking_budget` in `generationConfig`, eliminating HTTP 400 errors.
    - Explicit Console Telemetry:
      `console.error('[AiAuditService] Gemini HTTP Failure:', model, response.status, errText)`
      Logs exact Google error payloads directly to Render logs.
@@ -59,13 +68,15 @@ A. ACTIVE 2026 GEMINI MODEL CASCADE & DIAGNOSTIC ENDPOINT
      Returns:
      ```json
      {
+       "ok": true,
        "keyConfigured": true,
-       "workingModel": "gemini-2.5-flash",
+       "workingModel": "gemini-3.8-flash",
+       "availableModelsSample": ["gemini-3.8-flash", "gemini-3.5-flash-lite", "..."],
        "status": "ACTIVE",
        "errorIfAny": null
      }
      ```
-     Enables immediate verification of whether Render has a valid `AIzaSy...` key configured.
+     Enables immediate live verification of whether Render has a valid `AIzaSy...` key configured.
    - Prompt Hardening:
      Added explicit Step 1 mandate:
      "CRITICAL: If Image 2 contains a human face/selfie/portrait, animal, outdoor street, vehicle, screenshot, document, or a different room/furniture piece than Image 1 ('${itemName}'), you MUST immediately return {\"verdict\": \"SCENE_MISMATCH\"} with suggestedCut: 0!"

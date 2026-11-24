@@ -115,7 +115,7 @@ export const Login: React.FC = () => {
               Stop Losing <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-amber-300 bg-clip-text text-transparent">40% of Your Rental Deposit</span> to Unfair Claims.
             </h1>
             <p className="mt-4 text-sm sm:text-base text-slate-400 max-w-xl leading-relaxed">
-              RentShield turns move-in room photos into immutable SHA-256 cryptographic hashes right in your browser, backed by Gemini 2.5 Flash multimodal damage arbitration and zero-server byte verification.
+              RentShield turns move-in room photos into immutable SHA-256 cryptographic hashes right in your browser, backed by Gemini 3.8 Flash multimodal damage arbitration and zero-server byte verification.
             </p>
           </div>
 
@@ -161,7 +161,7 @@ export const Login: React.FC = () => {
               </div>
               <div>
                 <div className="text-xs font-bold text-slate-100 flex items-center space-x-2">
-                  <span>03 Gemini 2.5 Flash INR Arbitration</span>
+                  <span>03 Gemini 3.8 Flash INR Arbitration</span>
                   <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">Multimodal AI</span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">

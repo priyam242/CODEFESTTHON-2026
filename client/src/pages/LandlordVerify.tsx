@@ -523,7 +523,7 @@ export const LandlordVerify: React.FC = () => {
                 <Sparkles className="w-4 h-4" />
                 <span>Move-Out AI Settlement &amp; Audit Breakdown</span>
               </div>
-              <h3 className="text-lg font-bold text-slate-100">Deposit Arbitrated by Gemini 2.5</h3>
+              <h3 className="text-lg font-bold text-slate-100">Deposit Arbitrated by Gemini 3.8 Flash</h3>
             </div>
             {isSettled || tenancy.status === 'SETTLED' ? (
               <div className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono">

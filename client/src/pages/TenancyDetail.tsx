@@ -87,7 +87,7 @@ export const TenancyDetail: React.FC = () => {
 
   const aiStatuses = [
     'Hashing move-out raw byte stream (Web Crypto SHA-256)...',
-    'Comparing baseline vs move-out pixels with Gemini 2.5 Flash...',
+    'Comparing baseline vs move-out pixels with Gemini 3.8 Flash...',
     'Arbitrating Indian Tenancy Act wear & tear vs tenant damages...',
     'Computing transparent INR settlement deduction...',
   ];
@@ -2010,7 +2010,7 @@ export const TenancyDetail: React.FC = () => {
                     <Sparkles className="w-6 h-6 animate-spin" />
                   </div>
                   <div className="font-mono text-xs text-emerald-300 font-bold uppercase tracking-wider">
-                    Gemini 2.5 Flash Neural Arbitration in Progress
+                    Gemini 3.8 Flash Neural Arbitration in Progress
                   </div>
                   <p className="font-mono text-xs text-slate-300 transition-all duration-300">
                     {aiStatuses[aiStatusIdx]}

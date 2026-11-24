@@ -32,6 +32,7 @@ export interface SpatialColorSample {
 export class AiAuditService {
   private readonly logger = new Logger(AiAuditService.name);
   private geminiApiKey: string | null = null;
+  private discoveredModels: string[] | null = null;
 
   constructor() {
     const rawKey =
@@ -125,28 +126,89 @@ export class AiAuditService {
   }
 
   /**
+   * Dynamically auto-discovers supported active generation models from /v1beta/models
+   * Filters for generateContent + multimodal gemini flash/hydrogen models.
+   */
+  public async discoverAvailableModels(): Promise<string[]> {
+    if (this.discoveredModels && this.discoveredModels.length > 0) {
+      return this.discoveredModels;
+    }
+    const defaultModels = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-hydrogen', 'gemini-2.5-flash-lite'];
+    if (!this.geminiApiKey) {
+      return defaultModels;
+    }
+
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${this.geminiApiKey}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      if (res.ok) {
+        const json: any = await res.json();
+        const models: any[] = json?.models || [];
+        const supported = models
+          .filter((m) => {
+            const methods: string[] = m.supportedGenerationMethods || [];
+            const name: string = (m.name || '').toLowerCase();
+            return methods.includes('generateContent') && name.includes('gemini');
+          })
+          .map((m) => (m.name || '').replace(/^models\//, ''))
+          .filter(Boolean);
+
+        if (supported.length > 0) {
+          // Sort to prioritize 3.8, 3.5, 4, flash, lite
+          const sorted = supported.sort((a, b) => {
+            const score = (name: string) => {
+              let s = 0;
+              const n = name.toLowerCase();
+              if (n.includes('3.8')) s += 50;
+              if (n.includes('3.5')) s += 40;
+              if (n.includes('4-') || n.includes('hydrogen')) s += 35;
+              if (n.includes('flash')) s += 20;
+              if (n.includes('lite')) s += 10;
+              return -s;
+            };
+            return score(a) - score(b);
+          });
+          this.discoveredModels = sorted;
+          this.logger.log(`[AiAuditService] Auto-discovered ${sorted.length} active Gemini models: ${sorted.slice(0, 5).join(', ')}`);
+          return this.discoveredModels;
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`[AiAuditService] Could not auto-discover models: ${err?.message}`);
+    }
+
+    return defaultModels;
+  }
+
+  /**
    * Safe diagnostic health-check endpoint for Gemini Vision
-   * Returns live status and active model for deployment verification.
+   * Returns live status, active model, and available model list for deployment verification.
    */
   async checkHealth(): Promise<{
+    ok: boolean;
     keyConfigured: boolean;
     workingModel: string | null;
+    availableModelsSample: string[];
     status: 'ACTIVE' | 'ERROR' | 'NO_API_KEY';
     errorIfAny: string | null;
   }> {
     if (!this.geminiApiKey) {
       return {
+        ok: false,
         keyConfigured: false,
         workingModel: null,
+        availableModelsSample: [],
         status: 'NO_API_KEY',
         errorIfAny: 'No GEMINI_API_KEY, GOOGLE_API_KEY, or VITE_GEMINI_API_KEY found in environment',
       };
     }
 
-    const testModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
+    const discovered = await this.discoverAvailableModels();
+    const primaryModels = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-hydrogen', 'gemini-2.5-flash-lite'];
+    const candidateModels = Array.from(new Set([...primaryModels, ...discovered]));
     let lastError: string | null = null;
 
-    for (const model of testModels) {
+    for (const model of candidateModels) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
       try {
         const res = await fetch(url, {
@@ -158,7 +220,6 @@ export class AiAuditService {
                 parts: [{ text: 'Ping: Reply with PONG' }],
               },
             ],
-            generationConfig: { temperature: 0.1 },
           }),
           signal: AbortSignal.timeout(5000),
         });
@@ -168,8 +229,10 @@ export class AiAuditService {
           const reply = json?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (reply) {
             return {
+              ok: true,
               keyConfigured: true,
               workingModel: model,
+              availableModelsSample: candidateModels.slice(0, 8),
               status: 'ACTIVE',
               errorIfAny: null,
             };
@@ -185,8 +248,10 @@ export class AiAuditService {
     }
 
     return {
+      ok: false,
       keyConfigured: true,
       workingModel: null,
+      availableModelsSample: candidateModels.slice(0, 8),
       status: 'ERROR',
       errorIfAny: lastError,
     };
@@ -194,7 +259,7 @@ export class AiAuditService {
 
   /**
    * Directly invokes official Google v1beta REST endpoint with native inline_data: { mime_type, data }
-   * Avoids SDK silent failures and tries active 2026 models in order: gemini-2.5-flash, gemini-2.5-flash-lite, gemini-flash-latest.
+   * Avoids SDK silent failures and tries active 2026 models in order: gemini-3.8-flash, gemini-3.5-flash-lite, gemini-4-hydrogen, gemini-2.5-flash-lite.
    */
   private async callGeminiRest(
     prompt: string,
@@ -203,7 +268,10 @@ export class AiAuditService {
   ): Promise<string | null> {
     if (!this.geminiApiKey) return null;
 
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
+    const discovered = await this.discoverAvailableModels();
+    const primaryModels = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-hydrogen', 'gemini-2.5-flash-lite'];
+    const modelsToTry = Array.from(new Set([...primaryModels, ...discovered]));
+
     const parts: any[] = [{ text: prompt }];
 
     if (moveInPart) {
@@ -224,15 +292,13 @@ export class AiAuditService {
       });
     }
 
+    // Standard Gemini 3.8 / 3.5+ clean REST payload without deprecated sampling parameters
     const payload = {
       contents: [
         {
           parts,
         },
       ],
-      generationConfig: {
-        temperature: 0.1,
-      },
     };
 
     for (const model of modelsToTry) {

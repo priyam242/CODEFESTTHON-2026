@@ -154,7 +154,7 @@ export const Navbar: React.FC = () => {
             <div className="flex items-center space-x-2 sm:space-x-3 relative z-50 pointer-events-auto">
               <div className="hidden sm:inline-flex items-center space-x-2 text-xs font-mono px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 shadow-sm shadow-emerald-500/10 pointer-events-none select-none">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="text-[11px] font-semibold">Gemini 2.5 Flash + WebCrypto Active</span>
+                <span className="text-[11px] font-semibold">Gemini 3.8 Flash + WebCrypto Active</span>
               </div>
               <Link
                 to="/verify"
