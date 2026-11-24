@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import QRCode from 'qrcode';
 import {
   ShieldCheck,
@@ -72,8 +73,8 @@ export const SocietyGatePassModal: React.FC<SocietyGatePassModalProps> = ({
     window.print();
   };
 
-  return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
       {/* Print-specific style block to ensure crisp printable layout */}
       <style>{`
         @media print {
@@ -100,7 +101,7 @@ export const SocietyGatePassModal: React.FC<SocietyGatePassModalProps> = ({
         }
       `}</style>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-4 sm:p-8 shadow-2xl relative max-h-[92vh] overflow-y-auto">
         {/* Modal Top Actions */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6 no-print">
           <div className="flex items-center space-x-2 text-emerald-400 font-mono text-xs font-bold uppercase tracking-wider">
@@ -129,7 +130,7 @@ export const SocietyGatePassModal: React.FC<SocietyGatePassModalProps> = ({
         {/* Printable Document Container */}
         <div
           id="society-gate-pass-printable"
-          className="rounded-2xl bg-white text-slate-900 p-6 sm:p-8 shadow-lg border border-slate-200 relative overflow-hidden"
+          className="rounded-2xl bg-white text-slate-900 p-4 sm:p-8 shadow-lg border border-slate-200 relative overflow-hidden overflow-x-auto max-w-full"
         >
           {/* Subtle Watermark Stamp */}
           <div className="absolute -right-8 -bottom-8 pointer-events-none opacity-5">
@@ -316,7 +317,8 @@ export const SocietyGatePassModal: React.FC<SocietyGatePassModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 export default SocietyGatePassModal;

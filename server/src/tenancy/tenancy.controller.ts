@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { TenancyService } from './tenancy.service';
 import { CreateTenancyDto } from './dto/create-tenancy.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller(['tenancy', 'tenancies'])
 export class TenancyController {
@@ -26,15 +26,17 @@ export class TenancyController {
     return this.tenancyService.notifyOwner(id, req.user);
   }
 
-  // Settlement endpoints (supported via PATCH & POST for maximum compatibility)
+  // Settlement endpoints (supported via PATCH & POST with caller authorization)
+  @UseGuards(OptionalJwtAuthGuard)
   @Patch(':id/settle')
-  async settleTenancyPatch(@Param('id') id: string, @Body() body: any) {
-    return this.tenancyService.settle(id, body);
+  async settleTenancyPatch(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.tenancyService.settle(id, body, req?.user);
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Post(':id/settle')
-  async settleTenancyPost(@Param('id') id: string, @Body() body: any) {
-    return this.tenancyService.settle(id, body);
+  async settleTenancyPost(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.tenancyService.settle(id, body, req?.user);
   }
 
   // Public certificate & hash verification endpoints (NO auth needed)

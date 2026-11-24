@@ -73,21 +73,35 @@ export class PaymentsService {
    * Validate caller authorization against tenancy
    */
   private validateCaller(tenancy: any, user?: any, landlordToken?: string) {
+    let isLandlord = false;
+    let isTenant = false;
+
     if (landlordToken && tenancy.landlordToken === landlordToken) {
-      return { isLandlord: true, isTenant: false };
+      isLandlord = true;
     }
     if (user) {
-      const isTenant = tenancy.userId === user.id;
-      const isLandlord =
-        user.role === 'LANDLORD' &&
+      if (tenancy.userId === user.id || (user.email && tenancy.user?.email && user.email.toLowerCase() === tenancy.user.email.toLowerCase())) {
+        isTenant = true;
+      }
+      if (
+        (user.role === 'LANDLORD' || user.email) &&
         tenancy.landlordEmail &&
-        tenancy.landlordEmail.toLowerCase() === user.email?.toLowerCase();
-      if (isTenant || isLandlord) {
-        return { isTenant, isLandlord };
+        user.email &&
+        tenancy.landlordEmail.toLowerCase() === user.email.toLowerCase()
+      ) {
+        isLandlord = true;
       }
     }
-    // If no user & no token was provided, permit local tests/hooks
-    return { isTenant: true, isLandlord: true };
+
+    if (!isLandlord && !isTenant && !user && !landlordToken) {
+      return { isTenant: true, isLandlord: true };
+    }
+
+    if (!isLandlord && !isTenant) {
+      throw new ForbiddenException('Unauthorized: You are not an authorized party to this tenancy agreement.');
+    }
+
+    return { isTenant, isLandlord };
   }
 
   /**
@@ -148,6 +162,7 @@ export class PaymentsService {
             propertyTitle: tenancy.propertyTitle,
           },
         }),
+        signal: AbortSignal.timeout(8000),
       });
 
       if (!response.ok) {
@@ -364,7 +379,7 @@ export class PaymentsService {
   }
 
   /**
-   * Allow saving recipient's custom UPI / QR preferences independently
+   * Allow saving recipient's custom UPI / QR preferences independently with strict party isolation
    */
   async updateRecipientUpi(dto: {
     tenancyId?: string;
@@ -376,7 +391,18 @@ export class PaymentsService {
     tenantQrUrl?: string;
   }, user?: any) {
     const tenancy = await this.findTenancy(dto.tenancyId || dto.landlordToken || '');
-    this.validateCaller(tenancy, user, dto.landlordToken);
+    const caller = this.validateCaller(tenancy, user, dto.landlordToken);
+
+    const hasTenantUpdates = dto.tenantUpi !== undefined || dto.tenantQrUrl !== undefined;
+    const hasLandlordUpdates =
+      dto.landlordUpi !== undefined || dto.landlordQrUrl !== undefined || dto.customQrUrl !== undefined;
+
+    if (hasTenantUpdates && !caller.isTenant) {
+      throw new ForbiddenException('Forbidden: Only the Tenant can update their refund UPI ID and QR code.');
+    }
+    if (hasLandlordUpdates && !caller.isLandlord) {
+      throw new ForbiddenException('Forbidden: Only the Landlord can update their deposit UPI ID and QR code.');
+    }
 
     const updatePayload: any = {};
     if (dto.tenantUpi !== undefined) updatePayload.tenantUpi = dto.tenantUpi;

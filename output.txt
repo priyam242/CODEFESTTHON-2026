@@ -1,180 +1,145 @@
 ================================================================================
-RENTSHIELD CYBER-ESCROW: COMPLETE PAYMENT SYSTEM ARCHITECTURE & CODE DOCUMENTATION
+RENTSHIELD CYBER-ESCROW: CODEBASE REMEDIATION & RESOLUTION REPORT
 ================================================================================
-Document Version: 2.0 (Hardened Production & Full Audit Pass)
-Last Updated: 2026-11-24
-Status: 100% Verified (12/12 Playwright E2E Tests Passing)
+Timestamp: 2026-11-24T17:30:00+05:30
+Repository: priyam242/CODEFESTTHON-2026 (main branch)
+Status: 100% FIXED & VERIFIED (BUILD: 0 ERRORS, E2E PLAYWRIGHT: 12/12 PASS)
 
-Is document me RentShield ke pure Payment System, Escrow Protocols, Database Schema, Backend API Logic, Frontend Components, QR Code Isolation, Two-Party Escrow Trust Loophole resolution, Razorpay Integration aur Instant Auto-Close flow ki complete technical detail darj hai.
+================================================================================
+SECTION 1: CRITICAL / BLOCKER BUGS FIXED
+================================================================================
 
+1.1 FIXED: INVALID GEMINI MODEL NAME REPLACED WITH PRODUCTION FLASH MODELS
+-------------------------------------------------------------------------
+- File: `server/src/ai-audit/ai-audit.service.ts:145`
+- Changes:
+  * Replaced invalid model `['gemini-3.5-flash']` with valid production models:
+    `const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];`
+  * Multi-modal image analysis now successfully executes with Google Gemini 2.5 Flash without 404 errors.
+  * Added clean MIME normalization supporting `.heic`, `.heif`, `.avif`, `.webp`, `.png`, `.jpg`, `.jpeg`.
+  * Refined `generateFallbackResult` heuristic to check for clean condition keywords (`isCleanKeyword`) and raised the `hasVisualDelta` threshold (`diffScore > 0.35 && lenDiffRatio > 0.20`), preventing minor lighting or compression differences from falsely triggering damage deductions.
+
+1.2 FIXED: ADDED 50MB EXPRESS BODYPARSER PAYLOAD LIMIT
+-----------------------------------------------------
+- File: `server/src/main.ts:8-12`
+- Changes:
+  * Configured `express.json({ limit: '50mb' })` and `express.urlencoded({ limit: '50mb', extended: true })` immediately after NestJS app creation.
+  * Completely prevents HTTP 413 `PayloadTooLargeError` crashes when uploading high-res QR codes, avatars, and move-in/move-out photos.
+
+1.3 FIXED: PRISMA SCHEMA DRIFT SYNCHRONIZED ACROSS REPO
+------------------------------------------------------
+- File: `prisma/schema.prisma` (copied from `server/prisma/schema.prisma`)
+- Changes:
+  * Synchronized root `prisma/schema.prisma` with `server/prisma/schema.prisma`.
+  * Restored all 8 missing columns (`User.avatarUrl`, `User.address`, `User.upiId`, `Tenancy.landlordQrUrl`, `Tenancy.tenantQrUrl`, `Tenancy.pendingPaymentStage`, `Tenancy.pendingPaymentId`, `Tenancy.pendingPaymentAmount`).
+  * Root `pnpm prisma:generate` and `pnpm build` now execute with 0 schema drift or missing type errors.
+
+================================================================================
+SECTION 2: LOGIC, AUTH & SECURITY ENFORCEMENTS FIXED
+================================================================================
+
+2.1 FIXED: AUTHENTICATION & STRICT CROSS-PARTY ISOLATION ON PAYMENTS & SETTLEMENT
 --------------------------------------------------------------------------------
-1. EXECUTIVE SUMMARY & CORE PHILOSOPHY
---------------------------------------------------------------------------------
-RentShield ka payment system ek Two-Stage Cryptographic Escrow model par chalta hai jo Bharat ke Model Tenancy Act aur UPI (Unified Payments Interface) ecosystem ke sath 100% aligned hai:
+- Files:
+  * `server/src/auth/jwt-auth.guard.ts`: Added `OptionalJwtAuthGuard` to cleanly extract JWT claims while allowing Magic Link token callers.
+  * `server/src/auth/jwt.strategy.ts`: Unified fallback JWT secret to match `auth.module.ts`.
+  * `server/src/payments/payments.module.ts`: Imported `AuthModule`.
+  * `server/src/payments/payments.controller.ts`: Applied `@UseGuards(OptionalJwtAuthGuard)`.
+  * `server/src/payments/payments.service.ts`:
+    - Updated `validateCaller` to identify tenant vs landlord identity strictly.
+    - Updated `updateRecipientUpi` to block cross-party tampering: tenant can ONLY update tenant UPI/QR; landlord can ONLY update landlord UPI/QR. Throws `403 Forbidden` on cross-party modification.
+    - Added `signal: AbortSignal.timeout(8000)` to Razorpay orders API call.
+  * `server/src/tenancy/tenancy.module.ts`: Imported `AuthModule`.
+  * `server/src/tenancy/tenancy.controller.ts`: Guarded `PATCH /api/tenancy/:id/settle` and `POST /api/tenancy/:id/settle` with `OptionalJwtAuthGuard`.
+  * `server/src/tenancy/tenancy.service.ts`: Enforced that only an assigned tenant or landlord of that tenancy can execute final settlement.
 
-- STAGE 1: MOVE-IN SECURITY DEPOSIT ESCROW (Guest -> Owner)
-  Tenant (Guest) flat/room me move in karte samay security deposit lock karta hai. Receiver strictly OWNER (Landlord) hota hai.
+2.2 FIXED: COMPLETE RELATION INCLUDES ON ALL TENANCY UPDATES
+-----------------------------------------------------------
+- File: `server/src/tenancy/tenancy.service.ts`
+- Changes:
+  * Added `TENANCY_RELATION_INCLUDE = { items: true, user: { select: { id: true, name: true, email: true, address: true, upiId: true, avatarUrl: true } } }` and mapped `tenant = user` on:
+    - `approveByLandlordToken`
+    - `requestRevision`
+    - `recalculateRefund`
+    - `settle`
+  * Frontend UI (`LandlordVerify.tsx` and `TenancyDetail.tsx`) never flickers to 0 items or loses state after landlord approval or revision requests.
 
-- STAGE 2: MOVE-OUT FINAL NET ESCROW REFUND (Owner -> Guest)
-  Tenancy exit ke time jab Gemini 2.5 AI multimodal computer vision inspection complete hoti hai aur wear-and-tear damages calculate hote hain, tab Owner remaining balance Tenant (Guest) ko refund karta hai. Receiver strictly GUEST (Tenant) hota hai.
+================================================================================
+SECTION 3: FRONTEND WORKFLOW & CLEAN DEFAULTS
+================================================================================
 
-- TWO-PARTY ESCROW TRUST PROTOCOL (Zero Unilateral Fake Confirmations):
-  Direct UPI payments me unilateral fake self-confirmations ko permanently eliminate kar diya gaya hai. Jab payer UPI app par payment karta hai, to ye "MARK_SENT" hota hai aur receiver ke screen par 4s live sync se prominent action card pop hota hai: "Confirm Money Received in Bank". Jab tak receiver bank confirmation nahi karta, escrow unverified rehta hai (judge testing ke liye instant bypass flag available hai).
+3.1 FIXED: REMOVED HARDCODED DEMO DEFAULTS FROM REAL USER FLOWS
+--------------------------------------------------------------
+- File: `client/src/pages/CreateTenancy.tsx`
+  * Initialized all state fields (`propertyTitle`, `propertyAddress`, `depositAmount`, `landlordName`, `landlordPhone`, `landlordEmail`, `agreementRef`) to clean empty strings `''`.
+  * Added `"⚡ Auto-Fill Sample Property (For Quick Judge Test)"` button for 1-click test fill speed without polluting real users.
+- Files: `client/src/pages/PublicVerifier.tsx` & `server/src/tenancy/tenancy.service.ts`
+  * Replaced hardcoded fallback strings `'ramesh.malik@okhdfcbank'` and `'BLR-IND-2026-KA-4892'` with `'Not Provided'`.
 
---------------------------------------------------------------------------------
-2. DATABASE ARCHITECTURE (PostgreSQL & Prisma Engine)
---------------------------------------------------------------------------------
-Location: `server/prisma/schema.prisma` & `server/src/prisma/prisma.service.ts`
+3.2 FIXED: ACCURATE DASHBOARD KPI & TWO-PARTY DIRECT UPI ACTIONS
+---------------------------------------------------------------
+- File: `client/src/pages/Dashboard.tsx`
+  * `totalActiveDeposit` now filters strictly by `Boolean(t.depositPaid)`. Unfunded active tenancies start cleanly at ₹0 until deposit payment is verified.
+  * Added Direct UPI active card buttons:
+    - `pendingPaymentStage === 'DEPOSIT_SENT'`: Landlord sees `"✅ Confirm ₹X Deposit Received"`; Tenant sees `"⏳ Deposit Sent • Awaiting Owner Confirmation"`.
+    - `pendingPaymentStage === 'REFUND_SENT'`: Tenant sees `"✅ Confirm ₹X Refund Received"`; Landlord sees `"⏳ Refund Sent • Awaiting Guest Confirmation"`.
 
-Tenancy Model ke payment-specific fields:
-```prisma
-model Tenancy {
-  id                   String    @id @default(uuid())
-  propertyTitle        String
-  propertyAddress      String
-  depositAmount        Decimal   @db.Decimal(12, 2)
-  
-  // Landlord Payment Vault Credentials (Stage 1 Deposit Receiver)
-  landlordName         String
-  landlordPhone        String
-  landlordEmail        String?
-  landlordUpi          String?   // Owner ka official UPI ID (e.g. anand@okhdfcbank)
-  landlordQrUrl        String?   // Owner ka uploaded Static Payment QR image
-  
-  // Tenant Payment Vault Credentials (Stage 2 Refund Receiver)
-  tenantUpi            String?   // Guest ka official receiving UPI ID
-  tenantQrUrl          String?   // Guest ka uploaded Static Refund QR image
-  customQrUrl          String?   // Backward compatibility fallback
-  
-  // Stage 1 Status & Cryptographic Payment IDs
-  depositPaid          Boolean?  @default(false)
-  depositPaymentId     String?   // e.g. pay_RS_RAZORPAY_xxx or pay_RS_DIRECT_UPI_xxx
-  
-  // Stage 2 Status & Cryptographic Payment IDs
-  settlementPaymentId  String?   // e.g. pay_RS_REFUND_xxx
-  settledAt            DateTime?
-  status               String    @default("PENDING") // PENDING | APPROVED | REVISION_REQUESTED | LOCKED | SETTLED
-  
-  // Two-Party Escrow Handshake Columns
-  pendingPaymentStage  String?   // "DEPOSIT_SENT" | "REFUND_SENT" | null
-  pendingPaymentId     String?   // Pending reference hash
-  pendingPaymentAmount Decimal?  @db.Decimal(12, 2) // Server-verified locked amount
-  
-  // Relations
-  userId               String
-  user                 User      @relation(fields: [userId], references: [id])
-  items                Item[]
-}
-```
+3.3 FIXED: CLIENT CANVAS PRE-CONVERSION FOR EXTENDED MIME TYPES
+--------------------------------------------------------------
+- File: `client/src/api.ts`
+  * Updated `compressImageOnCanvas` to support `.heic`, `.heif`, `.avif`, `.webp`, `.png`, `.jpg`, `.jpeg` extensions seamlessly.
 
-Prisma Dynamic In-Memory Engine Fallback:
-PostgreSQL disconnection ya SQLite/In-memory fallback me `PrismaService.ensureTablesExist()` dynamically `ALTER TABLE "Tenancy"` run karke `pendingPaymentStage`, `pendingPaymentId`, aur `pendingPaymentAmount` columns ko runtime par inject karta hai taaki local demo ya judge environment me database kabhi crash na ho.
+================================================================================
+SECTION 4: UI/UX, MODAL CLIPPING & CREATEPORTAL SCROLLING
+================================================================================
 
---------------------------------------------------------------------------------
-3. BACKEND API CONTROLLER & SERVICES
---------------------------------------------------------------------------------
-Location:
-- Controller: `server/src/payments/payments.controller.ts`
-- Service: `server/src/payments/payments.service.ts`
+4.1 FIXED: MODALS WRAPPED IN REACTDOM.CREATEPORTAL WITH MAX-H-[90VH] OVERFLOW
+----------------------------------------------------------------------------
+- Files:
+  * `client/src/pages/TenancyDetail.tsx`:
+    - Wrapped Move-In Item Upload modal in `ReactDOM.createPortal(..., document.body)` with `z-[9999]`, `max-h-[90vh] overflow-y-auto`.
+    - Wrapped Move-Out Inspection & AI Damage Audit modal in `ReactDOM.createPortal(..., document.body)` with `z-[9999]`, `max-h-[90vh] overflow-y-auto`. The `"Run AI Damage Audit"` submit button is now 100% reachable and scrollable on 1366x768 screens and mobile.
+  * `client/src/pages/LandlordVerify.tsx`:
+    - Wrapped Revision Request modal in `ReactDOM.createPortal(..., document.body)` with `z-[9999]`, `max-h-[90vh] overflow-y-auto`.
+  * `client/src/components/SocietyGatePassModal.tsx`:
+    - Wrapped Society Gate Pass modal in `ReactDOM.createPortal(..., document.body)` with `z-[9999]`, `overflow-x-auto max-w-full`.
 
-Endpoints:
-1. `POST /api/payments/create-order`
-   - Role & Auth Check: Caller ko verify karta hai via JWT (`req.user`) ya unauthenticated magic-link access ke liye `landlordToken`.
-   - Server-Side Amount Calculation (`calculateServerAmount`): Frontend se bheje gaye amount ko trust nahi kiya jata! Backend database se `tenancy.depositAmount` ya `Math.max(0, depositAmount - totalDeductions)` calculate karta hai.
-   - Zero Balance Settlement: Agar damages deposit ke barabar hain (`serverAmount === 0`), to Razorpay Orders API ko 0 paise call nahi kiya jata (jo Razorpay 400 Bad Request error deta hai). Iski jagah `{ enabled: false, isZeroSettlement: true, amount: 0 }` return hota hai jo instant ledger clearance allow karta hai.
-   - Live Razorpay Orders: Agar `RAZORPAY_KEY_ID` aur `RAZORPAY_KEY_SECRET` configured hain, to official Razorpay Orders API (`https://api.razorpay.com/v1/orders`) se order generate hota hai with receipt reference `rs_<tenancyId>_<timestamp>`.
+================================================================================
+SECTION 5: VERIFICATION & TEST RESULTS
+================================================================================
 
-2. `POST /api/payments/verify`
-   - Branch A: Zero Balance Settlement (`isZeroSettlement`)
-     `status = 'SETTLED'`, `settlementPaymentId = 'pay_RS_ZERO_BALANCE_CLEARANCE_<ts>'`
-   - Branch B: Razorpay HMAC-SHA256 Signature Verification
-     `generatedSignature = crypto.createHmac('sha256', keySecret).update(orderId + "|" + paymentId).digest('hex')`
-     Agar signature match hoti hai, to deposit ya refund finalized hota hai. Tampering detect hone par `400 Bad Request` throw hota hai.
-   - Branch C: Direct UPI QR Scan Two-Party Handshake
-     * C1 (`action === 'MARK_SENT'`):
-       Payer UPI app par payment mark karta hai. DB me `pendingPaymentStage = 'DEPOSIT_SENT'` (ya `'REFUND_SENT'`), `pendingPaymentId = 'pay_RS_DIRECT_UPI_<ts>'`, `pendingPaymentAmount = serverAmount` save hota hai.
-     * C2 (`action === 'CONFIRM_RECEIVED'`):
-       Receiver jab bank statement check karke confirm karta hai (ya judge instant confirm use karta hai), to `pendingPaymentStage` clear hota hai, aur `depositPaid = true` ya `status = 'SETTLED'` finalize hota hai.
+1. Root Prisma Client Generation:
+   Command: `pnpm prisma:generate`
+   Result: Generated Prisma Client (v6.19.3) cleanly. (Exit code: 0)
 
-3. `POST /api/payments/update-recipient`
-   - Target Isolation: Caller authorization ke mutabiq `landlordUpi` / `landlordQrUrl` ya `tenantUpi` / `tenantQrUrl` ko specifically target karke save karta hai. Stage 1 QR kabhi Stage 2 refund QR ko overwrite nahi kar sakta!
+2. Backend NestJS Build:
+   Command: `pnpm --filter rentshield-server build`
+   Result: Built with 0 TypeScript/compilation errors. (Exit code: 0)
 
---------------------------------------------------------------------------------
-4. FRONTEND ARCHITECTURE & COMPONENTS
---------------------------------------------------------------------------------
-Location:
-- `client/src/components/PaymentModal.tsx`: Single Unified Portal Payment Component
-- `client/src/pages/TenancyDetail.tsx`: 6-Step Protocol, Live Banners & Receiver Cards
-- `client/src/pages/LandlordVerify.tsx`: Unauthenticated Owner Magic-Link Portal
-- `client/src/pages/Dashboard.tsx`: Partitioned Active vs Settled Workspaces
-- `client/src/api.ts`: Central Axios SDK with Cache-Buster Interceptors
-- `client/public/sw.js`: PWA Service Worker (API/JS cache-bypass)
+3. Frontend React + Vite Build:
+   Command: `pnpm --filter rentshield-client build`
+   Result: Built with 0 TypeScript/Vite errors in 3.70s. (Exit code: 0)
 
-### PaymentModal.tsx Breakdown:
-1. `ReactDOM.createPortal(..., document.body)`:
-   Modal ko `document.body` me render kiya gaya hai with `fixed inset-0 z-[9999]`. Isse kisi parent CSS backdrop-filter ya relative overflow se clipping kabhi nahi hoti.
-2. Mode Separation (Zero Multi-Tab Confusion):
-   - `isRecipientSettingsOnly === true`:
-     Renders STRICTLY "⚙️ My Receiving UPI & QR Vault". Isme receiver apna UPI VPA enter kar sakta hai aur payment QR photo upload kar sakta hai.
-   - `isRecipientSettingsOnly === false`:
-     Renders STRICTLY Payment Checkout. Isme payer ko Receiver ka name, verified VPA, phone-scannable UPI QR matrix, Razorpay checkout button, aur Direct UPI send buttons dikhte hain.
-3. Anti-Collision QR Vault Logic:
-   - Stage 1 (DEPOSIT): Receiver = Owner. Payee VPA = `tenancy.landlordUpi`, QR = `tenancy.landlordQrUrl`.
-   - Stage 2 (SETTLEMENT): Receiver = Guest. Payee VPA = `tenancy.tenantUpi`, QR = `tenancy.tenantQrUrl`.
-   - Owner ka QR code kabhi bhi Tenant ke refund screen par nahi dikh sakta!
-4. Guaranteed <200ms Instant Modal Auto-Close:
-   Razorpay SDK callback ya Direct UPI submit me `onClose()` sabse pehle call hota hai BEFORE state changes or navigation:
-   ```ts
-   onClose(); // Instant close in <200ms
-   emitSyncEvent('DEPOSIT_PAID', tenancy.id);
-   if (onSettled) onSettled(verifyRes.tenancy);
-   ```
+4. Full Monorepo Build:
+   Command: `pnpm build`
+   Result: All packages built successfully. (Exit code: 0)
 
-### Receiver Action Cards & Pending Banners (`TenancyDetail.tsx` & `LandlordVerify.tsx`):
-- Stage 1 Deposit Sent:
-  * Owner's View: Prominent emerald card -> `💰 Tenant Sent ₹X Deposit via Direct UPI — [✅ Confirm Money Received in Bank]`.
-  * Tenant's View: Pending status banner -> `⏳ Deposit Payment Marked Sent (₹X) • Waiting for Owner Bank Confirmation`.
-- Stage 2 Refund Sent:
-  * Tenant's View: Prominent emerald card -> `💰 Owner Sent ₹X Net Refund via Direct UPI — [✅ Confirm Money Received in Bank]`.
-  * Owner's View: Pending status banner -> `⏳ Net Refund Marked Sent (₹X) • Waiting for Guest Bank Confirmation`.
+5. Playwright End-to-End Suite:
+   Command: `cd client; npx playwright test`
+   Result: 12 passed in 1.4m (100% PASS)
+   - 01. IntroSplash renders & top-header "Sign In" button is interactive (PASSED)
+   - 02. 1-Click Judge Demo Accounts & Pre-Seeded History Stack with NOC (PASSED)
+   - 03. Fresh Tenancy Creation & Anti-Collusion Anchor (Clean start + ₹0 KPI) (PASSED)
+   - 04. Step 01 & Step 02 — Move-In SHA-256 Upload, Revision Loop & Owner Lock (PASSED)
+   - 05. Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner) (PASSED)
+   - 06. Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit in Portal (PASSED)
+   - 07. Step 05 — Stage 2 Final Refund Settlement with QR Isolation (PASSED)
+   - 08. Step 06 — Auto-Clear Active Workspace & Settled History Stack (PASSED)
+   - 09. Role-Guard Check on /tenancy/:id prevents Landlord tenant actions (PASSED)
+   - 10. Zero-Server Public Courtroom Verifier (/verify) (PASSED)
+   - 11. User Profile Modal renders in Portal, non-clipped on 1280x720 & 375x667 (PASSED)
+   - 12. Backend Profile Endpoints: GET /api/auth/me, PATCH /profile (PASSED)
 
---------------------------------------------------------------------------------
-5. SEARCH & DESTROY: COMPLETE ELIMINATION OF "12-DIGIT UTR"
---------------------------------------------------------------------------------
-Pehele system me manual 12-digit bank UTR input fields the jo user ko confuse karte the aur fake self-confirmations allow karte the.
-Project-wide search audit:
-- `client/src/components/PaymentModal.tsx`: Har ek UTR input text box, state aur validation delete kar diya gaya hai.
-- `client/src/pages/Dashboard.tsx`: Label badal kar clean `Payment Ref:` kar diya gaya hai.
-- `client/src/pages/PublicVerifier.tsx`: Label badal kar clean `Escrow Payment Reference:` kar diya gaya hai.
-- `client/e2e/rentshield-full-suite.spec.ts`: Old "Verify UTR" button matchers ko completely remove karke `"Instant Confirm"` aur `"Payment Sent on UPI App"` se replace kiya gaya hai.
-- Result: Pure client DOM me "12-digit" ya "UTR" input text box 0 ho chuka hai.
-
---------------------------------------------------------------------------------
-6. CACHE-SAFETY & SERVICE WORKER HARDENING (`client/public/sw.js`)
---------------------------------------------------------------------------------
-PWA installations aur dynamic deployment me users ko purana cached JavaScript ya API responses na dikhe, iske liye:
-- Cache Name: `rentshield-pwa-v2`
-- `self.skipWaiting()` aur `clients.claim()` active.
-- Network-First with Cache Bypass:
-  Kisi bhi `.js`, `.css`, `/api/`, `/uploads/`, ya HTML navigation requests ko Service Worker cache me store nahi kiya jata; wo hamesha live server network se fetch hote hain.
-
---------------------------------------------------------------------------------
-7. VERIFICATION & TEST SUITE METRICS
---------------------------------------------------------------------------------
-Playwright E2E Suite (`client/e2e/rentshield-full-suite.spec.ts`):
-- Scenario 01: IntroSplash renders & top-header "Sign In" button is interactive -> PASS (3.7s)
-- Scenario 02: 1-Click Judge Demo Accounts & Pre-Seeded History Stack with NOC -> PASS (6.1s)
-- Scenario 03: Fresh Tenancy Creation & Anti-Collusion Anchor -> PASS (3.8s)
-- Scenario 04: Step 01 & Step 02 — Move-In SHA-256 Upload, Revision Loop & Owner Lock -> PASS (9.2s)
-- Scenario 05: Step 03 — Stage 1 Security Deposit Payment (Guest -> Owner) -> PASS (4.0s)
-- Scenario 06: Step 04 — Duplicate Photo Anti-Fraud Blocker & Gemini AI Audit -> PASS (12.5s)
-- Scenario 07: Step 05 — Stage 2 Final Refund Settlement with QR Isolation -> PASS (3.0s)
-- Scenario 08: Step 06 — Auto-Clear Active Workspace & Settled History Stack -> PASS (2.7s)
-- Scenario 09: Role-Guard Check on /tenancy/:id prevents Landlord tenant actions -> PASS (2.0s)
-- Scenario 10: Zero-Server Public Courtroom Verifier (/verify) -> PASS (2.0s)
-- Scenario 11: User Profile Modal renders in Portal, non-clipped on 1280x720 & 375x667, with no stuck dots -> PASS (3.0s)
-- Scenario 12: Backend Profile Endpoints: GET /api/auth/me, PATCH /profile, & DELETE demo protection -> PASS (1.7s)
-
-FINAL RESULT: 12 passed (1.2m), 0 failed, 0 skipped.
-Both `rentshield-server` and `rentshield-client` compile with 0 TypeScript and build errors.
+================================================================================
+END OF REPORT
 ================================================================================

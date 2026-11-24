@@ -144,6 +144,11 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     await page.goto('/tenancy/new');
     await page.keyboard.press('Escape');
 
+    // Assert form starts clean with zero pre-filled demo credentials for real users
+    await expect(page.locator('input[placeholder*="Green Glen"]')).toHaveValue('');
+    await expect(page.locator('input[placeholder*="Ramesh Malik"]')).toHaveValue('');
+    await expect(page.locator('input[placeholder*="landlord.demo"]')).toHaveValue('');
+
     // Fill Tenancy Creation Form
     const propTitle = `Skyline Cyber-Vault Flat ${Date.now().toString().slice(-4)}`;
     await page.locator('input[placeholder*="Green Glen"]').fill(propTitle);
@@ -177,6 +182,12 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     await expect(step3).toBeVisible();
     const awaitingPayment = page.locator('text=Action Required').first();
     await expect(awaitingPayment).toBeVisible();
+
+    // Verify Dashboard Active Protected Deposit excludes unfunded tenancy (starts at ₹0)
+    await page.goto('/');
+    await page.keyboard.press('Escape');
+    const depositKpiZero = page.locator('div:has-text("Active Protected Deposit")').locator('text=₹0').first();
+    await expect(depositKpiZero).toBeVisible();
   });
 
   // --------------------------------------------------------------------------
@@ -323,6 +334,12 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     const moveOutBtn = page.locator('button:has-text("Upload Move-Out & Audit")').first();
     await expect(moveOutBtn).toBeVisible();
     await moveOutBtn.click();
+
+    // Assert Move-Out modal is rendered in Portal directly under document.body and has max-h-[90vh] scroll layout
+    const portalModal = page.locator('body > div.fixed.z-\\[9999\\]').first();
+    await expect(portalModal).toBeVisible();
+    const scrollableCard = portalModal.locator('div.max-h-\\[90vh\\].overflow-y-auto').first();
+    await expect(scrollableCard).toBeVisible();
 
     // 1. Upload EXACT SAME Move-In photo bytes to trigger Anti-Fraud
     const identicalImg = createTestImageBuffer(16, 185, 129); // identical bytes

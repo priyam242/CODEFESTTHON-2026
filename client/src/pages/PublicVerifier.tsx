@@ -225,8 +225,8 @@ export const PublicVerifier: React.FC = () => {
                 <span>Counterparty Identity Binding (Model Tenancy Act Anchor)</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono text-slate-300">
-                <div>Owner Rent VPA: <span className="text-emerald-300">{certificate.landlordUpi || 'ramesh.malik@okhdfcbank'}</span></div>
-                <div>Agreement Ref ID: <span className="text-slate-100">{certificate.agreementRef || 'BLR-IND-2026-KA-4892'}</span></div>
+                <div>Owner Rent VPA: <span className="text-emerald-300">{certificate.landlordUpi || 'Not Provided'}</span></div>
+                <div>Agreement Ref ID: <span className="text-slate-100">{certificate.agreementRef || 'Not Provided'}</span></div>
               </div>
               {(certificate.settlementPaymentId || certificate.depositPaymentId) && (
                 <div className="mt-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono text-emerald-300 flex items-center justify-between">

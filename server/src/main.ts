@@ -7,6 +7,10 @@ import * as path from 'path';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
+  // Body parser limits for base64 photo audits, avatar uploads, and QR code scans (50MB)
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Cleanly accept all localhost, onrender.com, vercel.app, and web requests with credentials

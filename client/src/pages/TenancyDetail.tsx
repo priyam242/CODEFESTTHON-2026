@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Shield,
@@ -1658,96 +1659,99 @@ export const TenancyDetail: React.FC = () => {
       </div>
 
       {/* Add Move-In Room Item Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl glass-vault-card">
-            <h3 className="text-lg font-bold text-slate-100 mb-1">Upload Baseline Move-In Item</h3>
-            <p className="text-xs text-slate-400 mb-6">
-              A cryptographic SHA-256 fingerprint will be generated from your photo to permanently freeze baseline proof.
-            </p>
+      {showAddModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
+            <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl glass-vault-card">
+              <h3 className="text-lg font-bold text-slate-100 mb-1">Upload Baseline Move-In Item</h3>
+              <p className="text-xs text-slate-400 mb-6">
+                A cryptographic SHA-256 fingerprint will be generated from your photo to permanently freeze baseline proof.
+              </p>
 
-            <form onSubmit={handleMoveInSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleMoveInSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
+                      Room Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={roomName}
+                      onChange={(e) => setRoomName(e.target.value)}
+                      placeholder="e.g. Living Room, Bedroom"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
+                      Item Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={itemName}
+                      onChange={(e) => setItemName(e.target.value)}
+                      placeholder="e.g. Inverter AC, Teak Table"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
-                    Room Name
+                    Baseline Condition Notes
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={roomName}
-                    onChange={(e) => setRoomName(e.target.value)}
-                    placeholder="e.g. Living Room, Bedroom"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                  <textarea
+                    rows={2}
+                    value={moveInNotes}
+                    onChange={(e) => setMoveInNotes(e.target.value)}
+                    placeholder="Note any pre-existing hairline scratches, dust, or standard wear"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
                   />
                 </div>
+
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
-                    Item Name
+                    Move-In Item Photo
                   </label>
                   <input
-                    type="text"
-                    required
-                    value={itemName}
-                    onChange={(e) => setItemName(e.target.value)}
-                    placeholder="e.g. Inverter AC, Teak Table"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setMoveInFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-500 file:text-slate-950 hover:file:bg-emerald-400 cursor-pointer"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
-                  Baseline Condition Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={moveInNotes}
-                  onChange={(e) => setMoveInNotes(e.target.value)}
-                  placeholder="Note any pre-existing hairline scratches, dust, or standard wear"
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1 uppercase tracking-wider font-mono">
-                  Move-In Item Photo
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setMoveInFile(e.target.files?.[0] || null)}
-                  className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-500 file:text-slate-950 hover:file:bg-emerald-400 cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={uploadingMoveIn}
-                  className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>{uploadingMoveIn ? 'Hashing & Uploading...' : 'Lock Item Hash'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={uploadingMoveIn}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-500/20"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{uploadingMoveIn ? 'Hashing & Uploading...' : 'Lock Item Hash'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* Upload Move-Out & AI Audit Modal */}
-      {activeMoveOutItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl glass-vault-card relative overflow-hidden">
-            <div className="flex items-center space-x-2 text-emerald-400 mb-2">
+      {activeMoveOutItem &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
+            <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl glass-vault-card relative">
+              <div className="flex items-center space-x-2 text-emerald-400 mb-2">
               <Sparkles className="w-5 h-5" />
               <h3 className="text-lg font-bold text-slate-100">
                 Move-Out Inspection &amp; AI Damage Audit
@@ -1915,7 +1919,8 @@ export const TenancyDetail: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Real Phone-Scannable UPI Settlement Modal */}

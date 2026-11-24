@@ -1,7 +1,21 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTenancyDto } from './dto/create-tenancy.dto';
 import { randomUUID, createHash } from 'crypto';
+
+const TENANCY_RELATION_INCLUDE = {
+  items: true,
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      address: true,
+      upiId: true,
+      avatarUrl: true,
+    },
+  },
+};
 
 @Injectable()
 export class TenancyService {
@@ -168,21 +182,31 @@ export class TenancyService {
       updateData.landlordUpi = signerData.landlordUpi;
     }
 
-    return this.prisma.tenancyClient.update({
+    const updated = await this.prisma.tenancyClient.update({
       where: { landlordToken: token },
       data: updateData,
+      include: TENANCY_RELATION_INCLUDE,
     });
+    if (updated && (updated as any).user) {
+      (updated as any).tenant = (updated as any).user;
+    }
+    return updated;
   }
 
   async requestRevision(token: string, notes: string) {
     await this.findByLandlordToken(token);
-    return this.prisma.tenancyClient.update({
+    const updated = await this.prisma.tenancyClient.update({
       where: { landlordToken: token },
       data: {
         status: 'REVISION_REQUESTED',
         revisionNotes: notes,
       },
+      include: TENANCY_RELATION_INCLUDE,
     });
+    if (updated && (updated as any).user) {
+      (updated as any).tenant = (updated as any).user;
+    }
+    return updated;
   }
 
   async recalculateRefund(tenancyId: string) {
@@ -199,10 +223,15 @@ export class TenancyService {
     const originalDeposit = Number(tenancy.depositAmount);
     const estimatedRefund = Math.max(0, originalDeposit - totalDeductions);
 
-    return this.prisma.tenancyClient.update({
+    const updated = await this.prisma.tenancyClient.update({
       where: { id: tenancyId },
       data: { estimatedRefund },
+      include: TENANCY_RELATION_INCLUDE,
     });
+    if (updated && (updated as any).user) {
+      (updated as any).tenant = (updated as any).user;
+    }
+    return updated;
   }
 
   async getPublicCertificate(idOrToken: string) {
@@ -225,8 +254,8 @@ export class TenancyService {
       propertyAddress: tenancy.propertyAddress,
       depositAmount: tenancy.depositAmount,
       landlordName: tenancy.landlordName,
-      landlordUpi: tenancy.landlordUpi || 'ramesh.malik@okhdfcbank',
-      agreementRef: tenancy.agreementRef || 'BLR-IND-2026-KA-4892',
+      landlordUpi: tenancy.landlordUpi || 'Not Provided',
+      agreementRef: tenancy.agreementRef || 'Not Provided',
       signerAudit: tenancy.signerAudit,
       revisionNotes: tenancy.revisionNotes,
       status: tenancy.status,
@@ -259,13 +288,33 @@ export class TenancyService {
     return this.getPublicCertificate(selected.id);
   }
 
-  async settle(id: string, data?: { customQrUrl?: string; tenantUpi?: string; landlordUpi?: string }) {
+  async settle(
+    id: string,
+    data?: { customQrUrl?: string; tenantUpi?: string; landlordUpi?: string; landlordToken?: string },
+    caller?: any,
+  ) {
     const tenancy = await this.prisma.tenancyClient.findUnique({
       where: { id },
-      include: { items: true, user: true },
+      include: TENANCY_RELATION_INCLUDE,
     });
     if (!tenancy) {
       throw new NotFoundException('Tenancy not found');
+    }
+
+    // Party isolation check: only assigned tenant or landlord can settle
+    const isOwnerByToken = Boolean(data?.landlordToken && data.landlordToken === tenancy.landlordToken);
+    const isTenantByUser = Boolean(caller && tenancy.userId === caller.id);
+    const isLandlordByUser = Boolean(
+      caller &&
+      tenancy.landlordEmail &&
+      caller.email &&
+      tenancy.landlordEmail.toLowerCase() === caller.email.toLowerCase()
+    );
+
+    if (caller || data?.landlordToken) {
+      if (!isOwnerByToken && !isTenantByUser && !isLandlordByUser) {
+        throw new ForbiddenException('Unauthorized: Only the assigned Tenant or Landlord can settle this tenancy.');
+      }
     }
 
     const updatePayload: any = {
@@ -279,7 +328,7 @@ export class TenancyService {
     const updated = await this.prisma.tenancyClient.update({
       where: { id },
       data: updatePayload,
-      include: { items: true, user: true },
+      include: TENANCY_RELATION_INCLUDE,
     });
     if (updated && (updated as any).user) {
       (updated as any).tenant = (updated as any).user;
@@ -289,7 +338,7 @@ export class TenancyService {
 
   async settleByToken(token: string, data?: { customQrUrl?: string; tenantUpi?: string; landlordUpi?: string }) {
     const tenancy = await this.findByLandlordToken(token);
-    return this.settle(tenancy.id, data);
+    return this.settle(tenancy.id, { ...data, landlordToken: token });
   }
 
   async clearAllData() {

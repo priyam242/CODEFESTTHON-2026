@@ -5,18 +5,29 @@ import { tenancyApi } from '../api';
 import { emitSyncEvent } from '../realtimeSync';
 
 export const CreateTenancy: React.FC = () => {
-  const [propertyTitle, setPropertyTitle] = useState('Green Glen Heights Flat 402');
-  const [propertyAddress, setPropertyAddress] = useState('Bellandur Outer Ring Road, Bangalore, KA 560103');
-  const [depositAmount, setDepositAmount] = useState(25000);
-  const [landlordName, setLandlordName] = useState('Ramesh Malik');
-  const [landlordPhone, setLandlordPhone] = useState('+91 98765 43210');
-  const [landlordEmail, setLandlordEmail] = useState('landlord.demo@rentshield.com');
+  const [propertyTitle, setPropertyTitle] = useState('');
+  const [propertyAddress, setPropertyAddress] = useState('');
+  const [depositAmount, setDepositAmount] = useState<number | ''>('');
+  const [landlordName, setLandlordName] = useState('');
+  const [landlordPhone, setLandlordPhone] = useState('');
+  const [landlordEmail, setLandlordEmail] = useState('');
   const [landlordUpi, setLandlordUpi] = useState('');
-  const [agreementRef, setAgreementRef] = useState('BLR-IND-2026-KA-4892');
+  const [agreementRef, setAgreementRef] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const navigate = useNavigate();
+
+  const handleAutoFillSample = () => {
+    setPropertyTitle('Green Glen Heights Flat 402');
+    setPropertyAddress('Bellandur Outer Ring Road, Bangalore, KA 560103');
+    setDepositAmount(25000);
+    setLandlordName('Ramesh Malik');
+    setLandlordPhone('+91 98765 43210');
+    setLandlordEmail('landlord.demo@rentshield.com');
+    setLandlordUpi('ramesh.malik@okhdfcbank');
+    setAgreementRef('BLR-IND-2026-KA-4892');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,16 +65,25 @@ export const CreateTenancy: React.FC = () => {
       </Link>
 
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 backdrop-blur-xl shadow-xl shadow-black/40">
-        <div className="flex items-center space-x-3 mb-6 pb-6 border-b border-slate-800">
-          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-            <Building2 className="w-6 h-6" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-800">
+          <div className="flex items-center space-x-3">
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-100">Initialize Tenancy Deposit Protection</h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Lock in your security deposit with a tamper-proof cryptographic move-in inventory.
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-100">Initialize Tenancy Deposit Protection</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Lock in your ₹25,000 security deposit with a tamper-proof cryptographic move-in inventory.
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={handleAutoFillSample}
+            className="self-start sm:self-auto text-xs px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition flex items-center space-x-1.5 font-mono shadow-sm active:scale-95"
+          >
+            <span>⚡ Auto-Fill Sample Property (For Quick Judge Test)</span>
+          </button>
         </div>
 
         {error && (

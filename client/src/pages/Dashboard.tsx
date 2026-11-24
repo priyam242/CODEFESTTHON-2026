@@ -145,7 +145,9 @@ export const Dashboard: React.FC = () => {
       return timeB - timeA;
     });
 
-  const totalActiveDeposit = activeTenancies.reduce((acc, t) => acc + Number(t.depositAmount || 0), 0);
+  const totalActiveDeposit = activeTenancies
+    .filter((t) => Boolean(t.depositPaid))
+    .reduce((acc, t) => acc + Number(t.depositAmount || 0), 0);
   const totalActiveApproved = activeTenancies.filter((t) => t.status === 'APPROVED').length;
   const pendingApprovals = isLandlord ? activeTenancies.filter((t) => t.status === 'PENDING') : [];
 
@@ -499,37 +501,59 @@ export const Dashboard: React.FC = () => {
 
                   {/* STAGE 1: Move-In Escrow Deposit Pay Button for Unfunded Tenancy */}
                   {!tenancy.depositPaid && (
-                    !isLandlord ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPaymentModalStage('DEPOSIT');
-                          setIsRecipientSettingsOnly(false);
-                          setSelectedPaymentTenancy(tenancy);
-                        }}
-                        className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95"
-                      >
-                        <CreditCard className="w-3.5 h-3.5" />
-                        <span>💳 Pay Security Deposit (₹{originalDeposit.toLocaleString('en-IN')})</span>
-                      </button>
-                    ) : (
-                      <div className="mt-3 flex items-center space-x-2">
-                        <div className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-amber-400 text-center font-bold">
-                          ⏳ Awaiting Deposit: ₹{originalDeposit.toLocaleString('en-IN')}
-                        </div>
+                    tenancy.pendingPaymentStage === 'DEPOSIT_SENT' ? (
+                      isLandlord ? (
                         <button
                           type="button"
                           onClick={() => {
                             setPaymentModalStage('DEPOSIT');
-                            setIsRecipientSettingsOnly(true);
+                            setIsRecipientSettingsOnly(false);
                             setSelectedPaymentTenancy(tenancy);
                           }}
-                          title="Set receiving UPI ID / QR"
-                          className="py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-mono transition"
+                          className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95 animate-pulse"
                         >
-                          ⚙️ QR
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>✅ Confirm ₹{originalDeposit.toLocaleString('en-IN')} Deposit Received</span>
                         </button>
-                      </div>
+                      ) : (
+                        <div className="mt-3 py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] font-mono text-amber-300 text-center font-bold flex items-center justify-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                          <span>⏳ Deposit Sent • Awaiting Owner Confirmation</span>
+                        </div>
+                      )
+                    ) : (
+                      !isLandlord ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('DEPOSIT');
+                            setIsRecipientSettingsOnly(false);
+                            setSelectedPaymentTenancy(tenancy);
+                          }}
+                          className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>💳 Pay Security Deposit (₹{originalDeposit.toLocaleString('en-IN')})</span>
+                        </button>
+                      ) : (
+                        <div className="mt-3 flex items-center space-x-2">
+                          <div className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-amber-400 text-center font-bold">
+                            ⏳ Awaiting Deposit: ₹{originalDeposit.toLocaleString('en-IN')}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentModalStage('DEPOSIT');
+                              setIsRecipientSettingsOnly(true);
+                              setSelectedPaymentTenancy(tenancy);
+                            }}
+                            title="Set receiving UPI ID / QR"
+                            className="py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-mono transition"
+                          >
+                            ⚙️ QR
+                          </button>
+                        </div>
+                      )
                     )
                   )}
 
@@ -567,7 +591,27 @@ export const Dashboard: React.FC = () => {
 
                   {/* STAGE 2: Real Razorpay / Phone-Scannable UPI Settlement CTA */}
                   {(hasAiAudit || isVacated) && (
-                    totalDeductions < originalDeposit ? (
+                    tenancy.pendingPaymentStage === 'REFUND_SENT' ? (
+                      !isLandlord ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalStage('SETTLEMENT');
+                            setIsRecipientSettingsOnly(false);
+                            setSelectedPaymentTenancy(tenancy);
+                          }}
+                          className="mt-3 w-full inline-flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs font-mono shadow-md shadow-emerald-500/20 transition active:scale-95 animate-pulse"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>✅ Confirm ₹{netRefund.toLocaleString('en-IN')} Refund Received</span>
+                        </button>
+                      ) : (
+                        <div className="mt-3 py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] font-mono text-amber-300 text-center font-bold flex items-center justify-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                          <span>⏳ Refund Sent • Awaiting Guest Confirmation</span>
+                        </div>
+                      )
+                    ) : totalDeductions < originalDeposit ? (
                       isLandlord ? (
                         <button
                           type="button"

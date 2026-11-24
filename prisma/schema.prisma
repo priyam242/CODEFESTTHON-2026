@@ -13,6 +13,9 @@ model User {
   password  String
   name      String   @default("")
   role      String   @default("TENANT")
+  avatarUrl String?
+  address   String?
+  upiId     String?
   tenancies Tenancy[]
   createdAt DateTime @default(now())
 }
@@ -25,21 +28,26 @@ model Tenancy {
   landlordName    String
   landlordPhone   String
   landlordEmail   String?
+  landlordUpi     String?
+  agreementRef    String?
+  signerAudit     String?
+  revisionNotes   String?
   landlordToken   String   @unique
   status          String   @default("ACTIVE")
   moveInHash      String?
   estimatedRefund Decimal? @db.Decimal
   depositAmountDecimal Decimal? @db.Decimal
-  landlordUpi     String?
-  agreementRef    String?
-  signerAudit     String?
-  revisionNotes   String?
   settledAt       DateTime?
   customQrUrl     String?
+  landlordQrUrl   String?
+  tenantQrUrl     String?
   tenantUpi       String?
   depositPaid     Boolean  @default(false)
   depositPaymentId String?
   settlementPaymentId String?
+  pendingPaymentStage String?
+  pendingPaymentId    String?
+  pendingPaymentAmount Decimal? @db.Decimal
 
   userId          String
   user            User     @relation(fields: [userId], references: [id])

@@ -108,7 +108,10 @@ export const compressImageOnCanvas = async (
   maxDim = 1280,
   quality = 0.82
 ): Promise<File> => {
-  if (!file || !file.type.startsWith('image/')) return file;
+  if (!file) return file;
+  const isImageMime = file.type && file.type.startsWith('image/');
+  const isImageExt = /\.(jpg|jpeg|png|webp|avif|heic|heif)$/i.test(file.name);
+  if (!isImageMime && !isImageExt) return file;
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {

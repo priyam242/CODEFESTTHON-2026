@@ -57,6 +57,8 @@ export class AiAuditService {
           if (ext === '.png') mimeType = 'image/png';
           else if (ext === '.webp') mimeType = 'image/webp';
           else if (ext === '.gif') mimeType = 'image/gif';
+          else if (ext === '.heic' || ext === '.heif') mimeType = 'image/heic';
+          else if (ext === '.avif') mimeType = 'image/avif';
 
           return {
             inlineData: {
@@ -140,8 +142,8 @@ Respond ONLY with a JSON object in this exact schema, with no markdown fences:
       if (moveInPart) contents.push(moveInPart);
       if (moveOutPart) contents.push(moveOutPart);
 
-      // Fast AI execution: gemini-3.5-flash with crisp 6s timeout and immediate deterministic fallback
-      const modelsToTry = ['gemini-3.5-flash'];
+      // Fast AI execution: production-grade Gemini vision models with crisp 6s timeout and immediate deterministic fallback
+      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
       for (const modelName of modelsToTry) {
         try {
           const timeoutPromise = new Promise<never>((_, reject) =>
@@ -256,12 +258,19 @@ Respond ONLY with a JSON object in this exact schema, with no markdown fences:
       };
     }
 
+    // Check for explicit clean / normal condition indicators
+    const isCleanKeyword = /clean|intact|good condition|no damage|normal|fine|well maintained|no issues|minor wear/i.test(outLower);
+    const isDamageKeyword =
+      /broken|crack|shatter|burn|deep gouge|ruin|torn|hole|scratch|stain|dent|leak|spill|damage|chipped|tear|ripped|peeled/i.test(outLower) ||
+      /broken|hole|torn|damaged/i.test(itemLower);
+
     // Check visual delta between moveIn and moveOut images
     let hasVisualDelta = false;
-    if (moveInPart && moveOutPart) {
+    if (moveInPart && moveOutPart && !isCleanKeyword) {
       const dataA = moveInPart.inlineData.data;
       const dataB = moveOutPart.inlineData.data;
       if (dataA && dataB && dataA !== dataB) {
+        const lenDiffRatio = Math.abs(dataA.length - dataB.length) / Math.max(dataA.length, dataB.length);
         const sampleSize = Math.min(1000, Math.min(dataA.length, dataB.length));
         if (sampleSize > 50) {
           const stepA = Math.floor(dataA.length / sampleSize);
@@ -273,17 +282,13 @@ Respond ONLY with a JSON object in this exact schema, with no markdown fences:
             }
           }
           const diffScore = diffs / sampleSize;
-          // Any altered or different image produces a diff score
-          if (diffScore > 0.05) {
+          // Structural visual check: requires substantial difference and not marked clean
+          if (diffScore > 0.35 && lenDiffRatio > 0.20) {
             hasVisualDelta = true;
           }
         }
       }
     }
-
-    const isDamageKeyword =
-      /broken|crack|shatter|burn|deep gouge|ruin|torn|hole|scratch|stain|dent|leak|spill|damage|chipped|tear|ripped|peeled/i.test(outLower) ||
-      /broken|hole|torn|damaged/i.test(itemLower);
 
     if (isDamageKeyword || hasVisualDelta) {
       let estimatedCost = 1500;
