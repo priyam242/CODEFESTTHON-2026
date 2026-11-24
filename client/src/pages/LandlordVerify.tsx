@@ -196,7 +196,7 @@ export const LandlordVerify: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !tenancy) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center text-slate-400 font-mono text-xs">

@@ -362,7 +362,7 @@ export const Dashboard: React.FC = () => {
         </span>
       </div>
 
-      {loading ? (
+      {loading && tenancies.length === 0 ? (
         <div className="text-center py-16 text-slate-400 text-sm font-mono">
           Loading protected tenancies...
         </div>

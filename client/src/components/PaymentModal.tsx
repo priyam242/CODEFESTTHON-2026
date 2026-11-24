@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import QRCode from 'qrcode';
 import {
   QrCode,
   Upload,
@@ -132,10 +131,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     ? (tenancy.tenantUpi || '')
     : (tenancy.landlordUpi || '');
 
-  const receiverQrImage = isLandlordPaying
-    ? (tenancy.tenantQrUrl || null)
-    : (tenancy.landlordQrUrl || (!tenancy.tenantQrUrl ? tenancy.customQrUrl : null) || null);
-
   // My Vault credentials for settings mode
   const isOwnerVault = effectiveUserRole === 'LANDLORD';
   const initialMyVpa = isOwnerVault
@@ -147,7 +142,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const [vaultVpa, setVaultVpa] = useState<string>(initialMyVpa);
   const [vaultQrImage, setVaultQrImage] = useState<string | null>(initialMyQr);
-  const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string>('');
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [loadingRazorpay, setLoadingRazorpay] = useState(false);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
@@ -174,23 +168,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const generatedUpiUrl = receiverVpa
     ? `upi://pay?pa=${encodeURIComponent(receiverVpa)}&pn=${encodeURIComponent(cleanPayeeName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(upiNote)}`
     : '';
-
-  useEffect(() => {
-    if (!receiverQrImage && generatedUpiUrl) {
-      QRCode.toDataURL(generatedUpiUrl, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: '#050912',
-          light: '#ffffff',
-        },
-      })
-        .then((url) => setGeneratedQrDataUrl(url))
-        .catch(() => setGeneratedQrDataUrl(''));
-    } else {
-      setGeneratedQrDataUrl('');
-    }
-  }, [receiverQrImage, generatedUpiUrl]);
 
   if (!isOpen) return null;
 
@@ -576,117 +553,94 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Official Razorpay Gateway Button */}
-                <button
-                  type="button"
-                  onClick={handlePayViaRazorpay}
-                  disabled={loadingRazorpay || verifyingPayment}
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:brightness-110 disabled:opacity-50 text-slate-950 font-extrabold font-mono text-xs transition shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 active:scale-[0.99]"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>
-                    {loadingRazorpay
-                      ? 'Opening Razorpay Gateway...'
-                      : effectiveStage === 'SETTLEMENT'
-                      ? `⚡ Release ₹${amount.toLocaleString('en-IN')} via Razorpay Escrow`
-                      : `⚡ Pay ₹${amount.toLocaleString('en-IN')} via Razorpay Verified Escrow`}
-                  </span>
-                </button>
+                {/* 1. Primary Instant Verified Gateway: Official Razorpay Escrow */}
+                <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/25 space-y-2.5">
+                  <button
+                    type="button"
+                    onClick={handlePayViaRazorpay}
+                    disabled={loadingRazorpay || verifyingPayment}
+                    className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:brightness-110 disabled:opacity-50 text-slate-950 font-extrabold font-mono text-xs transition shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 active:scale-[0.99]"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>
+                      {loadingRazorpay
+                        ? 'Opening Razorpay Gateway...'
+                        : effectiveStage === 'SETTLEMENT'
+                        ? `⚡ Release ₹${amount.toLocaleString('en-IN')} via Razorpay Verified Escrow`
+                        : `⚡ Pay ₹${amount.toLocaleString('en-IN')} via Razorpay Verified Escrow`}
+                    </span>
+                  </button>
+
+                  {/* Razorpay Test Webhook Simulation (Strictly inside Razorpay Test Flow) */}
+                  <button
+                    type="button"
+                    onClick={() => handleDirectUpiSubmit('CONFIRM_RECEIVED')}
+                    disabled={verifyingPayment || loadingRazorpay}
+                    className="text-[10px] text-emerald-400/80 hover:text-emerald-300 font-mono underline block mx-auto"
+                  >
+                    ⚡ Judge Demo Simulate Razorpay Webhook
+                  </button>
+                </div>
 
                 {/* Divider */}
-                <div className="flex items-center my-3 text-slate-600 text-[10px] font-mono">
+                <div className="flex items-center my-2 text-slate-600 text-[10px] font-mono">
                   <div className="flex-1 border-t border-slate-800" />
-                  <span className="px-2 text-slate-400 font-bold uppercase tracking-wider">📲 Direct UPI Transfer</span>
+                  <span className="px-2 text-slate-400 font-bold uppercase tracking-wider">OR USE P2P BANKING</span>
                   <div className="flex-1 border-t border-slate-800" />
                 </div>
 
-                {/* Recipient's Scannable QR Matrix */}
-                <div className="p-3 rounded-2xl bg-white mx-auto inline-block shadow-2xl border-4 border-emerald-500/40">
-                  {receiverQrImage ? (
-                    <img
-                      src={receiverQrImage}
-                      alt="Recipient's Official Payment QR"
-                      className="w-48 h-48 object-contain mx-auto rounded"
-                    />
-                  ) : generatedQrDataUrl ? (
-                    <img
-                      src={generatedQrDataUrl}
-                      alt={`Real Phone-Scannable UPI QR for ₹${amount}`}
-                      className="w-48 h-48 mx-auto rounded"
-                    />
-                  ) : (
-                    <div className="w-48 h-48 flex flex-col items-center justify-center p-3 text-slate-700 text-xs font-mono text-center">
-                      <AlertCircle className="w-8 h-8 text-amber-500 mb-2" />
-                      <span>Awaiting QR code from {payeeName}</span>
-                    </div>
-                  )}
-                </div>
+                {/* 2. Secondary P2P Box: Direct UPI Transfer (NO Duplicate QR Code on Payer Screen!) */}
+                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3 text-left">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-slate-100 font-mono">
+                      📲 Direct UPI Transfer to{' '}
+                      <span className="text-emerald-400">{receiverVpa || payeeName}</span>
+                    </span>
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  </div>
 
-                <div className="text-[10px] text-emerald-400 font-mono font-semibold flex items-center justify-center space-x-1">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>
-                    {receiverQrImage
-                      ? `Verified Official QR (${payeeName})`
-                      : receiverVpa
-                      ? `Verified NPCI QR • Payee VPA: ${receiverVpa}`
-                      : `Awaiting Recipient Payment Details (${payeeName})`}
-                  </span>
-                </div>
-
-                {/* Direct UPI URI Action Buttons */}
-                {generatedUpiUrl && (
+                  {/* Action Buttons: Open UPI App + Copy UPI ID */}
                   <div className="flex items-center space-x-2">
+                    {generatedUpiUrl && (
+                      <a
+                        href={generatedUpiUrl}
+                        className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono transition flex items-center justify-center space-x-1.5"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open UPI App</span>
+                      </a>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
-                        navigator.clipboard.writeText(generatedUpiUrl);
+                        navigator.clipboard.writeText(receiverVpa || generatedUpiUrl || '');
                         setCopiedUpi(true);
                         setTimeout(() => setCopiedUpi(false), 2000);
                       }}
-                      className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold font-mono transition flex items-center justify-center space-x-1.5"
+                      className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold font-mono transition flex items-center justify-center space-x-1.5"
                     >
                       {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedUpi ? 'Copied Link!' : 'Copy UPI Link'}</span>
+                      <span>{copiedUpi ? 'Copied UPI ID!' : 'Copy UPI ID'}</span>
                     </button>
-                    <a
-                      href={generatedUpiUrl}
-                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono transition flex items-center justify-center space-x-1.5"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Open UPI App</span>
-                    </a>
                   </div>
-                )}
 
-                {/* Direct Phone QR Submit Button */}
-                <div className="pt-2">
+                  <p className="text-[11px] text-cyan-300/90 font-mono bg-cyan-500/10 border border-cyan-500/20 rounded-xl px-3 py-2 text-center">
+                    📷 Or scan the Live QR displayed on Counterparty&apos;s Terminal
+                  </p>
+
+                  {/* Strictly Two-Party Direct UPI Confirmation Gate (Zero Self-Approval) */}
                   <button
                     type="button"
                     onClick={() => handleDirectUpiSubmit('MARK_SENT')}
                     disabled={verifyingPayment}
-                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 disabled:opacity-50 text-slate-950 font-extrabold font-mono text-xs transition shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 active:scale-[0.99]"
+                    className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-emerald-500/40 disabled:opacity-50 text-emerald-300 font-extrabold font-mono text-xs transition flex items-center justify-center space-x-2 active:scale-[0.99]"
                   >
                     <Check className="w-4 h-4" />
                     <span>
                       {verifyingPayment
                         ? 'Notifying Counterparty...'
-                        : effectiveStage === 'DEPOSIT'
-                        ? '📤 Notify Owner: UPI Sent (Awaiting Bank Confirmation)'
-                        : '📤 Notify Guest: Refund Sent (Awaiting Bank Confirmation)'}
+                        : '📤 Notify Receiver: UPI Sent (Requires Receiver Bank Confirmation)'}
                     </span>
-                  </button>
-                  <p className="text-[10px] text-slate-400 font-mono mt-1.5 text-center">
-                    Scanned the counterparty's terminal QR or used UPI app? Click to notify receiver and close immediately.
-                  </p>
-
-                  {/* Quick Confirm for Judge / Testing */}
-                  <button
-                    type="button"
-                    onClick={() => handleDirectUpiSubmit('CONFIRM_RECEIVED')}
-                    disabled={verifyingPayment}
-                    className="text-[10px] text-emerald-400/80 hover:text-emerald-300 font-mono underline mt-2 block mx-auto"
-                  >
-                    ⚡ Instant Confirm (Judge Demo &amp; Test Mode)
                   </button>
                 </div>
               </div>

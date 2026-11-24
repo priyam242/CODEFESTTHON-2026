@@ -626,7 +626,7 @@ export const TenancyDetail: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !tenancy) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center text-slate-400">
         <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 mb-3 animate-pulse">
