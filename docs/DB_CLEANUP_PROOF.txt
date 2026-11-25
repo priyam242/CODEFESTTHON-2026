@@ -1,0 +1,16 @@
+================================================================================
+RENTSHIELD — SELECTIVE DATABASE CLEANUP & DEMO PRESERVATION PROOF
+================================================================================
+Deleted Personal User Rows -> Items: 0 | Tenancies: 0
+
+ACCOUNT ROW COUNTS (VERIFIED DIRECTLY AGAINST NEON POSTGRESQL):
+  * priyam@gmail.com               -> Tenancies: 0 | Items: 0
+  * rajesh@gmail.com               -> Tenancies: 0 | Items: 0
+  * tenant.demo@rentshield.com     -> Tenancies: 3 | Items: 3
+  * landlord.demo@rentshield.com   -> Tenancies: 3 | Items: 3
+
+PRESERVED 3-SCENARIO JUDGE DEMO TENANCIES (tenant.demo <-> landlord.demo):
+  * koramangala-settled-002 | SETTLED | Deposit=Rs.45000 | Refund=Rs.41500 | Items=1 | #18, 4th Block, 80 Feet Road, Koramangala, Bengaluru, KA 560034
+  * demo-tenancy-hsr-002 | ACTIVE | Deposit=Rs.18000 | Refund=Rs.18000 | Items=1 | #204, 27th Main Road, Sector 1, HSR Layout, Bengaluru, KA 560102
+  * demo-tenancy-indiranagar-001 | APPROVED | Deposit=Rs.25000 | Refund=Rs.25000 | Items=1 | #402, 12th Main Road, HAL 2nd Stage, Indiranagar, Bengaluru, KA 560038
+================================================================================

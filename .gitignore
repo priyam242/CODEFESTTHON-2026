@@ -37,6 +37,8 @@ playwright-report/
 proof_*.png
 devfolio_slide_*.png
 VIDEO_KEYFRAMES_CONTACT_SHEET.png
+/devfolio_upload/
+/DEVFOLIO_SUBMISSION_COPY.txt
 scripts/temp/
 scripts/audio/mastered/
 __pycache__/

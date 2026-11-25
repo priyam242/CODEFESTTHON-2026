@@ -14,30 +14,37 @@ Autonomous SHA-256 & Gemini 3.8 Flash Rental Deposit Cyber-Escrow
 3. TRACKS:
 - Open Innovation
 - AI/ML
-- Web3/Blockchain
 - FinTech
+- CyberSecurity / LegalTech
 
 4. LIVE LINKS:
-- Live Web App: https://rentshield-web.onrender.com
+- Live Web App (PWA): https://rentshield-web.onrender.com
 - Live AI Health Check: https://rentshield-api.onrender.com/api/tenancy/ai-health
 - Zero-Server Courtroom Verifier: https://rentshield-web.onrender.com/verify
-- GitHub Repository: https://github.com/priyam242/CODEFESTTHON-2026
+- GitHub Repository: https://github.com/priyam242/CODEFESTTHON-2026 (MIT License)
 
-5. THE PROBLEM IT SOLVES:
-Across India's urban rental ecosystem, over ₹40,000 Crore in tenant security deposits is locked in opaque, dispute-prone handoffs. At move-out, tenants routinely lose 20% to 50% of their hard-earned deposit to arbitrary damage claims ("scratched sofa", "wall scuffs", "broken fixture") because neither party holds a tamper-proof baseline record or an objective arbitrator. Landlords, meanwhile, have no instant way to verify authentic move-out photos against fake re-uploads or cropped screenshots, and both parties lack automated legal closure documents for residential housing societies and tax accounting.
+5. JUDGE DEMO CREDENTIALS (1-CLICK 3-SCENARIO SANDBOX):
+- On /login, click "Demo as Tenant" (tenant.demo@rentshield.com) or "Demo as Owner" (landlord.demo@rentshield.com).
+- Includes 3 self-healing live scenarios (plus a "Reset Judge Demo" button on Dashboard):
+  1) Greenwood Cyber-Residency 1BHK HSR (Rs.18,000 — Step 01 sealed, awaiting Owner lock)
+  2) Skyline Cyber-Vault 2BHK Indiranagar (Rs.25,000 — Ready immediately for Step 04 AI Audit & Chips)
+  3) Prestige Lakeside 3BHK Koramangala (Rs.45,000 -> Rs.3,500 cut -> Rs.41,500 Settled NOC & Tax Receipt)
+
+6. THE PROBLEM IT SOLVES:
+Across India's urban rental ecosystem, over Rs.40,000 Crore in tenant security deposits is trapped in opaque, dispute-prone handoffs. Landlords insert predatory >2-month deposit or blanket painting-forfeiture clauses before move-in, while tenants routinely lose 20%-50% of their deposit at move-out without tamper-proof baseline records or neutral arbitration. Meanwhile, landlords lack instant protection against duplicate photo re-uploads or selfie spoofing, and both parties lack automated legal closure records.
 
 RentShield solves this end-to-end with a 6-Step Cryptographic & AI Cyber-Escrow Protocol:
-1. Local WebCrypto SHA-256 Sealing: Move-in photos are fingerprinted inside the browser via window.crypto.subtle before landlord lock—making post-hoc tampering mathematically impossible.
-2. Real-World Two-Party QR Escrow Terminals: Instead of illogical single-screen QR popups, the Receiver's screen (#owner-receiving-terminal in Stage 1, #guest-refund-terminal in Stage 2) displays a live NPCI UPI QR matrix while the Payer gets Razorpay Verified Escrow + Direct UPI with a strict zero self-approval gate.
-3. Triple Anti-Fraud Engine + Gemini 3.8 Flash Arbitration: Blocks duplicate move-in photo re-uploads via byte-hash checks, blocks selfies/UI screenshots via a 32x32 spatial skin-cluster & SSIM detector, and invokes Google Gemini 3.8 Flash under Indian Model Tenancy Act (MTA) 2021 Sections 13 & 15 to compute fair itemized deductions vs. normal wear-and-tear.
-4. Statutory Closure & Zero-Server /verify Courtroom: Auto-clears both dashboards to ₹0, generates a scannable Society Move-Out Gate Pass & NOC + tax-ready Settlement Receipt, and lets any arbitrator verify photo authenticity 100% offline in-browser.
+1. MTA 2021 Smart Lease & Deposit Risk Scanner (Pre-Lease Shield): Powered by Google Gemini 3.8 Flash (POST /api/tenancy/audit-lease), checks rental clauses against Indian Model Tenancy Act (MTA) 2021 Sec 11 (2-month residential cap), Sec 13/15 (normal wear-and-tear protection), and Sec 21 (eviction notice), scoring 0-100 risk and generating copyable legal replacement clauses.
+2. Local WebCrypto SHA-256 Sealing (Step 01 & 02): Move-in photos are fingerprinted inside the browser via window.crypto.subtle before landlord revision/lock — making post-hoc pixel edits mathematically detectable.
+3. Real-World Two-Party QR Escrow Terminals (Step 03 & Step 05): The Receiver's screen (#owner-receiving-terminal in Stage 1, #guest-refund-terminal in Stage 2) displays a live NPCI UPI QR matrix while the Payer gets Razorpay Verified Escrow + Direct UPI with a strict zero self-approval gate — auto-clearing both dashboards to Rs.0 on completion.
+4. Triple Anti-Fraud Engine + 1-Click Judge Evidence Chips (Step 04): Blocks duplicate move-in photos via SHA-256 hash checks, blocks human selfies/UI screenshots via a 32x32 spatial skin-cluster & SSIM guard, and invokes Gemini 3.8 Flash under MTA 2021 Sec 13/15 to compute fair deductions vs. normal wear-and-tear.
+5. Statutory Closure & Zero-Server /verify Courtroom (Step 06): Generates a scannable Society Move-Out Gate Pass & NOC, an accounting-ready Official Escrow Settlement Receipt, and lets any arbitrator verify photo bytes 100% offline in-browser.
 
-6. CHALLENGES I RAN INTO:
-- Backwards Real-World QR Payment UX: Early prototypes displayed the payment QR on the payer's own popup and allowed payers to mark their own transfer verified. Re-architecting PaymentModal + Live Receiving Terminals separated Receiver QR presentation from Payer Checkout and enforced two-party bank confirmation (DEPOSIT_CLAIMED / REFUND_CLAIMED) alongside <200ms Razorpay webhook verification.
-- Defeating Clever Photo Spoofing Without High Latency: Tenants or fraudsters can attempt to upload identical move-in photos or dark UI screenshots/selfies. Building a fast client + server 32x32 spatial correlation + skin-tone cluster guard stopped fake evidence pre-upload while keeping authentic Gemini 3.8 Flash canvas-compressed audits under 2.5 seconds.
-- Real-Time Multi-Tab State Without Loading Flicker: Keeping Guest and Owner views dynamically synchronized across independent browser contexts without page reloads caused intermittent loading-spinner flashes during 4s polls; guarding initial mount state with loading && !tenancy delivered seamless zero-flicker updates.
-- 2026 Gemini Model Deprecations: Older Gemini Flash endpoints began returning 404/403 on newer keys; implementing dynamic /v1beta/models capability discovery guarantees zero-downtime multimodal vision and native TTS resilience.
+7. CHALLENGES I RAN INTO:
+- Backwards Real-World QR Payment UX: Early prototypes rendered payment QRs on the payer's own popup and permitted self-approval. Re-architecting PaymentModal + Receiver QR Terminals separated Payer Checkout from Receiver QRs with strict counterparty confirmation (DEPOSIT_CLAIMED / REFUND_CLAIMED) and <200ms Razorpay verification.
+- Defeating Photo Spoofing Pre-Upload: Built a 32x32 spatial skin-cluster & chrominance heuristic calibrated on real beige interiors vs. portraits alongside SHA-256 byte-hash matching to stop fake submissions client-side before hitting Gemini Vision.
+- 2026 Gemini Model Deprecations & TTS RIFF Framing: Implemented dynamic /v1beta/models discovery plus RIFF-safe WAV parsing in our Gemini Puck TTS pipeline to eliminate double-header pops and IPTC XML tail noise.
 
-7. TECHNOLOGIES USED:
-React 19, TypeScript, Vite 6, Tailwind CSS v4, NestJS 11, Prisma ORM 6, Neon PostgreSQL, Google Gemini 3.8 Flash, Google Gemini Native TTS (Puck), W3C Web Crypto API (SHA-256), Razorpay Escrow, NPCI UPI QR, Playwright, FFmpeg, jsPDF, BroadcastChannel API.
+8. TECHNOLOGIES USED:
+React 19, TypeScript, Vite 6, Tailwind CSS v4, NestJS 11, Prisma ORM 6, Neon PostgreSQL, Google Gemini 3.8 Flash (Vision & Legal Audit), Google Gemini Native TTS (Puck), W3C Web Crypto API (SHA-256), Razorpay Escrow, NPCI UPI QR, Playwright (14/14 E2E), FFmpeg (60fps + 48kHz Stereo), jsPDF, BroadcastChannel API.
 ================================================================================
