@@ -1,193 +1,158 @@
-# RentShield 🛡️
+<div align="center">
 
-[![CODEFESTTHON 2026](https://img.shields.io/badge/CODEFESTTHON-2026-6366F1?style=for-the-badge&logo=devfolio&logoColor=white)](https://devfolio.co)
-[![Status](https://img.shields.io/badge/Status-100%25%20Verified%20MVP-10B981?style=for-the-badge)](https://github.com/priyam242/CODEFESTTHON-2026)
-[![Stack](https://img.shields.io/badge/Stack-React%2019%20%7C%20NestJS%2011%20%7C%20Gemini%202.5-0EA5E9?style=for-the-badge)](https://github.com/priyam242/CODEFESTTHON-2026)
+# 🛡️ RentShield
+### Autonomous Cryptographic & AI Rental Security Deposit Cyber-Escrow
 
-> **Built during CODEFESTTHON 2026 (Hosted on Devfolio)**  
-> *A Zero-Tamper Rental Inventory & Multimodal AI Security Deposit Arbitration Protocol.*
+[![Live on Render](https://img.shields.io/badge/Live%20App-rentshield--web.onrender.com-10B981?style=for-the-badge&logo=render&logoColor=white)](https://rentshield-web.onrender.com)
+[![Playwright E2E](https://img.shields.io/badge/Playwright%20E2E-12%2F12%20Passing-10B981?style=for-the-badge&logo=playwright&logoColor=white)](https://github.com/priyam242/CODEFESTTHON-2026)
+[![Gemini 3.8 Flash](https://img.shields.io/badge/Multimodal%20AI-Gemini%203.8%20Flash%20Vision-38BDF8?style=for-the-badge&logo=google-gemini&logoColor=white)](https://rentshield-api.onrender.com/api/tenancy/ai-health)
+[![MTA 2021 Compliant](https://img.shields.io/badge/Legal%20Framework-Indian%20MTA%202021%20Compliant-F59E0B?style=for-the-badge)](https://rentshield-web.onrender.com/verify)
+[![WebCrypto SHA-256](https://img.shields.io/badge/Cryptography-WebCrypto%20SHA--256-6366F1?style=for-the-badge&logo=letsencrypt&logoColor=white)](https://rentshield-web.onrender.com/verify)
 
----
+**Eliminating unfair security deposit deductions across India's ₹40,000+ Crore urban rental market using zero-tamper in-browser SHA-256 seals, real-world Two-Party QR Escrow Terminals, a Triple Anti-Fraud Engine, and Google Gemini 3.8 Flash Multimodal Arbitration.**
 
-## ⚡ The Problem & The Solution
+[🚀 Launch Live App](https://rentshield-web.onrender.com) • [⚖️ Courtroom Verifier (`/verify`)](https://rentshield-web.onrender.com/verify) • [🩺 Live AI Health](https://rentshield-api.onrender.com/api/tenancy/ai-health)
 
-In urban rental markets across India, over **₹1.2 Lakh Crore ($15B+)** in tenant security deposits is held by property owners. At move-out, tenants routinely lose **20% to 50%** of their deposits due to arbitrary, unsubstantiated deductions ("wall scuffs", "worn fixtures", "old appliances") with zero verifiable baseline of move-in condition.
-
-**RentShield eliminates deposit disputes through cryptographic verification and objective AI arbitration:**
-1. **Cryptographic Move-In Seal:** Tenants photograph fixtures during move-in. The browser's native **Web Crypto API** immediately computes local **SHA-256 byte fingerprints**, sealing the condition into an aggregate cryptographic fingerprint before landlord review.
-2. **Landlord Magic Link Lock:** The property owner reviews and locks the baseline condition via a one-time token link. Once approved, the move-in inventory is cryptographically immutable.
-3. **Gemini 2.5 Flash Damage Arbitration:** At move-out, tenants log exit photos. Google’s **Gemini 2.5 Flash** multimodal model objectively evaluates before/after condition, distinguishing **normal wear-and-tear** (₹0 cut) from **genuine negligence**, generating itemized rupee repair recommendations.
-4. **Client-Side Zero-Knowledge Verifier (`/verify`):** Anyone (judges, landlords, legal arbitrators) can drop an inventory certificate PDF or photo into the browser. The file is hashed in memory and verified against the sealed fingerprint—**the file is never uploaded to any server during verification**.
-5. **Multi-Tab Real-Time Sync:** Built using HTML5 `BroadcastChannel` (`rentshield_live_sync`) allowing simultaneous dual-actor evaluation (Tenant in Tab 1, Landlord in Tab 2) with instant zero-refresh emerald status badges.
+</div>
 
 ---
 
-## 🏛️ System & Two-Party Escrow Architecture
+## 🌐 Live Deployment & 1-Click Judge Credentials
+
+Judges can test the entire **Dual-Tab Real-Time Split-Screen Handshake** (Guest in Window 1 + Property Owner in Window 2) directly on production with zero setup:
+
+| Surface / Account | Live Endpoint / Credentials | Notes |
+| :--- | :--- | :--- |
+| **Live Web App (PWA)** | **[https://rentshield-web.onrender.com](https://rentshield-web.onrender.com)** | Installable Progressive Web App with animated Cyber-Shield splash |
+| **Live API Health** | **[https://rentshield-api.onrender.com/api/tenancy/ai-health](https://rentshield-api.onrender.com/api/tenancy/ai-health)** | Auto-discovers active multimodal Gemini models (`3.8-flash` / `3.5-flash-lite` / `4-hydrogen`) |
+| **Courtroom Verifier** | **[https://rentshield-web.onrender.com/verify](https://rentshield-web.onrender.com/verify)** | Zero-server, offline WebCrypto SHA-256 evidence byte matcher |
+| **1-Click Judge Demo** | Click **"Demo as Tenant"** or **"Demo as Owner"** on `/login` | Self-healing seeded PostgreSQL state for instant evaluation |
+| **Guest / Tenant Login** | `priyam@gmail.com` / `priyam1200` | Priyam Prajapati (`TENANT` — Step 01, 03, 04, 05 Terminal, NOC) |
+| **Owner / Landlord Login** | `rajesh@gmail.com` / `rajesh6005` | Rajesh Prajapati (`LANDLORD` — Step 02 Lock, Step 03 Terminal, Step 05 Payout, Tax Receipt) |
+
+---
+
+## ⚡ Why RentShield?
+
+Every year in India, **₹40,000+ Crore** in rental security deposits is trapped in unilateral disputes where tenants lose 20–50% of their money to vague claims (*"wall scuffs"*, *"old sofa wear"*) without immutable baseline proof or neutral arbitration.
+
+RentShield replaces verbal trust with a **6-Step Cryptographic Cyber-Escrow Protocol**:
+1. **Step 01 — In-Browser SHA-256 Baseline:** Guest uploads move-in photos; `window.crypto.subtle` seals raw byte hashes locally before storage.
+2. **Step 02 — Landlord Magic-Link Seal:** Owner inspects hashes via `/verify/:token`, flags revisions if needed, confirms UPI VPA, and cryptographically locks the contract.
+3. **Step 03 — Real-World Two-Party Deposit Terminal:** Owner's screen displays `#owner-receiving-terminal` with a live NPCI QR matrix; Guest's checkout modal (zero duplicate QR) offers Razorpay Verified Escrow or Direct UPI with a **zero self-approval anti-bypass gate**.
+4. **Step 04 — Triple Anti-Fraud + Gemini 3.8 Flash Arbitration:**
+   - **Gate 1:** Client + Server SHA-256 duplicate-photo detector blocks re-uploaded move-in photos.
+   - **Gate 2:** `32x32` spatial chrominance/skin-cluster & SSIM detector blocks selfies, blank screens, and off-room UI screenshots.
+   - **Gate 3:** Google Gemini 3.8 Flash compares baseline vs. exit photos under **Indian Model Tenancy Act (MTA) 2021 Sec 13 & 15**, separating normal wear-and-tear (`₹0`) from genuine negligence.
+5. **Step 05 — Guest Refund Receiving Terminal:** Guest's screen mounts `#guest-refund-terminal` with their auto-saved UPI QR for the exact post-audit net refund; settlement clears **both** dashboards to `₹0` Active Deposit cleanly.
+6. **Step 06 — Statutory Documents & Offline Courtroom (`/verify`):** Generates a scannable **Society Move-Out Gate Pass & NOC**, a tax-ready **Official Escrow Settlement Receipt**, and lets anyone verify photo integrity offline in-browser.
+
+---
+
+## 🏛️ System Architecture
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Tenant as 👤 Tenant (Payer)
-    participant RS as 🛡️ RentShield Protocol
-    actor Owner as 🏠 Owner (Receiver)
-
-    Note over Tenant, Owner: Stage 1: Security Deposit Handshake (Step 03)
-    Owner->>RS: Lock & Approve Step 02 Baseline
-    RS-->>Owner: Display "🏦 Owner Receiving Terminal" (Owner QR & UPI)
-    RS-->>Tenant: Unlock Step 03 "Pay Security Deposit"
-    alt Razorpay Verified Escrow
-        Tenant->>RS: Pay via Razorpay Gateway
-        RS-->>Tenant: Auto-Verify & Close (<200ms)
-        RS-->>Owner: Live Broadcast: ₹25,000 Escrow Deposit Locked
-    else Direct UPI Handshake
-        Tenant->>Owner: Scan Owner QR & Notify "Payment Sent"
-        RS-->>Owner: Display "Confirm ₹25,000 Received in Bank"
-        Owner->>RS: Confirm Bank Receipt
-        RS-->>Tenant: Step 03 Confirmed & Unlocked
+flowchart LR
+    subgraph Guest["👤 Guest Browser (WebCrypto SHA-256)"]
+        G1["1. Move-In Photo Capture<br/>Local SHA-256 Byte Seal"]
+        G2["3. Guest Payer Checkout<br/>Razorpay Escrow / Direct UPI"]
+        G3["5. #guest-refund-terminal<br/>Live Refund QR Receiver"]
     end
 
-    Note over Tenant, Owner: Stage 2: Net Refund Handshake (Step 05)
-    Tenant->>RS: Submit Move-Out Evidence (Auto-Save Tenant UPI)
-    RS->>RS: Triple Anti-Fraud & Gemini 3.8 Flash Multimodal Audit
-    RS-->>Tenant: Display "💸 Guest Refund Terminal" (Tenant QR & UPI)
-    RS-->>Owner: Unlock Step 05 "Scan Guest QR / Pay Net Refund"
-    alt Razorpay Verified Escrow
-        Owner->>RS: Release Net Refund
-        RS-->>Tenant: Auto-Verify & Clear Active Tenancy to ₹0
-    else Direct UPI Handshake
-        Owner->>Tenant: Scan Tenant QR & Notify "Refund Sent"
-        RS-->>Tenant: Display "Confirm ₹21,500 Refund Received"
-        Tenant->>RS: Confirm Bank Receipt
-        RS-->>Owner: Tenancy Settled & Moved to History
-    end
-```
-
-```mermaid
-flowchart TD
-    subgraph Client ["Client Layer (React 19 + Vite 6 + Tailwind v4)"]
-        A["Tenant Move-In Capture"] -->|Web Crypto API| B["Local SHA-256 Hash"]
-        C["Landlord Magic Portal"] -->|BroadcastChannel| D["Live Cross-Tab Sync"]
-        E["Public Verifier /verify"] -->|In-Browser Web Crypto| F["Tamper-Proof Verdict"]
-        T1["🏦 Owner Receiving Terminal"] -->|Dynamic QR| D
-        T2["💸 Guest Refund Terminal"] -->|Dynamic QR| D
+    subgraph AntiFraud["🛡️ Triple Anti-Fraud & AI Engine"]
+        AF1["Layer 1: Exact SHA-256<br/>Duplicate Hash Blocker"]
+        AF2["Layer 2: 32x32 Portrait &<br/>Spatial SSIM Scene Blocker"]
+        AF3["Layer 3: Gemini 3.8 Flash<br/>MTA 2021 Sec 13/15 Arbitrator"]
+        AF1 --> AF2 --> AF3
     end
 
-    subgraph Server ["Backend API (NestJS 11 + Prisma ORM)"]
-        G["Tenancy Controller"] --> H["Tenancy Service"]
-        I["Items Controller"] --> J["Items Service"]
-        P["Payments Controller"] --> PS["Payments Service (Razorpay Escrow)"]
-        H & J & PS --> K[("PostgreSQL Database")]
+    subgraph Owner["🏠 Owner Portal (/verify/:token)"]
+        O1["2. Cryptographic Seal &<br/>Revision Flagging"]
+        O2["3. #owner-receiving-terminal<br/>Live Deposit QR Matrix"]
+        O3["5. Owner Refund Release<br/>Bank Confirmation Gate"]
     end
 
-    subgraph AI ["Multimodal AI Engine"]
-        L["Google Gemini 3.8 / 3.5 Flash"] -->|Visual Arbitration| M["Itemized Rupee Deduction & MTA 2021 Verdict"]
+    subgraph Outputs["📄 Statutory Settlement & Offline Audit"]
+        D1["🛂 Society Move-Out<br/>Gate Pass & No-Dues NOC"]
+        D2["🧾 Official Escrow<br/>Settlement Receipt (PDF)"]
+        D3["⚖️ Zero-Server Verifier (/verify)<br/>Offline SHA-256 Match"]
     end
 
-    B --> G
-    C --> G
-    J --> L
-    M --> J
-    D --> P
+    G1 --> O1 --> O2
+    O2 -. "Live Cross-Tab Sync<br/>(BroadcastChannel + Poll)" .-> G2
+    G2 --> AF1
+    AF3 --> G3
+    G3 -. "Exact Net Refund" .-> O3
+    O3 --> D1 & D2 --> D3
 ```
 
 ---
 
-## 🏆 Judge Quick-Test Guide (Dual-Screen Evaluation in 60s)
+## 🛠️ Tech Stack
 
-To evaluate the complete real-world two-party handshake:
-1. **Open Two Browser Windows Side-by-Side:**
-   - **Left Window:** Open `https://rentshield-web.onrender.com/login` and click **"1-Click Demo Login as Tenant"** (`priyam@gmail.com` / `priyam1200`).
-   - **Right Window:** Open `https://rentshield-web.onrender.com/login` and click **"1-Click Demo Login as Landlord"** (`rajesh@gmail.com` / `rajesh6005`).
-2. **Create & Live Sync Tenancy:**
-   - In Left Tab, click `+ New Tenancy`, enter ₹25,000 deposit, and submit.
-   - Watch the Right Tab update **instantly with 0 page refreshes** via HTML5 BroadcastChannel!
-3. **Inspect & Approve Baseline:**
-   - Left Tab: Upload a living room photo under Step 01.
-   - Right Tab: Open Landlord Verify portal, review photo, check the confirmation box, and click **"Lock & Approve Baseline"**.
-4. **Experience Stage 1 Deposit Handshake:**
-   - Right Tab immediately renders the **"🏦 Owner Receiving Terminal"** displaying the Owner's live QR Code and UPI ID.
-   - Left Tab: Click **"Pay Security Deposit"** and choose Razorpay Escrow or Direct UPI. In test mode, it verifies in <200ms!
-5. **Trigger Triple Anti-Fraud & Gemini Multimodal Audit:**
-   - Left Tab: In Step 04 Move-Out, try uploading a duplicate photo (detected!), or a selfie portrait (scene mismatch blocked!), then upload the authentic damaged sofa.
-   - Click **"Run AI Damage Audit"**: Google Gemini arbitrates fair wear-and-tear vs negligence under MTA 2021.
-6. **Experience Stage 2 Net Refund Handshake:**
-   - Left Tab immediately displays the **"💸 Guest Refund Receiving Terminal"** with Tenant's live QR Code.
-   - Right Tab: Click **"Scan Guest QR / Pay Net Refund"** and release payout.
-   - Both screens auto-clear to ₹0 active deposit and transfer the contract into Settled History!
-7. **Download Official Documents:**
-   - Tenant accesses **"Society Gate Pass & NOC"**; Owner downloads/prints **"Official Escrow Settlement Receipt"**.
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React 19, TypeScript, Vite 6, Tailwind CSS v4, Lucide Icons, `qrcode`, `jspdf`, W3C Web Crypto API (`crypto.subtle`) |
+| **Backend** | NestJS 11, TypeScript, Prisma ORM 6, Passport JWT, Multer |
+| **Database** | Neon Serverless PostgreSQL |
+| **AI & Vision** | Google Gemini 3.8 Flash / 3.5 Flash Lite / 4 Hydrogen (Multimodal Vision + Native TTS `Puck`) |
+| **Payments** | Two-Party Direct NPCI UPI Terminals + Razorpay Verified Escrow Gateway |
+| **Testing & QA** | Playwright E2E Suite (`12/12` scenarios passing), FFmpeg 60fps automated verification |
 
 ---
 
-## 🚀 1-Click Judge Credentials & Quickstart
+## 💻 Local Monorepo Quickstart
 
-For evaluating judges, RentShield includes pre-configured demo credentials and automated database seeding:
+### Prerequisites
+- Node.js `>= 20` & `pnpm` (`>= 9`)
+- PostgreSQL database URL (`DATABASE_URL`) & `GEMINI_API_KEY` in `server/.env`
 
-### 1-Click Quick Login (On `/login`)
-- **Tenant Persona:**  
-  `tenant.demo@rentshield.com` | `password123`  
-  *(Aarav Sharma — Active 2BHK Tenancy in Indiranagar, Bangalore with pre-hashed fixtures)*
-- **Landlord Persona:**  
-  `landlord.demo@rentshield.com` | `password123`  
-  *(Ramesh Malik — Property Owner review & approval portal)*
-
-### Local Setup in 2 Commands
+### Setup & Run
 ```bash
-# 1. Install all monorepo dependencies
+# 1. Install dependencies across client & server workspaces
 pnpm install
 
-# 2. Run both NestJS API (port 4000) and React client (port 5173) concurrently
+# 2. Push Prisma schema to PostgreSQL
+pnpm --filter rentshield-server exec prisma db push
+
+# 3. Start both NestJS API (:4000) and React Vite client (:5173)
 pnpm dev
 ```
-Open **[http://localhost:5173](http://localhost:5173)** in your browser.  
-*(Note: Visiting `http://localhost:4000` automatically redirects to `http://localhost:5173`).*
 
----
+### Verification Commands
+```bash
+# Typecheck & production builds
+pnpm --filter rentshield-server build
+pnpm --filter rentshield-client build
 
-## 🛡️ Mandatory Devfolio Code of Conduct & Third-Party Disclosures
-
-Per Devfolio's Hackathon Code of Conduct, we explicitly disclose all third-party libraries, boilerplates, and tools utilized:
-
-| Category | Technology / Package | Disclosure & Scope |
-| :--- | :--- | :--- |
-| **Framework Boilerplates** | NestJS CLI & Vite React TS Starter | Used solely for baseline directory scaffolding. |
-| **Multimodal AI** | `@google/genai` (Gemini 2.5 Flash) | AI arbitration prompt engineering and structured schema parsing built during the hackathon. |
-| **Cryptography** | W3C Web Crypto API (`window.crypto.subtle`) | Standard native browser API used for zero-server in-browser SHA-256 byte hashing. |
-| **UI & Styling** | Tailwind CSS v4, Lucide Icons | Component styling and icon design. |
-| **Export Engine** | `jspdf` | Client-side cryptographic condition report PDF generation. |
-| **Database & ORM** | Prisma ORM 6 & PostgreSQL | Data modeling with custom resilient in-memory fallback for offline continuity. |
-
-**Declaration:** 100% of the domain business logic, the dual-tab `BroadcastChannel` synchronization engine, the cryptographic hash aggregation pipeline, the public verifier page, and the rental deposit arbitration system were conceived and developed exclusively during **CODEFESTTHON 2026**.
-
----
-
-## 📂 Repository Structure
-
+# Run full Playwright E2E test suite (12 scenarios)
+pnpm --filter rentshield-client test:e2e
 ```
-├── client/                     # React 19 + TypeScript + Vite 6 Frontend
-│   ├── src/
-│   │   ├── components/         # Navbar, Status Badges
-│   │   ├── pages/
-│   │   │   ├── Dashboard.tsx   # Tenancy overview & live sync status
-│   │   │   ├── TenancyDetail.tsx # 4-step progressive inspection sidebar
-│   │   │   ├── LandlordVerify.tsx # Landlord magic link approval portal
-│   │   │   ├── PublicVerifier.tsx # Zero-upload drag-and-drop SHA-256 verifier
-│   │   │   └── Login.tsx       # 1-Click Judge quick logins
-│   │   ├── realtimeSync.ts     # HTML5 BroadcastChannel cross-tab engine
-│   │   └── api.ts              # Axios client with multi-tab session isolation
+
+---
+
+## 📂 Monorepo Structure
+
+```text
+├── client/                     # React 19 + Vite 6 + Tailwind v4 Frontend
+│   ├── e2e/                    # 12-scenario Playwright end-to-end suite
+│   └── src/
+│       ├── components/         # PaymentModal, SocietyGatePassModal, EscrowReceiptModal, IntroSplash
+│       ├── pages/              # Dashboard, TenancyDetail, LandlordVerify, PublicVerifier (/verify)
+│       ├── utils/              # escrowSequence.ts shared 6-step state machine
+│       └── realtimeSync.ts     # BroadcastChannel + silent background sync hook
 ├── server/                     # NestJS 11 Backend API
-│   ├── src/
-│   │   ├── ai-audit/           # Gemini 2.5 Flash multimodal arbitration service
-│   │   ├── auth/               # Passport JWT authentication & role management
-│   │   ├── items/              # Room fixtures, photo upload & hashing
-│   │   ├── tenancy/            # Tenancy lifecycle, magic tokens & certificates
-│   │   └── prisma/             # Prisma client with resilient in-memory fallback
-├── prisma/
-│   └── schema.prisma           # Tenancy, Item, and User models
-└── output.txt                  # (Ignored from git) Local execution log
+│   ├── prisma/                 # Prisma schema (User, Tenancy, Item)
+│   └── src/
+│       ├── ai-audit/           # Gemini 3.8 Flash multimodal arbitration & native TTS engine
+│       ├── items/              # Evidence ingestion, SHA-256 verification, move-out audit
+│       ├── payments/           # Two-party Payer/Receiver escrow & Razorpay order verification
+│       └── tenancy/            # Lifecycle, landlord magic tokens, public certificates
+└── scripts/                    # Automated Playwright + Gemini TTS demo & proof pack pipelines
 ```
 
 ---
 
-## ⚖️ License
-Licensed under the [MIT License](LICENSE). Built with pride for **CODEFESTTHON 2026**.
+<div align="center">
+Built with cryptographic rigor during <strong>CODEFESTTHON 2026</strong> • Licensed under MIT
+</div>
