@@ -4,10 +4,9 @@ import sys
 import time
 import json
 import shutil
-import struct
 import subprocess
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from playwright.async_api import async_playwright
 import psycopg2
 from dotenv import load_dotenv
@@ -43,27 +42,40 @@ with open(os.path.join(CANDIDATES_DIR, "thumbnails.json"), "r", encoding="utf-8"
     THUMBNAILS = json.load(f)
 
 
-def wipe_neon_db_spotless():
+def wipe_user_tenancies_preserve_demo():
+    """Surgically wipes ONLY priyam@gmail.com & rajesh@gmail.com tenancies/items; preserves Judge Demo accounts."""
     import bcrypt
     conn = psycopg2.connect(DB_URL)
+    conn.autocommit = True
     cur = conn.cursor()
-    cur.execute('DELETE FROM "Item"')
-    cur.execute('DELETE FROM "Tenancy"')
-    cur.execute('DELETE FROM "User" WHERE email NOT IN (\'priyam@gmail.com\', \'rajesh@gmail.com\')')
+
+    cur.execute(
+        'DELETE FROM "Item" WHERE "tenancyId" IN ('
+        '  SELECT t.id FROM "Tenancy" t '
+        '  LEFT JOIN "User" u ON t."userId" = u.id '
+        '  WHERE u.email IN (\'priyam@gmail.com\', \'rajesh@gmail.com\') '
+        '     OR t."landlordEmail" IN (\'priyam@gmail.com\', \'rajesh@gmail.com\')'
+        ')'
+    )
+    cur.execute(
+        'DELETE FROM "Tenancy" WHERE "userId" IN ('
+        '  SELECT id FROM "User" WHERE email IN (\'priyam@gmail.com\', \'rajesh@gmail.com\')'
+        ') OR "landlordEmail" IN (\'priyam@gmail.com\', \'rajesh@gmail.com\')'
+    )
+
     p1 = bcrypt.hashpw(b"priyam1200", bcrypt.gensalt()).decode()
     p2 = bcrypt.hashpw(b"rajesh6005", bcrypt.gensalt()).decode()
     cur.execute('UPDATE "User" SET password = %s, name = \'Priyam Prajapati\', role = \'TENANT\' WHERE email = \'priyam@gmail.com\'', (p1,))
     cur.execute('UPDATE "User" SET password = %s, name = \'Rajesh Prajapati\', role = \'LANDLORD\' WHERE email = \'rajesh@gmail.com\'', (p2,))
-    conn.commit()
     conn.close()
-    print("[DB] Neon PostgreSQL wiped spotless (0 Items, 0 Tenancies).")
+    print("[DB] Cleaned priyam@gmail.com & rajesh@gmail.com tenancies cleanly (Judge Demo accounts preserved).")
 
 
 def run_cmd(cmd):
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
         print("CMD FAILED:", " ".join(cmd))
-        print("STDERR:", res.stderr[-1000:])
+        print("STDERR:", res.stderr[-1200:])
         raise RuntimeError(f"FFmpeg command failed ({res.returncode})")
     return res.stdout
 
@@ -299,7 +311,8 @@ async def animated_click(page, selector, timeout=15000):
     await loc.click()
 
 
-async def animated_type(page, selector, text, delay=0.025):
+async def animated_type(page, selector, text, delay=0.065):
+    """Calm, natural human typing cadence (default 65ms/char)."""
     loc = page.locator(selector).first if isinstance(selector, str) else selector
     await loc.wait_for(state="visible", timeout=12000)
     await loc.scroll_into_view_if_needed()
@@ -368,7 +381,7 @@ async def record_scene_01(browser) -> str:
 
     await page.set_content(dark_google_html)
     await attach_overlay(page)
-    await animated_type(page, "#dark-q", "https://rentshield-web.onrender.com", delay=0.03)
+    await animated_type(page, "#dark-q", "https://rentshield-web.onrender.com", delay=0.065)
     await asyncio.sleep(0.5)
 
     await page.goto(f"{BASE_URL}/?intro=1", timeout=30000)
@@ -392,7 +405,7 @@ async def record_scene_01(browser) -> str:
     await ctx.close()
     raw_webm = str(max(Path(s1_dir).glob("*.webm"), key=os.path.getmtime))
     out_mp4 = os.path.join(TEMP_DIR, "scene_01_raw.mp4")
-    run_cmd(["ffmpeg", "-y", "-i", raw_webm, "-vf", "scale=1920:1080,fps=60", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", out_mp4])
+    run_cmd(["ffmpeg", "-y", "-i", raw_webm, "-vf", "scale=1920:1080,fps=60", "-c:v", "libx264", "-preset", "fast", "-crf", "19", "-pix_fmt", "yuv420p", out_mp4])
     return out_mp4
 
 
@@ -400,11 +413,6 @@ async def record_scene_01(browser) -> str:
 # EXACT FRAME-BOUNDARY SLICER FOR CONTINUOUS DUAL SPLIT-SCREEN
 # -----------------------------------------------------------------------------
 def slice_dual_video_by_led(dual_mp4: str, expected_scenes: list):
-    """
-    Scans pixel (15, 15) across every 60fps frame of dual_mp4.
-    Detects transitions between Emerald (#10b981 -> G>B) and Cyan (#38bdf8 -> B>G) LEDs,
-    splitting dual_mp4 at exact 1/60s frame indices into scene_02_raw.mp4 ... scene_09_raw.mp4!
-    """
     proc = subprocess.Popen(
         ["ffmpeg", "-v", "error", "-i", dual_mp4, "-vf", "crop=4:4:15:13", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
         stdout=subprocess.PIPE
@@ -417,15 +425,11 @@ def slice_dual_video_by_led(dual_mp4: str, expected_scenes: list):
         chunk = proc.stdout.read(frame_bytes)
         if len(chunk) < frame_bytes:
             break
-        # Average green vs blue across 4x4 crop
-        r_sum = sum(chunk[i] for i in range(0, frame_bytes, 3)) / 16.0
-        g_sum = sum(chunk[i+1] for i in range(0, frame_bytes, 3)) / 16.0
-        b_sum = sum(chunk[i+2] for i in range(0, frame_bytes, 3)) / 16.0
-        # Only inspect frames after header bar mounts (green or cyan present)
+        g_sum = sum(chunk[i + 1] for i in range(0, frame_bytes, 3)) / 16.0
+        b_sum = sum(chunk[i + 2] for i in range(0, frame_bytes, 3)) / 16.0
         if g_sum > 120 or b_sum > 150:
             state = "EMERALD" if g_sum > b_sum else "CYAN"
             if state != prev_state:
-                # Avoid debouncing single-frame compression glitches by requiring at least 30 frames (0.5s) from last transition
                 if not transitions or (idx - transitions[-1][0] > 30):
                     transitions.append((idx, state))
                     prev_state = state
@@ -439,14 +443,14 @@ def slice_dual_video_by_led(dual_mp4: str, expected_scenes: list):
     for pos, scene_num in enumerate(expected_scenes):
         start_f = transitions[pos][0] if pos < len(transitions) else 0
         if pos == 0:
-            start_f = 0  # include login transition in scene 2 cleanly
+            start_f = 0
         end_f = transitions[pos + 1][0] if (pos + 1) < len(transitions) else total_frames
         t0 = start_f / 60.0
         dur = max(1.0, (end_f - start_f) / 60.0)
         out_p = os.path.join(TEMP_DIR, f"scene_{scene_num:02d}_raw.mp4")
         run_cmd([
             "ffmpeg", "-y", "-ss", f"{t0:.4f}", "-i", dual_mp4, "-t", f"{dur:.4f}",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-r", "60", out_p
+            "-c:v", "libx264", "-preset", "fast", "-crf", "19", "-pix_fmt", "yuv420p", "-r", "60", out_p
         ])
         out_paths[scene_num] = out_p
         print(f"  -> Sliced Scene {scene_num:02d}: frames [{start_f}..{end_f}] = {dur:.2f}s")
@@ -454,7 +458,7 @@ def slice_dual_video_by_led(dual_mp4: str, expected_scenes: list):
 
 
 # -----------------------------------------------------------------------------
-# PASS 1: SCENES 02..09 (DUAL SPLIT SCREEN + SCRAPE EXACT LIVE GEMINI NUMBERS)
+# PASS 1: SCENES 02..09 (DUAL SPLIT SCREEN + LEASE SCANNER + CHIPS + GEMINI)
 # -----------------------------------------------------------------------------
 async def record_scenes_02_to_09(browser):
     print(">>> [PASS 1] Recording Scenes 02..09 (True Dual-Tab Live Sync + LED Frame Markers)...")
@@ -478,12 +482,12 @@ async def record_scenes_02_to_09(browser):
     await asyncio.gather(page_l.goto(f"{BASE_URL}/login", timeout=30000), page_r.goto(f"{BASE_URL}/login", timeout=30000))
     await asyncio.gather(attach_overlay(page_l, "TENANT", 2), attach_overlay(page_r, "LANDLORD", 2))
 
-    await animated_type(page_l, 'input[type="email"]', TENANT_EMAIL)
-    await animated_type(page_l, 'input[type="password"]', TENANT_PASS)
+    await animated_type(page_l, 'input[type="email"]', TENANT_EMAIL, delay=0.065)
+    await animated_type(page_l, 'input[type="password"]', TENANT_PASS, delay=0.065)
     await animated_click(page_l, 'button[type="submit"]:has-text("Sign In")')
 
-    await animated_type(page_r, 'input[type="email"]', LANDLORD_EMAIL)
-    await animated_type(page_r, 'input[type="password"]', LANDLORD_PASS)
+    await animated_type(page_r, 'input[type="email"]', LANDLORD_EMAIL, delay=0.065)
+    await animated_type(page_r, 'input[type="password"]', LANDLORD_PASS, delay=0.065)
     await animated_click(page_r, 'button[type="submit"]:has-text("Sign In")')
 
     await page_l.wait_for_url(f"{BASE_URL}/", timeout=25000)
@@ -492,38 +496,52 @@ async def record_scenes_02_to_09(browser):
     await wait_no_spinners(page_r)
     await asyncio.gather(attach_overlay(page_l, "TENANT", 2), attach_overlay(page_r, "LANDLORD", 2))
 
-    # Open User Profile Vault Modal & hold 2.5s
     user_pill = page_l.locator('nav button:has-text("Priyam"), [title*="Profile"]').first
     await animated_click(page_l, user_pill)
-    await asyncio.sleep(2.5)
-    close_prof = page_l.locator('button:has-text("Close"), button[title="Close"], button:has-text("Save Profile")').first
+    await asyncio.sleep(2.2)
+    # Close Profile modal cleanly (X button inside dialog)
+    close_prof = page_l.locator('[role="dialog"] button:has-text("Close"), [role="dialog"] button[aria-label*="Close"], [role="dialog"] button').first
     if await close_prof.is_visible():
         await animated_click(page_l, close_prof)
-    await asyncio.sleep(0.6)
+    await asyncio.sleep(0.5)
 
     # ---------------- SCENE 3 (Odd -> CYAN) ----------------
-    print("  -> Scene 03: Create ₹25,000 Tenancy + Live Auto-Sync to Owner...")
+    print("  -> Scene 03: MTA 2021 Smart Lease & Deposit Clause Scanner Showcase...")
     await page_l.evaluate("window.setSceneLed && window.setSceneLed(3);")
-    await page_l.goto(f"{BASE_URL}/tenancy/new", timeout=25000)
-    await attach_overlay(page_l, "TENANT", 3)
+    await animated_click(page_l, 'button:has-text("Lease Risk Scanner")')
+    await page_l.locator('button:has-text("Predatory 10-Month Deposit")').first.wait_for(state="visible", timeout=10000)
+    await animated_click(page_l, 'button:has-text("Predatory 10-Month Deposit")')
+    await page_l.locator("#lease-audit-result").wait_for(state="visible", timeout=45000)
+    await page_l.locator('text=Suggested Fair MTA 2021 Replacement Wording').first.scroll_into_view_if_needed()
+    await page_r.evaluate("window.showAutoSyncBadge && window.showAutoSyncBadge('MTA 2021 AI LEGAL SCANNER • 95/100 HIGH RISK');")
+    await asyncio.sleep(5.5)
 
-    await animated_type(page_l, 'input[placeholder*="Green Glen"]', "Skyline Cyber-Vault 2BHK Indiranagar")
-    await animated_type(page_l, 'textarea', "88, 100ft Road, Indiranagar, Bengaluru, KA 560038")
-    await animated_type(page_l, 'input[type="number"]', "25000")
-    await animated_type(page_l, 'input[placeholder*="Ramesh Malik"]', "Rajesh Prajapati")
-    await animated_type(page_l, 'input[placeholder*="98765"]', "+91 99887 76655")
-    await animated_type(page_l, 'input[placeholder*="landlord.demo"]', LANDLORD_EMAIL)
-    await animated_type(page_l, 'input[placeholder*="okhdfcbank"]', "rajesh.prajapati@okhdfcbank")
-    await animated_type(page_l, 'input[placeholder*="BLR-IND"]', "BLR-IND-2026-KA-9912")
+    # ---------------- SCENE 4 (Even -> EMERALD) ----------------
+    print("  -> Scene 04: Create ₹25,000 Tenancy + Live Auto-Sync to Owner...")
+    await page_l.evaluate("window.setSceneLed && window.setSceneLed(4);")
+    close_scanner = page_l.locator('[role="dialog"] button').first
+    if await close_scanner.is_visible():
+        await animated_click(page_l, close_scanner)
+    await asyncio.sleep(0.3)
+    await page_l.goto(f"{BASE_URL}/tenancy/new", timeout=25000)
+    await attach_overlay(page_l, "TENANT", 4)
+
+    await animated_type(page_l, 'input[placeholder*="Green Glen"]', "Skyline Cyber-Vault 2BHK Indiranagar", delay=0.065)
+    await animated_type(page_l, 'textarea', "88, 100ft Road, Indiranagar, Bengaluru, KA 560038", delay=0.065)
+    await animated_type(page_l, 'input[type="number"]', "25000", delay=0.065)
+    await animated_type(page_l, 'input[placeholder*="Ramesh Malik"]', "Rajesh Prajapati", delay=0.065)
+    await animated_type(page_l, 'input[placeholder*="98765"]', "+91 99887 76655", delay=0.065)
+    await animated_type(page_l, 'input[placeholder*="landlord.demo"]', LANDLORD_EMAIL, delay=0.065)
+    await animated_type(page_l, 'input[placeholder*="okhdfcbank"]', "rajesh.prajapati@okhdfcbank", delay=0.065)
+    await animated_type(page_l, 'input[placeholder*="BLR-IND"]', "BLR-IND-2026-KA-9912", delay=0.065)
 
     await animated_click(page_l, 'button[type="submit"]:has-text("Initialize & Protect Deposit")')
     await page_l.wait_for_url(lambda u: "/tenancy/" in u and "/tenancy/new" not in u, timeout=25000)
     await wait_no_spinners(page_l)
-    await attach_overlay(page_l, "TENANT", 3)
+    await attach_overlay(page_l, "TENANT", 4)
     tenancy_id = page_l.url.split("/tenancy/")[1].split("?")[0]
     print(f"     Created Tenancy ID: {tenancy_id}")
 
-    # Wait for Right Owner Dashboard live auto-sync (up to 6s, zero reload!)
     try:
         await page_r.locator('text=Skyline Cyber-Vault 2BHK Indiranagar').first.wait_for(state="visible", timeout=7000)
     except Exception:
@@ -531,24 +549,23 @@ async def record_scenes_02_to_09(browser):
     await page_r.evaluate("window.showAutoSyncBadge && window.showAutoSyncBadge('LIVE DYNAMIC AUTO-SYNC: NEW PROPERTY RECEIVED!');")
     await asyncio.sleep(2.2)
 
-    # ---------------- SCENE 4 (Even -> EMERALD) ----------------
-    print("  -> Scene 04: Upload 1 Clean Baseline Photo + Owner Revision Request...")
-    await page_l.evaluate("window.setSceneLed && window.setSceneLed(4);")
+    # ---------------- SCENE 5 (Odd -> CYAN) ----------------
+    print("  -> Scene 05: Step 01 SHA-256 Upload + Revision Flag + Owner UPI Lock...")
+    await page_l.evaluate("window.setSceneLed && window.setSceneLed(5);")
     await animated_click(page_l, 'button:has-text("Upload Room Item")')
     await asyncio.sleep(0.5)
 
-    await animated_type(page_l, 'input[placeholder*="Living Room"]', "Living Room")
-    await animated_type(page_l, 'input[placeholder*="Inverter AC"]', "Italian Leather Sofa & Recliner")
-    await animated_type(page_l, 'textarea[placeholder*="pre-existing"]', "Pristine beige leather, zero tears or scratches.")
+    await animated_type(page_l, 'input[placeholder*="Living Room"]', "Living Room", delay=0.065)
+    await animated_type(page_l, 'input[placeholder*="Inverter AC"]', "Italian Leather Sofa & Recliner", delay=0.065)
+    await animated_type(page_l, 'textarea[placeholder*="pre-existing"]', "Pristine beige leather, zero tears or scratches.", delay=0.065)
 
     await pick_file_with_visual_overlay(page_l, 'input[type="file"]', 'living_room_clean.jpg', MOVE_IN_IMG, title="Baseline Inventory — Select Photo", hold_sec=1.3)
     await animated_click(page_l, 'button[type="submit"]:has-text("Lock Item Hash")')
     await page_l.locator('h3:has-text("Upload Baseline Move-In Item")').wait_for(state="detached", timeout=25000)
     await asyncio.sleep(0.5)
     await wait_no_spinners(page_l)
-    await attach_overlay(page_l, "TENANT", 4)
+    await attach_overlay(page_l, "TENANT", 5)
 
-    # Query landlordToken from DB (autocommit=True so subsequent queries never read stale MVCC snapshots!)
     conn = psycopg2.connect(DB_URL)
     conn.autocommit = True
     cur = conn.cursor()
@@ -557,38 +574,41 @@ async def record_scenes_02_to_09(browser):
 
     await page_r.goto(f"{BASE_URL}/verify/{landlord_token}", timeout=25000)
     await wait_no_spinners(page_r)
-    await attach_overlay(page_r, "LANDLORD", 4)
+    await attach_overlay(page_r, "LANDLORD", 5)
 
     flag_btn = page_r.locator('button:has-text("Flag Discrepancy / Request Revision")').first
     if await flag_btn.is_visible():
         await animated_click(page_r, flag_btn)
-        await asyncio.sleep(0.5)
-        await animated_type(page_r, 'textarea', "Please include power outlet & corner sofa cushion stitch detail.")
+        await asyncio.sleep(0.4)
+        await animated_type(page_r, 'textarea', "Please confirm corner sofa cushion stitch detail.", delay=0.065)
         await animated_click(page_r, 'button:has-text("Send Revision Request")')
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(1.2)
 
     try:
         await page_l.locator('text=/Revision Requested/i').first.wait_for(state="visible", timeout=7000)
     except Exception:
         pass
     await page_l.evaluate("window.showAutoSyncBadge && window.showAutoSyncBadge('LIVE DYNAMIC AUTO-SYNC: REVISION REQUEST RECEIVED!');")
-    await asyncio.sleep(2.0)
+    await asyncio.sleep(1.5)
 
-    # ---------------- SCENE 5 (Odd -> CYAN) ----------------
-    print("  -> Scene 05: Owner Approves & Locks Baseline + Step 03 Unlocks...")
-    await page_l.evaluate("window.setSceneLed && window.setSceneLed(5);")
+    # Confirm Owner UPI & Lock & Approve Baseline
+    upi_owner = page_r.locator('input[placeholder*="okhdfcbank"], input[placeholder*="UPI"]').first
+    if await upi_owner.is_visible():
+        val = await upi_owner.input_value()
+        if not val.strip():
+            await animated_type(page_r, upi_owner, "rajesh.prajapati@okhdfcbank", delay=0.065)
     chk = page_r.locator('input[type="checkbox"]').first
     if await chk.is_visible() and not (await chk.is_checked()):
         await chk.check()
     await animated_click(page_r, 'button:has-text("Lock & Approve Baseline")')
-    await asyncio.sleep(2.0)
+    await asyncio.sleep(1.8)
 
     try:
         await page_l.locator('button:has-text("Pay Security Deposit"), button:has-text("Pay & Lock Deposit")').first.wait_for(state="visible", timeout=7000)
     except Exception:
         pass
     await page_l.evaluate("window.showAutoSyncBadge && window.showAutoSyncBadge('CONTRACT CRYPTOGRAPHICALLY SEALED • STEP 03 UNLOCKED!');")
-    await asyncio.sleep(2.0)
+    await asyncio.sleep(1.8)
 
     # ---------------- SCENE 6 (Even -> EMERALD) ----------------
     print("  -> Scene 06: Stage 1 Deposit (#owner-receiving-terminal QR + Clean Payer Modal)...")
@@ -600,9 +620,8 @@ async def record_scenes_02_to_09(browser):
 
     await animated_click(page_l, 'button:has-text("Pay Security Deposit"), button:has-text("Pay & Lock Deposit")')
     await page_l.locator('text=Direct UPI Transfer to').first.wait_for(state="visible", timeout=12000)
-    await asyncio.sleep(2.2)  # Hold both Owner QR Terminal & Clean Guest Checkout!
+    await asyncio.sleep(2.2)
 
-    # Use Razorpay Webhook Simulation cleanly (instant verified close)
     await animated_click(page_l, 'button:has-text("Judge Demo Simulate Razorpay Webhook")')
     await page_l.locator('button:has-text("Upload Move-Out & Audit")').first.wait_for(state="visible", timeout=15000)
 
@@ -610,26 +629,30 @@ async def record_scenes_02_to_09(browser):
     await asyncio.sleep(2.2)
 
     # ---------------- SCENE 7 (Odd -> CYAN) ----------------
-    print("  -> Scene 07: Step 04 Triple Anti-Fraud Engine + Live Gemini 3.8 Audit...")
+    print("  -> Scene 07: Step 04 1-Click Judge Quick-Test Chips + File Picker + Live Gemini 3.8 Audit...")
     await page_l.evaluate("window.setSceneLed && window.setSceneLed(7);")
     await animated_click(page_l, 'button:has-text("Upload Move-Out & Audit")')
     await asyncio.sleep(0.8)
 
-    # (a) Duplicate Photo Block
-    await pick_file_with_visual_overlay(page_l, 'input[type="file"]', 'living_room_duplicate.jpg', DUP_IMG, title="Move-Out Audit — Select Photo (Test 1)", hold_sec=1.1)
-    await asyncio.sleep(2.0)  # Hold Red Duplicate Hash Alert!
+    # (a) Duplicate Move-In Photo via Custom Visual File Picker -> Red ANTI-FRAUD block (1.8s)
+    await pick_file_with_visual_overlay(page_l, 'input[type="file"]', 'living_room_duplicate.jpg', DUP_IMG, title="Move-Out Audit — Select Duplicate Photo (Test 1)", hold_sec=1.1)
+    await page_l.locator('text=ANTI-FRAUD TRIGGERED').first.wait_for(state="visible", timeout=8000)
+    await asyncio.sleep(1.8)
 
-    # (b) Human Selfie 32x32 Portrait Block
-    await pick_file_with_visual_overlay(page_l, 'input[type="file"]', 'human_selfie_test.jpg', SELFIE_IMG, title="Move-Out Audit — Select Photo (Test 2)", hold_sec=1.1)
-    await asyncio.sleep(2.0)  # Hold Red 32x32 Portrait Block Alert!
+    # (b) 1-Click Judge Chip: Selfie Portrait -> Red 32x32 Portrait Block (1.8s)
+    selfie_chip = page_l.locator('button:has-text("Load Selfie Portrait")').first
+    await selfie_chip.scroll_into_view_if_needed()
+    await animated_click(page_l, selfie_chip)
+    await page_l.locator('text=SCENE MISMATCH BLOCKED').first.wait_for(state="visible", timeout=8000)
+    await asyncio.sleep(1.8)
 
-    # (c) Authentic Damaged Sofa + Gemini 3.8 Flash
-    await pick_file_with_visual_overlay(page_l, 'input[type="file"]', 'living_room_sofa_tear.jpg', MOVE_OUT_IMG, title="Move-Out Audit — Select Photo (Test 3)", hold_sec=1.1)
+    # (c) Custom Dark Visual File Picker: Damaged Sofa + UPI + Gemini 3.8 Flash
+    await pick_file_with_visual_overlay(page_l, 'input[type="file"]', 'living_room_sofa_tear.jpg', MOVE_OUT_IMG, title="Move-Out Audit — Select Real Damaged Photo", hold_sec=1.2)
     upi_inp = page_l.locator('input[placeholder*="yourname@okaxis"], input[placeholder*="UPI"]').first
     if await upi_inp.is_visible():
-        await animated_type(page_l, upi_inp, "priyam.prajapati@okaxis")
-    override_chk = page_l.locator('label:has-text("Judge Demo Override") input, input[type="checkbox"]').last
-    if await override_chk.is_visible() and not (await override_chk.is_checked()):
+        await animated_type(page_l, upi_inp, "priyam.prajapati@okaxis", delay=0.065)
+    override_chk = page_l.locator('label:has-text("Override") input, input[type="checkbox"]').last
+    if await override_chk.count() > 0 and await override_chk.is_visible() and not (await override_chk.is_checked()):
         await override_chk.check()
 
     await animated_click(page_l, 'button[type="submit"]:has-text("Run AI Damage Audit")')
@@ -638,7 +661,6 @@ async def record_scenes_02_to_09(browser):
     await wait_no_spinners(page_l)
     await page_l.locator('#guest-refund-terminal').first.wait_for(state="visible", timeout=25000)
 
-    # Scrape EXACT live cut & net refund from PostgreSQL (autocommit=True guarantees fresh committed values!)
     cur.execute('SELECT "suggestedCut", "aiVerdict" FROM "Item" WHERE "tenancyId" = %s LIMIT 1', (tenancy_id,))
     item_cut_row = cur.fetchone()
     actual_cut = int(float(item_cut_row[0] or 0)) if item_cut_row else 0
@@ -648,7 +670,6 @@ async def record_scenes_02_to_09(browser):
     actual_refund = int(float(t_row[1])) if t_row[1] is not None else max(0, dep_amt - actual_cut)
     print(f"     [LIVE GEMINI SCRAPED] Verdict={item_cut_row[1] if item_cut_row else '?'} | Deduction = ₹{actual_cut:,} | Net Refund = ₹{actual_refund:,}")
 
-    # Scroll item card into view & hold 3s
     await page_l.locator('text=/Italian Leather Sofa/i').first.scroll_into_view_if_needed()
     await page_r.evaluate("window.showAutoSyncBadge && window.showAutoSyncBadge('PROPERTY VACATED • GEMINI 3.8 AUDIT ARBITRATED!');")
     await asyncio.sleep(3.0)
@@ -670,7 +691,6 @@ async def record_scenes_02_to_09(browser):
     await page_r.locator('button:has-text("Judge Demo Simulate Razorpay Webhook")').wait_for(state="detached", timeout=25000)
     await asyncio.sleep(0.8)
 
-    # Verify settlement committed cleanly before transitioning to Dashboards
     for _ in range(10):
         cur.execute('SELECT status FROM "Tenancy" WHERE id = %s', (tenancy_id,))
         st = cur.fetchone()
@@ -678,7 +698,6 @@ async def record_scenes_02_to_09(browser):
             break
         await asyncio.sleep(0.5)
 
-    # Transition BOTH cleanly to Dashboard and wait until BOTH show ₹0 Active Deposit
     await asyncio.gather(page_l.goto(f"{BASE_URL}/", timeout=25000), page_r.goto(f"{BASE_URL}/", timeout=25000))
     await wait_no_spinners(page_l)
     await wait_no_spinners(page_r)
@@ -691,7 +710,7 @@ async def record_scenes_02_to_09(browser):
     await asyncio.sleep(2.5)
 
     # ---------------- SCENE 9 (Odd -> CYAN) ----------------
-    print("  -> Scene 09: Society Move-Out Gate Pass NOC & Official Settlement Receipt...")
+    print("  -> Scene 09: Society Move-Out Gate Pass NOC & Official Settlement Receipt (4.2s)...")
     await page_l.evaluate("window.setSceneLed && window.setSceneLed(9);")
     await animated_click(page_l, 'button:has-text("Society Gate Pass & NOC")')
     await page_l.locator('text=Move-Out Gate Pass').first.wait_for(state="visible", timeout=15000)
@@ -699,7 +718,6 @@ async def record_scenes_02_to_09(browser):
     await animated_click(page_r, 'button:has-text("Settlement Receipt")')
     await page_r.locator('text=Escrow Settlement Receipt').first.wait_for(state="visible", timeout=15000)
 
-    # Hold both settlement modals side-by-side for 4 full seconds!
     await asyncio.sleep(4.2)
 
     conn.close()
@@ -712,7 +730,7 @@ async def record_scenes_02_to_09(browser):
     run_cmd([
         "ffmpeg", "-y", "-i", left_webm, "-i", right_webm,
         "-filter_complex", "[0:v]scale=960:1080,fps=60[v0];[1:v]scale=960:1080,fps=60[v1];[v0][v1]hstack=inputs=2[v]",
-        "-map", "[v]", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-r", "60", dual_mp4
+        "-map", "[v]", "-c:v", "libx264", "-preset", "fast", "-crf", "19", "-pix_fmt", "yuv420p", "-r", "60", dual_mp4
     ])
     sliced = slice_dual_video_by_led(dual_mp4, [2, 3, 4, 5, 6, 7, 8, 9])
     return sliced, tenancy_id, landlord_token, actual_cut, actual_refund
@@ -744,9 +762,8 @@ async def record_scene_10(browser) -> str:
         await pick_file_with_visual_overlay(page, 'input[type="file"]', 'living_room_clean.jpg', MOVE_IN_IMG, title="Courtroom Dropzone — Select Original Photo", hold_sec=1.2)
 
     await page.locator('text=/Authentic|100%|VERIFIED|Match/i').first.wait_for(state="visible", timeout=15000)
-    await asyncio.sleep(3.2)  # Hold green authentic match badge 3s!
+    await asyncio.sleep(3.2)
 
-    # Smooth dark fade to End Card
     await page.evaluate("""
     (() => {
         const card = document.createElement('div');
@@ -764,21 +781,21 @@ async def record_scene_10(browser) -> str:
     await ctx.close()
     raw_webm = str(max(Path(s10_dir).glob("*.webm"), key=os.path.getmtime))
     out_mp4 = os.path.join(TEMP_DIR, "scene_10_raw.mp4")
-    run_cmd(["ffmpeg", "-y", "-i", raw_webm, "-vf", "scale=1920:1080,fps=60", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", out_mp4])
+    run_cmd(["ffmpeg", "-y", "-i", raw_webm, "-vf", "scale=1920:1080,fps=60", "-c:v", "libx264", "-preset", "fast", "-crf", "19", "-pix_fmt", "yuv420p", out_mp4])
     return out_mp4
 
 
 # -----------------------------------------------------------------------------
-# PASS 2: SYNC EACH SCENE EXACTLY TO GEMINI NATIVE VOICE + CONCAT + CONTACT SHEET
+# PASS 2: STUDIO-MASTERED SYNC + DARK #060D13 FADES + SINGLE-PASS 48kHz STEREO AAC
 # -----------------------------------------------------------------------------
 SUBTITLES = {
     1: "Scene 01: Google Search -> Cyber-Shield Logo Morph & PWA Install",
     2: "Scene 02: Split-Screen Login & User Profile Identity Vault",
-    3: "Scene 03: ₹25,000 Tenancy Setup -> Live Auto-Sync to Owner",
-    4: "Scene 04: SHA-256 Baseline Upload & Owner Revision Alert",
-    5: "Scene 05: Owner UPI Approval -> Step 03 Escrow Unlock",
+    3: "Scene 03: MTA 2021 Lease Risk Scanner -> 95/100 High Risk Verdict",
+    4: "Scene 04: ₹25,000 Tenancy Setup -> Live Auto-Sync to Owner",
+    5: "Scene 05: SHA-256 Baseline Upload, Revision Alert & Owner Lock",
     6: "Scene 06: Owner Receiving QR Terminal + Clean Guest Checkout",
-    7: "Scene 07: Triple Anti-Fraud Engine (Dup + Selfie) + Gemini 3.8 AI",
+    7: "Scene 07: Judge Chips + Visual Picker + Triple Anti-Fraud & Gemini 3.8",
     8: "Scene 08: Guest Refund QR Terminal -> Both Dashboards Auto-Clear ₹0",
     9: "Scene 09: Society Gate Pass NOC & Official Escrow Settlement Receipt",
     10: "Scene 10: Zero-Server Courtroom Verifier (/verify) -> 100% Authentic",
@@ -826,96 +843,114 @@ def build_contact_sheet(frame_paths: list, out_path: str):
 
 
 async def main():
-    if "--assemble-from-latest" in sys.argv:
-        print(">>> [--assemble-from-latest] Reusing latest recorded Pass 1 .webm clips cleanly!")
-        s1_webm = str(max(Path(os.path.join(TEMP_DIR, "s1")).glob("*.webm"), key=os.path.getmtime))
-        s1_mp4 = os.path.join(TEMP_DIR, "scene_01_raw.mp4")
-        run_cmd(["ffmpeg", "-y", "-i", s1_webm, "-vf", "scale=1920:1080,fps=60", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", s1_mp4])
+    wipe_user_tenancies_preserve_demo()
+    # Warm up Render API so Gemini endpoints respond in <1.5s without cold starts
+    try:
+        import urllib.request
+        urllib.request.urlopen("https://rentshield-api.onrender.com/api/tenancy/ai-health", timeout=25).read()
+    except Exception:
+        pass
 
-        left_webm = str(max(Path(os.path.join(TEMP_DIR, "dual_left")).glob("*.webm"), key=os.path.getmtime))
-        right_webm = str(max(Path(os.path.join(TEMP_DIR, "dual_right")).glob("*.webm"), key=os.path.getmtime))
-        dual_mp4 = os.path.join(TEMP_DIR, "dual_2_to_9_60fps.mp4")
-        run_cmd([
-            "ffmpeg", "-y", "-i", left_webm, "-i", right_webm,
-            "-filter_complex", "[0:v]scale=960:1080,fps=60[v0];[1:v]scale=960:1080,fps=60[v1];[v0][v1]hstack=inputs=2[v]",
-            "-map", "[v]", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-r", "60", dual_mp4
-        ])
-        scene_clips = slice_dual_video_by_led(dual_mp4, [2, 3, 4, 5, 6, 7, 8, 9])
-
-        s10_webm = str(max(Path(os.path.join(TEMP_DIR, "s10")).glob("*.webm"), key=os.path.getmtime))
-        s10_mp4 = os.path.join(TEMP_DIR, "scene_10_raw.mp4")
-        run_cmd(["ffmpeg", "-y", "-i", s10_webm, "-vf", "scale=1920:1080,fps=60", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", s10_mp4])
-        actual_cut, actual_refund = 3500, 21500
-    else:
-        wipe_neon_db_spotless()
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--start-maximized"]
-            )
-            s1_mp4 = await record_scene_01(browser)
-            scene_clips, _, _, actual_cut, actual_refund = await record_scenes_02_to_09(browser)
-            s10_mp4 = await record_scene_10(browser)
-            await browser.close()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--start-maximized"]
+        )
+        s1_mp4 = await record_scene_01(browser)
+        scene_clips, _, _, actual_cut, actual_refund = await record_scenes_02_to_09(browser)
+        s10_mp4 = await record_scene_10(browser)
+        await browser.close()
 
     scene_clips[1] = s1_mp4
     scene_clips[10] = s10_mp4
 
-    # PASS 2: Generate Gemini Native Voice (Puck) with LIVE scraped numbers
-    durations = generate_all_scenes_audio(cut_amount=actual_cut, refund_amount=actual_refund)
+    # Reuse already-synthesized & cleaned Gemini WAVs if --reuse-audio passed
+    if "--reuse-audio" in sys.argv:
+        force_set = set()
+    else:
+        force_set = {3, 4, 5, 7, 9}
+        if actual_cut != 3500 or actual_refund != 21500:
+            force_set.add(8)
 
-    synced_files = []
+    durations, mastered_wavs = generate_all_scenes_audio(
+        cut_amount=actual_cut,
+        refund_amount=actual_refund,
+        force_scenes=force_set,
+    )
+
+    video_parts = []
+    audio_parts = []
     keyframe_pngs = []
     print("\n" + "=" * 80)
-    print("PASS 2: SYNCING ALL 10 SCENES EXACTLY TO GEMINI AUDIO + BURNING SUBTITLES @ 60FPS")
+    print("PASS 2: STUDIO-MASTERING 60FPS VIDEO (CRF=19, #060D13 FADES) + 48kHz STEREO AAC")
     print("=" * 80)
 
     for i in range(1, 11):
         raw_v = scene_clips[i]
-        wav_a = os.path.join(AUDIO_DIR, f"scene_{i}.wav")
+        wav_a = mastered_wavs[i]
         vid_dur = probe_duration(raw_v)
-        aud_dur = durations[i]
-        target_dur = aud_dur + 0.25
+        target_dur = durations[i]  # already includes 35ms/60ms afades, loudnorm & 0.25s tail pad
 
         ass_rel = f"scripts/temp/video_build/s{i:02d}.ass"
         write_scene_ass(ass_rel, target_dur, SUBTITLES[i])
 
+        fade_out_st = max(0.2, target_dur - 0.30)
+        fade_vf = f"fade=t=in:st=0:d=0.30:color=#060D13,fade=t=out:st={fade_out_st:.4f}:d=0.30:color=#060D13"
+
         if vid_dur < target_dur:
             pad_s = target_dur - vid_dur
-            v_filter = f"scale=1920:1080,fps=60,tpad=stop_mode=clone:stop_duration={pad_s:.4f},ass=filename={ass_rel}"
+            v_filter = f"scale=1920:1080,fps=60,tpad=stop_mode=clone:stop_duration={pad_s:.4f},ass=filename={ass_rel},{fade_vf}"
         else:
             ratio = target_dur / vid_dur
-            v_filter = f"scale=1920:1080,setpts={ratio:.6f}*PTS,fps=60,ass=filename={ass_rel}"
+            v_filter = f"scale=1920:1080,setpts={ratio:.6f}*PTS,fps=60,ass=filename={ass_rel},{fade_vf}"
 
-        synced_out = os.path.join(TEMP_DIR, f"scene_{i:02d}_synced.mp4")
+        part_v = os.path.join(TEMP_DIR, f"scene_{i:02d}_video.mp4")
         run_cmd([
-            "ffmpeg", "-y", "-i", raw_v, "-i", wav_a,
-            "-filter_complex", f"[0:v]{v_filter}[v];[1:a]apad=pad_dur=0.25[a]",
-            "-map", "[v]", "-map", "[a]",
-            "-t", f"{target_dur:.4f}",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "192k", "-r", "60", synced_out
+            "ffmpeg", "-y", "-i", raw_v,
+            "-vf", v_filter,
+            "-an", "-t", f"{target_dur:.4f}",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p", "-r", "60", part_v
         ])
-        synced_files.append(synced_out)
+        video_parts.append(part_v)
+        audio_parts.append(wav_a)
 
-        # Extract middle frame of synced scene for anti-dhoka 5x2 contact sheet
         mid_t = target_dur * 0.50
         kf_png = os.path.join(TEMP_DIR, f"kf_{i:02d}.png")
-        run_cmd(["ffmpeg", "-y", "-ss", f"{mid_t:.3f}", "-i", synced_out, "-frames:v", "1", kf_png])
+        run_cmd(["ffmpeg", "-y", "-ss", f"{mid_t:.3f}", "-i", part_v, "-frames:v", "1", kf_png])
         keyframe_pngs.append(kf_png)
-        print(f"  -> Scene {i:02d}: Raw={vid_dur:.2f}s | GeminiAudio={aud_dur:.2f}s | Synced={target_dur:.2f}s (0.00s drift)")
+        print(f"  -> Scene {i:02d}: Raw={vid_dur:.2f}s | MasterAudio={target_dur:.2f}s (CRF=19, 48kHz Stereo PCM)")
 
-    concat_txt = os.path.join(TEMP_DIR, "final_concat.txt")
-    with open(concat_txt, "w", encoding="utf-8") as f:
-        for sf in synced_files:
-            f.write(f"file '{sf.replace(chr(92), '/')}'\n")
+    # Concatenate lossless video stream + lossless PCM audio concat encoded ONCE to 48kHz Stereo AAC 192kbps
+    v_concat_txt = os.path.join(TEMP_DIR, "video_concat.txt")
+    with open(v_concat_txt, "w", encoding="utf-8") as f:
+        for vp in video_parts:
+            f.write(f"file '{vp.replace(chr(92), '/')}'\n")
 
-    run_cmd(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_txt, "-c", "copy", OUTPUT_VIDEO])
+    concat_v_only = os.path.join(TEMP_DIR, "all_scenes_v_only.mp4")
+    run_cmd(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", v_concat_txt, "-c:v", "copy", concat_v_only])
+
+    master_audio_wav = os.path.join(TEMP_DIR, "master_all_48k_stereo.wav")
+    a_cmd = ["ffmpeg", "-y"]
+    for ap in audio_parts:
+        a_cmd.extend(["-i", ap])
+    a_inputs = "".join(f"[{idx}:a]" for idx in range(len(audio_parts)))
+    a_cmd.extend([
+        "-filter_complex", f"{a_inputs}concat=n={len(audio_parts)}:v=0:a=1[aout]",
+        "-map", "[aout]", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", master_audio_wav
+    ])
+    run_cmd(a_cmd)
+
+    # Single clean mux: Video copy + 1-pass 48kHz Stereo AAC 192kbps encode (ZERO AAC boundary pops!)
+    run_cmd([
+        "ffmpeg", "-y", "-i", concat_v_only, "-i", master_audio_wav,
+        "-map", "0:v", "-map", "1:a",
+        "-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "192k",
+        "-movflags", "+faststart", "-shortest", OUTPUT_VIDEO
+    ])
+
     build_contact_sheet(keyframe_pngs, CONTACT_SHEET)
-
     final_dur = probe_duration(OUTPUT_VIDEO)
-    print(f"\nDONE! Final 60fps Synced Video: {OUTPUT_VIDEO} ({final_dur:.2f}s)")
+    print(f"\nDONE! Studio-Mastered 60fps 48kHz Stereo MP4: {OUTPUT_VIDEO} ({final_dur:.2f}s)")
 
 
 if __name__ == "__main__":

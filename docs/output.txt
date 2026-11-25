@@ -1,0 +1,61 @@
+================================================================================
+RENTSHIELD — FINAL STUDIO MASTER DEMO & SAFE DB CLEANUP REPORT (CODEFESTTHON 2026)
+================================================================================
+Timestamp: 2026-11-25T14:32:00+05:30
+Repository: priyam242/CODEFESTTHON-2026 (Branch: main, Commit: a91f016)
+Live Web App: https://rentshield-web.onrender.com (Bundle: /assets/index-DJGBW-G4.js)
+Live API Base: https://rentshield-api.onrender.com
+
+================================================================================
+PART 1: ROOT-CAUSE AUDIO FIX & 48kHz STEREO STUDIO MASTERING
+================================================================================
+- Diagnosed & eliminated the exact 02:40-02:42 pop/clip bug:
+  * Google Gemini TTS returns a complete RIFF WAV container with trailing IPTC
+    XMP metadata chunks ("trainedAlgorithmicMedia"). Prior raw-write wrapped a
+    second 44-byte RIFF header around it (full-scale 32767 digital pops at start
+    and end), and scene_9.wav had a clipped tail peak (25,497).
+  * Updated scripts/gemini_tts.py with RIFF-safe write_pcm_to_wav() (extracts
+    ONLY the pure data chunk PCM) + repair_double_riff_wav_if_needed() +
+    master_scene_wav() (silence trim, 35ms fade-in, 60ms fade-out, EBU R128
+    loudnorm I=-16 TP=-1.5 LRA=11, 0.25s tail pad, 48kHz Stereo PCM).
+  * Regenerated clean Gemini Puck WAVs for updated/repaired Scenes 3, 4, 5, 7, 8, 9
+    and muxed all 10 uncompressed 48kHz Stereo PCM masters in a single FFmpeg pass
+    into 48kHz Stereo AAC 192kbps (sample_rate=48000, channels=2, bit_rate=190422).
+  * Verified every mastered scene boundary peak: first 20ms <= 39, last 150ms = 0.
+
+================================================================================
+PART 2: 60FPS CRF=19 10-SCENE DEMO VIDEO (WITH NEW GRAND-WINNER FEATURES)
+================================================================================
+- Deliverable: D:\22 Nove\RentShield_Full_SplitScreen_Demo.mp4
+  * Resolution/FPS: 1920x1080 @ 60fps (H.264 yuv420p, CRF=19, 0.30s #060D13 fades)
+  * Duration: 187.17s (3.12 min) | Size: 27,475,523 bytes
+  * Audio: 48kHz Stereo AAC (190.4 kbps), clean Hinglish Gemini Puck narration
+  * Live Gemini numbers scraped & spoken in Scenes 07-09:
+    Deduction = Rs.2,800 | Net Refund = Rs.22,200 (matches NOC & Receipt)
+- Scene Lineup (calm 65ms/char human typing + Visual File Picker + 1-Click Chips):
+  * Scene 01: Dark Google Search -> Cyber-Shield Logo Morph -> PWA Install
+  * Scene 02: Dual Split-Screen Login -> User Profile Vault Modal
+  * Scene 03: MTA 2021 Lease Risk Scanner -> 95/100 HIGH RISK + Fair Replacement Clause
+  * Scene 04: Create Rs.25,000 Indiranagar Tenancy -> Owner Live Auto-Sync (0 reloads)
+  * Scene 05: Step 01 SHA-256 Upload -> Revision Alert -> Owner UPI Lock -> Step 03
+  * Scene 06: Owner Live Receiving QR (#owner-receiving-terminal) + Clean Payer Modal
+  * Scene 07: Step 04 Judge Chips + File Picker -> Dup Block + 32x32 Selfie + Gemini Audit
+  * Scene 08: Guest Refund QR (#guest-refund-terminal) -> Both Dashboards Auto-Clear Rs.0
+  * Scene 09: Society Move-Out Gate Pass NOC & Official Escrow Settlement Receipt (4.2s)
+  * Scene 10: Zero-Server Courtroom Verifier (/verify) -> 100% Authentic + End Card
+- Contact Sheet: D:\22 Nove\VIDEO_KEYFRAMES_CONTACT_SHEET.png
+
+================================================================================
+PART 3: SELECTIVE NEON POSTGRESQL CLEANUP + 3-SCENARIO JUDGE DEMO RESET
+================================================================================
+- Personal Accounts Cleaned (0 records):
+  * priyam@gmail.com            -> Tenancies: 0 | Items: 0
+  * rajesh@gmail.com            -> Tenancies: 0 | Items: 0
+- Judge Demo Accounts Reset & Preserved via POST /api/tenancy/demo/reset (201):
+  * tenant.demo@rentshield.com  -> Tenancies: 3 | Items: 3
+  * landlord.demo@rentshield.com -> Tenancies: 3 | Items: 3
+    1) demo-tenancy-indiranagar-001 (APPROVED, Rs.25,000, Move-Out AI Audit Ready)
+    2) demo-tenancy-hsr-002 (ACTIVE, Rs.18,000, Awaiting Owner Lock)
+    3) koramangala-settled-002 (SETTLED, Rs.45,000 -> Rs.3,500 Cut -> Rs.41,500 Refund)
+- Proof File: D:\22 Nove\DB_CLEANUP_PROOF.txt
+================================================================================

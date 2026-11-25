@@ -1,3 +1,4 @@
+import io
 import os
 import json
 import time
@@ -13,11 +14,14 @@ if not os.environ.get("GEMINI_API_KEY"):
     load_dotenv(".env")
 
 AUDIO_DIR = os.path.abspath("scripts/audio")
+MASTER_AUDIO_DIR = os.path.abspath("scripts/audio/mastered")
 TEMP_DIR = os.path.abspath("scripts/temp/audio_build")
 SCENE7_SAMPLE_WAV = os.path.abspath("gemini_voice_sample_scene07.wav")
+SCENE10_SAMPLE_WAV = os.path.abspath("gemini_voice_sample_scene10.wav")
 RENDER_TTS_URL = "https://rentshield-api.onrender.com/api/tenancy/ai-tts"
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
+os.makedirs(MASTER_AUDIO_DIR, exist_ok=True)
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
@@ -34,12 +38,78 @@ def get_audio_duration(file_path: str) -> float:
     return float(json.loads(res.stdout)["format"]["duration"])
 
 
-def write_pcm_to_wav(pcm_bytes: bytes, wav_path: str, sample_rate: int = 24000):
+def write_pcm_to_wav(raw_bytes: bytes, wav_path: str, sample_rate: int = 24000):
+    """
+    Safely writes PCM audio to a clean single-header WAV file.
+    If Google Gemini TTS returns an already-headered RIFF/WAV container (including trailing IPTC XML chunks),
+    extracts ONLY the true data chunk PCM via Python wave.open() so NO header pops or XML tail static occur.
+    """
+    if raw_bytes[:4] == b"RIFF":
+        with wave.open(io.BytesIO(raw_bytes), "rb") as src_wf:
+            ch = src_wf.getnchannels()
+            sw = src_wf.getsampwidth()
+            sr = src_wf.getframerate()
+            pcm_bytes = src_wf.readframes(src_wf.getnframes())
+    else:
+        ch, sw, sr = 1, 2, sample_rate
+        pcm_bytes = raw_bytes
+
     with wave.open(wav_path, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)  # signed 16-bit PCM
-        wf.setframerate(sample_rate)
+        wf.setnchannels(ch)
+        wf.setsampwidth(sw)
+        wf.setframerate(sr)
         wf.writeframes(pcm_bytes)
+
+
+def repair_double_riff_wav_if_needed(wav_path: str) -> bool:
+    """Strips accidental outer 44-byte RIFF wrapper + trailing IPTC XML chunk if present."""
+    if not os.path.exists(wav_path):
+        return False
+    with open(wav_path, "rb") as f:
+        raw = f.read()
+    if len(raw) > 88 and raw[44:48] == b"RIFF":
+        write_pcm_to_wav(raw[44:], wav_path)
+        print(f"[AudioFix] Repaired double-RIFF & stripped XML tail -> {os.path.basename(wav_path)}")
+        return True
+    return False
+
+
+def master_scene_wav(raw_wav_path: str, mastered_wav_path: str) -> float:
+    """
+    Studio-masters a Gemini TTS WAV clip:
+    1. Repairs any accidental double-RIFF header/XML tail
+    2. Trims leading/trailing dead silence cleanly
+    3. Applies 35ms smooth fade-in + 60ms smooth fade-out (eliminates clicks/bleed)
+    4. Normalizes loudness (EBU R128 I=-16 TP=-1.5 LRA=11)
+    5. Pads 0.25s tail silence & outputs 48kHz Stereo 16-bit PCM WAV
+    """
+    repair_double_riff_wav_if_needed(raw_wav_path)
+    trimmed_tmp = os.path.join(TEMP_DIR, f"trimmed_{os.path.basename(raw_wav_path)}")
+
+    # Step 1: Trim silence gently + convert to 48kHz stereo intermediate
+    subprocess.run([
+        "ffmpeg", "-y", "-i", raw_wav_path,
+        "-af", "silenceremove=start_periods=1:start_silence=0.04:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_silence=0.06:start_threshold=-45dB,areverse",
+        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", trimmed_tmp
+    ], capture_output=True, text=True, check=True)
+
+    trimmed_dur = get_audio_duration(trimmed_tmp)
+    fade_out_start = max(0.05, trimmed_dur - 0.06)
+
+    # Step 2: 35ms fade-in + 60ms fade-out + loudnorm + 0.25s tail silence @ 48kHz Stereo
+    af_chain = (
+        f"afade=t=in:st=0:d=0.035,"
+        f"afade=t=out:st={fade_out_start:.4f}:d=0.06,"
+        f"loudnorm=I=-16:TP=-1.5:LRA=11,"
+        f"apad=pad_dur=0.25"
+    )
+    subprocess.run([
+        "ffmpeg", "-y", "-i", trimmed_tmp,
+        "-af", af_chain,
+        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", mastered_wav_path
+    ], capture_output=True, text=True, check=True)
+
+    return get_audio_duration(mastered_wav_path)
 
 
 def _discover_tts_models(api_key: str) -> list:
@@ -67,11 +137,9 @@ def synthesize_gemini_tts_wav(text: str, wav_output_path: str, voice_name: str =
     """
     Calls Google's Official Gemini Native TTS REST API (STRICTLY NO edge-tts / pyttsx3 fallback).
     Uses local AIzaSy GEMINI_API_KEY if present, or Render's authenticated GEMINI_API_KEY via /api/tenancy/ai-tts.
-    Decodes raw 16-bit 24kHz mono PCM base64 directly into a valid .wav file via Python's wave module.
     """
     prompt_text = f"{FOUNDER_PROMPT_PREFIX}{text}"
 
-    # Path A: Direct Google AI Studio API call when AIzaSy... key is available locally
     if GEMINI_API_KEY.startswith("AIza"):
         models = _discover_tts_models(GEMINI_API_KEY)
         payload = {
@@ -116,7 +184,7 @@ def synthesize_gemini_tts_wav(text: str, wav_output_path: str, voice_name: str =
                     time.sleep(3)
         raise RuntimeError(f"Direct Google Gemini TTS failed: {last_err}")
 
-    # Path B: Render env proxy endpoint (calls generativelanguage.googleapis.com using Render's GEMINI_API_KEY)
+    # Render env proxy endpoint (calls generativelanguage.googleapis.com using Render's GEMINI_API_KEY)
     payload = json.dumps({"text": prompt_text, "voiceName": voice_name}).encode("utf-8")
     last_err = None
     for attempt in range(5):
@@ -164,23 +232,23 @@ def get_scene_scripts(cut_amount: int = 3500, refund_amount: int = 21500) -> dic
         1: (
             "भारत में हर साल चालीस हज़ार करोड़ रुपये के रेंटल डिपॉज़िट्स बिना किसी ट्रांसपेरेंसी के फंस जाते हैं। "
             "मिलिए रेंटशील्ड से — भारत का पहला ऑटोनोमस साइबर-एस्क्रो सॉल्यूशन! "
-            "गूगल सर्च से ओपन करते ही इसका लोगो स्मूदली नैवबार में लॉक हो जाता है, और वन-क्लिक में यह पी डब्ल्यू ए ऐप की तरह किसी भी फोन या लैपटॉप पर इंस्टॉल हो जाता है।"
+            "गूगल सर्च से ओपन करते ही इसका लोगो स्मूदली नैवबार में लॉक हो जाता है, और वन-क्लिक में यह पी-डब्ल्यू-ए ऐप की तरह किसी भी फोन या लैपटॉप पर इंस्टॉल हो जाता है।"
         ),
         2: (
             "अब शुरू होता है हमारा रियल-टाइम स्प्लिट-स्क्रीन डेमो! बाईं तरफ गेस्ट प्रियम, और दाईं तरफ प्रॉपर्टी ओनर राजेश। "
             "दोनों अकाउंट्स लाइव लॉगिन होते ही, आप प्रोफाइल वॉल्ट के अंदर अपनी फोटो, यूपीआई आईडी और वेरीफाइड एड्रेस पूरी प्राइवेसी के साथ अपडेट कर सकते हैं।"
         ),
         3: (
-            "टेनेंट पच्चीस हज़ार रुपये का सिक्योरिटी डिपॉज़िट और इंदिरानगर प्रॉपर्टी डिटेल्स डालकर कॉन्ट्रैक्ट शुरू करता है। "
-            "और अब दाईं तरफ ओनर की स्क्रीन देखिए — बिना एक भी रीलोड किए, लाइव ऑटो-सिंक से यह नया एस्क्रो कॉन्ट्रैक्ट तुरंत ओनर के डैशबोर्ड पर आ गया!"
+            "एग्रीमेंट साइन करने से पहले ही, रेंटशील्ड का एम-टी-ए 2021 स्मार्ट लीज़ रिस्क स्कैनर हर छुपे हुए ट्रैप को पकड़ लेता है! "
+            "दस महीने का सिक्योरिटी डिपॉज़िट या मनमाना पेंटिंग क्लॉज़ डालते ही, गूगल जेमिनी थ्री पॉइंट एट फ्लैश इसे पचानवे बाय सौ हाई रिस्क घोषित करता है, और कानून के हिसाब से फेयर रिप्लेसमेंट क्लॉज़ भी लिख कर देता है!"
         ),
         4: (
-            "स्टेप वन में टेनेंट लिविंग रूम की साफ़ मूव-इन फोटो चुनता है, और ब्राउज़र के अंदर ही टैम्पर-प्रूफ हैश लॉक हो जाता है। "
-            "ओनर अपनी पोर्टल लिंक से फोटो चेक करके एक रिवीजन रिक्वेस्ट भेजता है — और बाईं तरफ टेनेंट को तुरंत रियल-टाइम अलर्ट मिल जाता है!"
+            "अब टेनेंट पच्चीस हज़ार रुपये का सिक्योरिटी डिपॉज़िट और इंदिरानगर प्रॉपर्टी डिटेल्स डालकर एस्क्रो कॉन्ट्रैक्ट शुरू करता है। "
+            "और दाईं तरफ ओनर की स्क्रीन देखिए — बिना एक भी रीलोड किए, लाइव ऑटो-सिंक से यह नया कॉन्ट्रैक्ट तुरंत ओनर के डैशबोर्ड पर आ गया!"
         ),
         5: (
-            "अब ओनर अपनी यूपीआई आईडी rajesh.prajapati@okhdfcbank कन्फर्म करके मूव-इन बेसलाइन को अप्रूव एंड लॉक करता है। "
-            "दोनों पार्टीज की सहमति लॉक होते ही, बाईं तरफ स्टेप थ्री सिक्योरिटी डिपॉज़िट तुरंत अनलॉक हो जाता है!"
+            "स्टेप वन में टेनेंट लिविंग रूम की साफ़ मूव-इन फोटो चुनता है, और ब्राउज़र के अंदर ही शा टू-फिफ्टी-सिक्स हैश लॉक हो जाता है। "
+            "ओनर पोर्टल लिंक से फोटो चेक करके रिवीजन अलर्ट भेजता है — और फिर अपनी यूपीआई आईडी rajesh.prajapati@okhdfcbank कन्फर्म करके बेसलाइन अप्रूव एंड लॉक करते ही, स्टेप थ्री डिपॉज़िट तुरंत अनलॉक हो जाता है!"
         ),
         6: (
             "देखिए असली टू-पार्टी पेमेंट डिज़ाइन! दाईं तरफ ओनर की स्क्रीन पर लाइव रिसीविंग टर्मिनल और क्यूआर कोड ऑन है। "
@@ -188,8 +256,8 @@ def get_scene_scripts(cut_amount: int = 3500, refund_amount: int = 21500) -> dic
             "पच्चीस हज़ार रुपये पे होते ही ओनर की स्क्रीन लाइव अपडेट हो जाती है।"
         ),
         7: (
-            "अब देखिए रेंटशील्ड का ट्रिपल एंटी-फ्रॉड इंजन! सेम फोटो दोबारा डालने पर डुप्लीकेट हैश डिटेक्टर तुरंत ब्लॉक कर देता है। "
-            "सेल्फी अपलोड करने पर बत्तीस बाय बत्तीस सीन डिटेक्टर उसे भी रोक देता है! "
+            "अब देखिए स्टेप फोर में रेंटशील्ड का ट्रिपल एंटी-फ्रॉड इंजन और वन-क्लिक जज क्विक-टेस्ट चिप्स! "
+            "डुप्लीकेट फोटो डालने पर हैश डिटेक्टर ब्लॉक करता है, सेल्फी पर बत्तीस बाय बत्तीस सीन डिटेक्टर रोक देता है! "
             f"फिर असली फटी हुई सोफा फोटो डालते ही... गूगल जेमिनी थ्री पॉइंट एट फ्लैश {cut_text} की फेयर रिपेयर कटौती और {refund_text} का नेट रिफंड कैलकुलेट करता है!"
         ),
         8: (
@@ -199,7 +267,7 @@ def get_scene_scripts(cut_amount: int = 3500, refund_amount: int = 21500) -> dic
         ),
         9: (
             "स्टेप सिक्स में दोनों पार्टीज को इंस्टैंट लीगल रिकॉर्ड्स मिलते हैं। "
-            "बाईं तरफ टेनेंट के लिए स्कैनेबल सोसाइटी मूव-आउट गेट पास और एनओसी, और दाईं तरफ ओनर के लिए ऑफिशियल एस्क्रो सेटलमेंट रिसीट — बिल्कुल टैक्स और ऑडिट रेडी!"
+            "बाईं तरफ टेनेंट के लिए स्कैनेबल सोसाइटी मूव-आउट गेट पास और एनओसी, और दाईं तरफ ओनर के लिए ऑफिशियल एस्क्रो सेटलमेंट रिसीट — बिल्कुल टैक्स और ऑडिट रेडी रहते हैं।"
         ),
         10: (
             "और अंत में, रेंटशील्ड का ज़ीरो-सर्वर कोर्ट रूम वेरीफायर! बिना किसी सर्वर के, सीधे ब्राउज़र में ओरिजिनल फोटो ड्रॉप करते ही हंड्रेड परसेंट ऑथेंटिक ज़ीरो-पिक्सल टैम्परिंग प्रूफ मिल जाता है। "
@@ -208,39 +276,51 @@ def get_scene_scripts(cut_amount: int = 3500, refund_amount: int = 21500) -> dic
     }
 
 
-def generate_all_scenes_audio(cut_amount: int = 3500, refund_amount: int = 21500, force: bool = False) -> dict:
+def generate_all_scenes_audio(
+    cut_amount: int = 3500,
+    refund_amount: int = 21500,
+    force_scenes: set = None,
+) -> tuple:
     scripts = get_scene_scripts(cut_amount, refund_amount)
     durations = {}
+    mastered_paths = {}
     total = 0.0
+    force_scenes = force_scenes or set()
 
     print("=" * 80)
-    print("SYNTHESIZING REAL GOOGLE GEMINI NATIVE VOICEOVER (VOICE: Puck, NO FALLBACKS)")
+    print("SYNTHESIZING & STUDIO-MASTERING GEMINI NATIVE VOICEOVER (VOICE: Puck, 48kHz STEREO)")
     print(f"Dynamic Numbers -> Deduction: ₹{cut_amount:,} | Net Refund: ₹{refund_amount:,}")
     print("=" * 80)
 
     for scene_id, text in scripts.items():
         wav_path = os.path.join(AUDIO_DIR, f"scene_{scene_id}.wav")
-        if not force and os.path.exists(wav_path) and os.path.getsize(wav_path) > 50000:
-            print(f"[GeminiTTS] Reusing existing real Gemini WAV -> {os.path.basename(wav_path)}")
-        else:
+        master_path = os.path.join(MASTER_AUDIO_DIR, f"scene_{scene_id}_master.wav")
+
+        if scene_id in force_scenes or not os.path.exists(wav_path) or os.path.getsize(wav_path) <= 50000:
             synthesize_gemini_tts_wav(text, wav_path, voice_name="Puck")
-            time.sleep(15.0)  # Respect Gemini TTS free-tier RPM limits cleanly without 429s
+            time.sleep(15.0)
+        else:
+            print(f"[GeminiTTS] Reusing raw Gemini WAV -> {os.path.basename(wav_path)}")
+
+        dur = master_scene_wav(wav_path, master_path)
+        durations[scene_id] = dur
+        mastered_paths[scene_id] = master_path
+        total += dur
+        print(f"  -> Scene {scene_id:02d} Studio Master (48kHz Stereo, fade + loudnorm): {dur:.2f}s")
 
         if scene_id == 7:
-            with open(wav_path, "rb") as src, open(SCENE7_SAMPLE_WAV, "wb") as dst:
+            with open(master_path, "rb") as src, open(SCENE7_SAMPLE_WAV, "wb") as dst:
                 dst.write(src.read())
-            print(f"[Proof] Saved raw Gemini Puck Scene 07 WAV -> {SCENE7_SAMPLE_WAV}")
-
-        dur = get_audio_duration(wav_path)
-        durations[scene_id] = dur
-        total += dur
-        print(f"  -> Scene {scene_id:02d} WAV Duration: {dur:.2f}s")
+        elif scene_id == 10:
+            with open(master_path, "rb") as src, open(SCENE10_SAMPLE_WAV, "wb") as dst:
+                dst.write(src.read())
 
     with open(os.path.join(AUDIO_DIR, "durations.json"), "w", encoding="utf-8") as f:
         json.dump(durations, f, indent=2)
-    print(f"\nTotal Gemini Native Voiceover Duration: {total:.2f}s ({total/60:.2f} min)")
-    return durations
+    print(f"\nTotal Studio-Mastered Voiceover Duration: {total:.2f}s ({total/60:.2f} min)")
+    return durations, mastered_paths
 
 
 if __name__ == "__main__":
-    generate_all_scenes_audio()
+    # Regenerate scenes with new content / prior clip-end bug: 3, 4, 5, 7, 9
+    generate_all_scenes_audio(force_scenes={3, 4, 5, 7, 9})

@@ -29,12 +29,16 @@ Thumbs.db
 *.ntvs*
 *.njsproj
 
-# Hackathon Temporary Artifacts
+# Hackathon Temporary & Local Binary Deliverables
 test-results/
 playwright-report/
 *.mp4
+*.wav
+proof_*.png
+devfolio_slide_*.png
+VIDEO_KEYFRAMES_CONTACT_SHEET.png
 scripts/temp/
-output.txt
+scripts/audio/mastered/
 __pycache__/
 *.pyc
 
