@@ -1,268 +1,246 @@
 import os
 import json
+import time
+import wave
 import base64
 import subprocess
 import urllib.request
 import urllib.error
-import asyncio
+from dotenv import load_dotenv
+
+load_dotenv("server/.env")
+if not os.environ.get("GEMINI_API_KEY"):
+    load_dotenv(".env")
 
 AUDIO_DIR = os.path.abspath("scripts/audio")
-SFX_DIR = os.path.join(AUDIO_DIR, "sfx")
 TEMP_DIR = os.path.abspath("scripts/temp/audio_build")
+SCENE7_SAMPLE_WAV = os.path.abspath("gemini_voice_sample_scene07.wav")
+RENDER_TTS_URL = "https://rentshield-api.onrender.com/api/tenancy/ai-tts"
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
-os.makedirs(SFX_DIR, exist_ok=True)
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
 
-FOUNDER_SYSTEM_PROMPT = (
-    "You are an energetic, warm, passionate Indian startup founder pitching live at a hackathon grand finale in natural everyday Hinglish. "
-    "Use natural human pauses, genuine excitement on live sync & instant settlement, and serious urgency on fraud detection. "
-    "Do NOT use robotic jargon or monotone cadence. Speak crisply and confidently."
-)
+FOUNDER_PROMPT_PREFIX = ""
 
-def get_audio_duration(file_path):
+
+def get_audio_duration(file_path: str) -> float:
     cmd = [
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
         "-of", "json", file_path
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    data = json.loads(res.stdout)
-    return float(data["format"]["duration"])
+    res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    return float(json.loads(res.stdout)["format"]["duration"])
 
-def synthesize_with_gemini_native(text: str, output_path: str, voice_name: str = "Puck") -> bool:
-    """
-    Attempts Google's Gemini 2.5 Flash Native TTS REST API.
-    Returns True if successfully generated audio from Google, False otherwise.
-    """
-    if not GEMINI_API_KEY or not GEMINI_API_KEY.strip() or GEMINI_API_KEY.startswith("AQ."):
-        # AQ. token returns 401 on Google's public REST endpoint
-        return False
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={GEMINI_API_KEY.strip()}"
-    payload = {
-        "contents": [{
-            "parts": [{
-                "text": f"{FOUNDER_SYSTEM_PROMPT}\n\nRead the following script verbatim:\n{text}"
-            }]
-        }],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": {
-                        "voiceName": voice_name
-                    }
-                }
-            }
-        }
-    }
+def write_pcm_to_wav(pcm_bytes: bytes, wav_path: str, sample_rate: int = 24000):
+    with wave.open(wav_path, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)  # signed 16-bit PCM
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_bytes)
 
+
+def _discover_tts_models(api_key: str) -> list:
+    candidates = [
+        "gemini-2.5-flash-preview-tts",
+        "gemini-2.5-pro-preview-tts",
+        "gemini-3.8-flash-tts",
+        "gemini-3.8-flash-lite-tts",
+    ]
     try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
-        )
-        with urllib.request.urlopen(req, timeout=12) as res:
-            data = json.loads(res.read().decode("utf-8"))
-            candidates = data.get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                for part in parts:
-                    inline = part.get("inlineData", {})
-                    if inline and "data" in inline:
-                        raw_bytes = base64.b64decode(inline["data"])
-                        mime = inline.get("mimeType", "audio/mp3")
-                        temp_raw = output_path + ".raw"
-                        with open(temp_raw, "wb") as f:
-                            f.write(raw_bytes)
-                        if "pcm" in mime:
-                            subprocess.run([
-                                "ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1",
-                                "-i", temp_raw, "-c:a", "libmp3lame", "-b:a", "192k", output_path
-                            ], check=True, capture_output=True)
-                            if os.path.exists(temp_raw): os.remove(temp_raw)
-                        else:
-                            os.rename(temp_raw, output_path)
-                        print(f"[GeminiTTS] ✅ Native Gemini Audio generated for: {output_path}")
-                        return True
-    except Exception as e:
-        print(f"[GeminiTTS] Gemini Native TTS fallback triggered ({e})")
-    return False
+        req = urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}")
+        with urllib.request.urlopen(req, timeout=8) as res:
+            models = json.loads(res.read().decode("utf-8")).get("models", [])
+            for m in models:
+                if "generateContent" in (m.get("supportedGenerationMethods") or []):
+                    name = str(m.get("name", "")).replace("models/", "")
+                    if "tts" in name.lower() and name not in candidates:
+                        candidates.append(name)
+    except Exception:
+        pass
+    return candidates
 
-async def synthesize_founder_segment(text: str, output_path: str, rate: str = "+12%", pitch: str = "+5Hz"):
+
+def synthesize_gemini_tts_wav(text: str, wav_output_path: str, voice_name: str = "Puck") -> str:
     """
-    Synthesizes natural founder voiceover using the high-fidelity neural engine.
+    Calls Google's Official Gemini Native TTS REST API (STRICTLY NO edge-tts / pyttsx3 fallback).
+    Uses local AIzaSy GEMINI_API_KEY if present, or Render's authenticated GEMINI_API_KEY via /api/tenancy/ai-tts.
+    Decodes raw 16-bit 24kHz mono PCM base64 directly into a valid .wav file via Python's wave module.
     """
-    import edge_tts
-    c = edge_tts.Communicate(text, "hi-IN-MadhurNeural", rate=rate, pitch=pitch)
-    await c.save(output_path)
+    prompt_text = f"{FOUNDER_PROMPT_PREFIX}{text}"
 
-async def generate_scene_audio_pipeline(scene_id: int, segments: list, sfx_list: list = None) -> float:
-    """
-    Full pipeline:
-    1. Tries Gemini Native Audio first.
-    2. Falls back to founder voice synthesis if needed.
-    3. Mixes subtle UI sound effects at -22dB.
-    4. Returns exact measured duration.
-    """
-    full_text = " ".join([s[0] for s in segments])
-    final_output = os.path.join(AUDIO_DIR, f"scene_{scene_id}.mp3")
-    
-    # Try native Gemini audio first
-    if synthesize_with_gemini_native(full_text, final_output):
-        return get_audio_duration(final_output)
+    # Path A: Direct Google AI Studio API call when AIzaSy... key is available locally
+    if GEMINI_API_KEY.startswith("AIza"):
+        models = _discover_tts_models(GEMINI_API_KEY)
+        payload = {
+            "contents": [{"parts": [{"text": prompt_text}]}],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {
+                    "voiceConfig": {
+                        "prebuiltVoiceConfig": {"voiceName": voice_name}
+                    }
+                },
+            },
+        }
+        encoded = json.dumps(payload).encode("utf-8")
+        last_err = None
+        for model in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+            for attempt in range(4):
+                try:
+                    req = urllib.request.Request(url, data=encoded, headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(req, timeout=40) as res:
+                        data = json.loads(res.read().decode("utf-8"))
+                        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                        for part in parts:
+                            inline = part.get("inlineData", {})
+                            if inline.get("data"):
+                                raw_bytes = base64.b64decode(inline["data"])
+                                write_pcm_to_wav(raw_bytes, wav_output_path, 24000)
+                                print(f"[GeminiTTS] OK ({model}, Puck) -> {os.path.basename(wav_output_path)}")
+                                return model
+                except urllib.error.HTTPError as e:
+                    err_body = e.read().decode("utf-8", "ignore")[:240]
+                    last_err = f"{model} HTTP {e.code}: {err_body}"
+                    if e.code == 429 or e.code >= 500:
+                        wait_s = 6 * (attempt + 1)
+                        print(f"[GeminiTTS] Rate-limit/transient ({e.code}) on {model}, backing off {wait_s}s...")
+                        time.sleep(wait_s)
+                        continue
+                    break
+                except Exception as e:
+                    last_err = f"{model} error: {e}"
+                    time.sleep(3)
+        raise RuntimeError(f"Direct Google Gemini TTS failed: {last_err}")
 
-    # Multi-segment neural founder synthesis
-    seg_files = []
-    for idx, (txt, rate, pitch, pause) in enumerate(segments):
-        seg_file = os.path.join(TEMP_DIR, f"s{scene_id}_seg_{idx}.mp3")
-        await synthesize_founder_segment(txt, seg_file, rate=rate, pitch=pitch)
-        seg_files.append((seg_file, pause))
+    # Path B: Render env proxy endpoint (calls generativelanguage.googleapis.com using Render's GEMINI_API_KEY)
+    payload = json.dumps({"text": prompt_text, "voiceName": voice_name}).encode("utf-8")
+    last_err = None
+    for attempt in range(5):
+        try:
+            req = urllib.request.Request(
+                RENDER_TTS_URL,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=45) as res:
+                data = json.loads(res.read().decode("utf-8"))
+                b64 = data.get("data")
+                model_used = data.get("model", "gemini-tts")
+                if not b64:
+                    raise RuntimeError(f"Empty audio payload from Render TTS: {data}")
+                raw_bytes = base64.b64decode(b64)
+                write_pcm_to_wav(raw_bytes, wav_output_path, 24000)
+                print(f"[GeminiTTS] OK via Render env ({model_used}, Puck) -> {os.path.basename(wav_output_path)}")
+                return model_used
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", "ignore")[:300]
+            last_err = f"HTTP {e.code}: {err_body}"
+            if e.code in (429, 502, 503, 504):
+                wait_s = 8 * (attempt + 1)
+                print(f"[GeminiTTS] Render TTS HTTP {e.code}, retrying in {wait_s}s...")
+                time.sleep(wait_s)
+                continue
+            raise RuntimeError(f"Gemini TTS failed ({last_err})")
+        except Exception as e:
+            last_err = str(e)
+            time.sleep(4)
 
-    # Concat segments
-    inputs = []
-    filter_chains = []
-    for i, (f, _) in enumerate(seg_files):
-        inputs.extend(["-i", f])
-        filter_chains.append(f"[{i}:a]")
-    
-    concat_filter = "".join(filter_chains) + f"concat=n={len(seg_files)}:v=0:a=1[voice]"
+    raise RuntimeError(f"Gemini Native TTS failed after retries: {last_err}")
 
-    # If SFX is provided, mix at -22dB
-    if sfx_list:
-        mix_inputs = list(inputs)
-        mix_filters = [concat_filter]
-        current_input_idx = len(seg_files)
-        
-        sfx_mix_parts = ["[voice]"]
-        for sfx_name, delay_s in sfx_list:
-            sfx_path = os.path.join(SFX_DIR, f"{sfx_name}.wav")
-            if os.path.exists(sfx_path):
-                mix_inputs.extend(["-i", sfx_path])
-                delay_ms = int(delay_s * 1000)
-                tag = f"sfx{current_input_idx}"
-                mix_filters.append(f"[{current_input_idx}:a]adelay={delay_ms}|{delay_ms},volume=0.08[{tag}]")
-                sfx_mix_parts.append(f"[{tag}]")
-                current_input_idx += 1
-        
-        if len(sfx_mix_parts) > 1:
-            mix_chain = "".join(sfx_mix_parts) + f"amix=inputs={len(sfx_mix_parts)}:duration=first:dropout_transition=2[a]"
-            mix_filters.append(mix_chain)
-            full_filter = ";".join(mix_filters)
-            cmd = ["ffmpeg", "-y"] + mix_inputs + ["-filter_complex", full_filter, "-map", "[a]", "-c:a", "libmp3lame", "-b:a", "192k", final_output]
-        else:
-            cmd = ["ffmpeg", "-y"] + inputs + ["-filter_complex", concat_filter, "-map", "[voice]", "-c:a", "libmp3lame", "-b:a", "192k", final_output]
-    else:
-        cmd = ["ffmpeg", "-y"] + inputs + ["-filter_complex", concat_filter, "-map", "[voice]", "-c:a", "libmp3lame", "-b:a", "192k", final_output]
 
-    subprocess.run(cmd, check=True, capture_output=True)
-    return get_audio_duration(final_output)
+def format_rupees_hinglish(amount: int) -> str:
+    return f"{int(amount):,} रुपये"
 
-def get_scene_script_definition(cut_amount: int = 3500, refund_amount: int = 21500):
-    """
-    Returns the scene script definitions with dynamic rupee amounts and zero robotic jargon!
-    """
-    cut_text = f"{cut_amount:,} रुपये" if cut_amount else "पैंतीस सौ रुपये"
-    refund_text = f"{refund_amount:,} रुपये" if refund_amount else "इक्कीस हज़ार पांच सौ रुपये"
+
+def get_scene_scripts(cut_amount: int = 3500, refund_amount: int = 21500) -> dict:
+    cut_text = format_rupees_hinglish(cut_amount)
+    refund_text = format_rupees_hinglish(refund_amount)
 
     return {
-        1: {
-            "segments": [
-                ("भारत में हर साल 40,000 करोड़ रुपये के सिक्योरिटी डिपॉजिट्स बिना किसी ट्रांसपेरेंसी के फंस जाते हैं।", "+12%", "+6Hz", 0.15),
-                ("रेंटशील्ड इसी का पहला ऑटोनोमस साइबर-एस्क्रो सॉल्यूशन है! गूगल सर्च से ओपन करते ही इसका लोगो स्मूदली नैवबार में डॉक हो जाता है, और यह पी-डब्ल्यू-ए ऐप की तरह किसी भी फोन या लैपटॉप पर इंस्टॉल हो जाता है।", "+13%", "+5Hz", 0.15)
-            ],
-            "sfx": None
-        },
-        2: {
-            "segments": [
-                ("शुरू होता है हमारा रियल-टाइम स्प्लिट-स्क्रीन डेमो! बाईं तरफ टेनेंट प्रियम, और दाईं तरफ लैंडलॉर्ड राजेश।", "+12%", "+5Hz", 0.15),
-                ("1-क्लिक जज डेमो से दोनों अकाउंट्स रेडी हैं। आइए लॉगिन करते हैं। प्रोफाइल वॉल्ट में यूजर्स फोटो, यूपीआई आईडी और लीगल एड्रेस पूरी सिक्योरिटी के साथ मैनेज कर सकते हैं।", "+12%", "+4Hz", 0.15)
-            ],
-            "sfx": [("click_pop", 1.8)]
-        },
-        3: {
-            "segments": [
-                ("टेनेंट 25,000 रुपये का डिपॉजिट और इंदिरानगर प्रॉपर्टी दर्ज करके सबमिट करता है।", "+12%", "+5Hz", 0.15),
-                ("अब दाईं तरफ ओनर का डैशबोर्ड देखिए — बिना किसी रिफ्रेश के, लाइव ऑटो-सिंक से नई प्रॉपर्टी तुरंत ओनर की स्क्रीन पर आ गई!", "+13%", "+6Hz", 0.15)
-            ],
-            "sfx": [("click_pop", 0.3), ("success_chime", 1.5)]
-        },
-        4: {
-            "segments": [
-                ("स्टेप वन में टेनेंट लिविंग रूम की बेसलाइन फोटो अपलोड करता है, और इन-ब्राउज़र शा 256 हैश लॉक हो जाता है।", "+12%", "+4Hz", 0.15),
-                ("ओनर रिवीजन रिक्वेस्ट फ्लैग करता है — और बाईं तरफ टेनेंट को बिना रिफ्रेश किए तुरंत अलर्ट मिल जाता है!", "+13%", "+5Hz", 0.15)
-            ],
-            "sfx": [("click_pop", 0.4), ("alert_chime", 1.2)]
-        },
-        5: {
-            "segments": [
-                ("ओनर यूपीआई आईडी कंफर्म करके बेसलाइन अप्रूव करता है।", "+12%", "+4Hz", 0.15),
-                ("और देखिए, दोनों पार्टीज के डिजिटल साइन होते ही स्टेप थ्री एस्क्रो डिपॉजिट अनलॉक हो जाता है!", "+13%", "+5Hz", 0.15)
-            ],
-            "sfx": [("click_pop", 0.4), ("success_chime", 0.8)]
-        },
-        6: {
-            "segments": [
-                ("अब ध्यान से देखिए — दाईं तरफ ओनर की स्क्रीन पर लाइव रिसीविंग टर्मिनल और क्यूआर कोड दिख रहा है!", "+12%", "+5Hz", 0.15),
-                ("बाईं तरफ टेनेंट 25,000 रुपये का डिपॉजिट पे करता है। बिना किसी यूटीआर झंझट के... रेज़रपे वेरिफाइड चेकआउट दो सौ मिलीसेकंड में ऑटो-क्लोज़ हो जाता है! ओनर का डैशबोर्ड लाइव 25,000 रुपये प्रोटेक्टेड डिपॉजिट में अपडेट हो गया।", "+13%", "+6Hz", 0.15)
-            ],
-            "sfx": [("click_pop", 0.4), ("success_chime", 1.2)]
-        },
-        7: {
-            "segments": [
-                ("अब आता है रेंटशील्ड का ट्रिपल एंटी-फ्रॉड इंजन! सेम फोटो दोबारा डालने पर डुप्लीकेट हैश डिटेक्टर इसे तुरंत ब्लॉक कर देता है!", "+13%", "+7Hz", 0.2),
-                ("सेल्फी या डार्क स्क्रीनशॉट डालने पर बत्तीस बाय बत्तीस सीन डिटेक्टर सबमिशन हार्ड-लॉक कर देता है!", "+13%", "+6Hz", 0.2),
-                (f"फिर असली डैमेज फोटो डालते ही... गूगल जेमिनी थ्री पॉइंट एट फ्लैश {cut_text} की रिपेयर डिडक्शन और {refund_text} का नेट रिफंड असेस करता है!", "+12%", "+4Hz", 0.2),
-                ("ओनर की स्क्रीन लाइव प्रॉपर्टी वेकेटेड में अपडेट हो जाती है।", "+12%", "+3Hz", 0.15)
-            ],
-            "sfx": [("alert_chime", 1.0), ("alert_chime", 3.0), ("success_chime", 6.5)]
-        },
-        8: {
-            "segments": [
-                (f"स्टेप फाइव में बाईं तरफ टेनेंट की स्क्रीन पर रिफंड रिसीविंग टर्मिनल और क्यूआर आ गया है! ओनर दाईं तरफ से {refund_text} का नेट रिफंड रिलीज करता है।", "+12%", "+4Hz", 0.15),
-                ("पेमेंट कन्फर्म होते ही दोनों स्क्रीन्स बिना रिफ्रेश किए लाइव जीरो रुपये पर ऑटो-क्लियर हो जाती हैं, और कॉन्ट्रैक्ट सेटल्ड हिस्ट्री में चला जाता है!", "+13%", "+5Hz", 0.15)
-            ],
-            "sfx": [("click_pop", 0.4), ("success_chime", 1.0)]
-        },
-        9: {
-            "segments": [
-                ("स्टेप सिक्स में दोनों पार्टीज को ऑफिशियल डॉक्यूमेंट्स मिलते हैं।", "+12%", "+4Hz", 0.15),
-                ("टेनेंट के लिए स्कैनेबल सोसाइटी गेट पास और एनओसी, और ओनर के लिए ऑफिशियल एस्क्रो सेटलमेंट रिसीट, जिसे एक क्लिक में प्रिंट या पीडीएफ एक्सपोर्ट किया जा सकता है!", "+13%", "+5Hz", 0.15)
-            ],
-            "sfx": [("click_pop", 0.3), ("success_chime", 1.0)]
-        },
-        10: {
-            "segments": [
-                ("और अंत में, रेंटशील्ड का जीरो-सर्वर कोर्ट रूम वेरीफायर! जहां बिना किसी बैकएंड सर्वर के, वेब-क्रिप्टो से ओरिजिनल फोटो मैच करके जीरो पिक्सल टैम्परिंग का 100% ऑथेंटिक प्रूफ मिलता है।", "+12%", "+5Hz", 0.15),
-                ("यह है रेंटशील्ड — भारत के रेंटल इकोसिस्टम का सबसे भरोसेमंद और सिक्योर साइबर-एस्क्रो प्रोटोकॉल!", "+12%", "+5Hz", 0.15)
-            ],
-            "sfx": [("success_chime", 1.2)]
-        }
+        1: (
+            "भारत में हर साल चालीस हज़ार करोड़ रुपये के रेंटल डिपॉज़िट्स बिना किसी ट्रांसपेरेंसी के फंस जाते हैं। "
+            "मिलिए रेंटशील्ड से — भारत का पहला ऑटोनोमस साइबर-एस्क्रो सॉल्यूशन! "
+            "गूगल सर्च से ओपन करते ही इसका लोगो स्मूदली नैवबार में लॉक हो जाता है, और वन-क्लिक में यह पी डब्ल्यू ए ऐप की तरह किसी भी फोन या लैपटॉप पर इंस्टॉल हो जाता है।"
+        ),
+        2: (
+            "अब शुरू होता है हमारा रियल-टाइम स्प्लिट-स्क्रीन डेमो! बाईं तरफ गेस्ट प्रियम, और दाईं तरफ प्रॉपर्टी ओनर राजेश। "
+            "दोनों अकाउंट्स लाइव लॉगिन होते ही, आप प्रोफाइल वॉल्ट के अंदर अपनी फोटो, यूपीआई आईडी और वेरीफाइड एड्रेस पूरी प्राइवेसी के साथ अपडेट कर सकते हैं।"
+        ),
+        3: (
+            "टेनेंट पच्चीस हज़ार रुपये का सिक्योरिटी डिपॉज़िट और इंदिरानगर प्रॉपर्टी डिटेल्स डालकर कॉन्ट्रैक्ट शुरू करता है। "
+            "और अब दाईं तरफ ओनर की स्क्रीन देखिए — बिना एक भी रीलोड किए, लाइव ऑटो-सिंक से यह नया एस्क्रो कॉन्ट्रैक्ट तुरंत ओनर के डैशबोर्ड पर आ गया!"
+        ),
+        4: (
+            "स्टेप वन में टेनेंट लिविंग रूम की साफ़ मूव-इन फोटो चुनता है, और ब्राउज़र के अंदर ही टैम्पर-प्रूफ हैश लॉक हो जाता है। "
+            "ओनर अपनी पोर्टल लिंक से फोटो चेक करके एक रिवीजन रिक्वेस्ट भेजता है — और बाईं तरफ टेनेंट को तुरंत रियल-टाइम अलर्ट मिल जाता है!"
+        ),
+        5: (
+            "अब ओनर अपनी यूपीआई आईडी rajesh.prajapati@okhdfcbank कन्फर्म करके मूव-इन बेसलाइन को अप्रूव एंड लॉक करता है। "
+            "दोनों पार्टीज की सहमति लॉक होते ही, बाईं तरफ स्टेप थ्री सिक्योरिटी डिपॉज़िट तुरंत अनलॉक हो जाता है!"
+        ),
+        6: (
+            "देखिए असली टू-पार्टी पेमेंट डिज़ाइन! दाईं तरफ ओनर की स्क्रीन पर लाइव रिसीविंग टर्मिनल और क्यूआर कोड ऑन है। "
+            "और बाईं तरफ गेस्ट के चेकआउट पॉपअप में कोई डुप्लीकेट क्यूआर नहीं — बल्कि सीधे रेज़रपे वेरीफाइड एस्क्रो या यूपीआई ट्रांसफर का ऑप्शन है! "
+            "पच्चीस हज़ार रुपये पे होते ही ओनर की स्क्रीन लाइव अपडेट हो जाती है।"
+        ),
+        7: (
+            "अब देखिए रेंटशील्ड का ट्रिपल एंटी-फ्रॉड इंजन! सेम फोटो दोबारा डालने पर डुप्लीकेट हैश डिटेक्टर तुरंत ब्लॉक कर देता है। "
+            "सेल्फी अपलोड करने पर बत्तीस बाय बत्तीस सीन डिटेक्टर उसे भी रोक देता है! "
+            f"फिर असली फटी हुई सोफा फोटो डालते ही... गूगल जेमिनी थ्री पॉइंट एट फ्लैश {cut_text} की फेयर रिपेयर कटौती और {refund_text} का नेट रिफंड कैलकुलेट करता है!"
+        ),
+        8: (
+            f"स्टेप फाइव में बाईं तरफ गेस्ट की स्क्रीन पर {refund_text} का लाइव रिफंड क्यूआर टर्मिनल आ गया है! "
+            f"दाईं तरफ से ओनर {refund_text} का नेट रिफंड रिलीज करता है। "
+            "पेमेंट पूरा होते ही दोनों डैशबोर्ड्स बिना रीलोड किए लाइव ज़ीरो रुपये पर ऑटो-क्लियर होकर सेटल्ड हिस्ट्री में चले जाते हैं!"
+        ),
+        9: (
+            "स्टेप सिक्स में दोनों पार्टीज को इंस्टैंट लीगल रिकॉर्ड्स मिलते हैं। "
+            "बाईं तरफ टेनेंट के लिए स्कैनेबल सोसाइटी मूव-आउट गेट पास और एनओसी, और दाईं तरफ ओनर के लिए ऑफिशियल एस्क्रो सेटलमेंट रिसीट — बिल्कुल टैक्स और ऑडिट रेडी!"
+        ),
+        10: (
+            "और अंत में, रेंटशील्ड का ज़ीरो-सर्वर कोर्ट रूम वेरीफायर! बिना किसी सर्वर के, सीधे ब्राउज़र में ओरिजिनल फोटो ड्रॉप करते ही हंड्रेड परसेंट ऑथेंटिक ज़ीरो-पिक्सल टैम्परिंग प्रूफ मिल जाता है। "
+            "यह है रेंटशील्ड — फास्ट, ट्रांसपेरेंट और फ्रॉड-फ्री रेंटल एस्क्रो!"
+        ),
     }
 
-async def generate_all_scenes_audio(cut_amount=3500, refund_amount=21500):
-    script_def = get_scene_script_definition(cut_amount, refund_amount)
+
+def generate_all_scenes_audio(cut_amount: int = 3500, refund_amount: int = 21500, force: bool = False) -> dict:
+    scripts = get_scene_scripts(cut_amount, refund_amount)
     durations = {}
-    total_dur = 0.0
+    total = 0.0
 
-    print("================================================================================")
-    print("SYNTHESIZING FOUNDER VOICEOVER (NATURAL HINGLISH • ZERO JARGON • DYNAMIC NUMBERS)")
-    print(f"Parameters: Deductions = ₹{cut_amount:,} | Net Refund = ₹{refund_amount:,}")
-    print("================================================================================")
+    print("=" * 80)
+    print("SYNTHESIZING REAL GOOGLE GEMINI NATIVE VOICEOVER (VOICE: Puck, NO FALLBACKS)")
+    print(f"Dynamic Numbers -> Deduction: ₹{cut_amount:,} | Net Refund: ₹{refund_amount:,}")
+    print("=" * 80)
 
-    for scene_id, data in script_def.items():
-        dur = await generate_scene_audio_pipeline(scene_id, data["segments"], data.get("sfx"))
+    for scene_id, text in scripts.items():
+        wav_path = os.path.join(AUDIO_DIR, f"scene_{scene_id}.wav")
+        if not force and os.path.exists(wav_path) and os.path.getsize(wav_path) > 50000:
+            print(f"[GeminiTTS] Reusing existing real Gemini WAV -> {os.path.basename(wav_path)}")
+        else:
+            synthesize_gemini_tts_wav(text, wav_path, voice_name="Puck")
+            time.sleep(15.0)  # Respect Gemini TTS free-tier RPM limits cleanly without 429s
+
+        if scene_id == 7:
+            with open(wav_path, "rb") as src, open(SCENE7_SAMPLE_WAV, "wb") as dst:
+                dst.write(src.read())
+            print(f"[Proof] Saved raw Gemini Puck Scene 07 WAV -> {SCENE7_SAMPLE_WAV}")
+
+        dur = get_audio_duration(wav_path)
         durations[scene_id] = dur
-        total_dur += dur
-        print(f"  -> Scene {scene_id} Duration: {dur:.2f}s")
+        total += dur
+        print(f"  -> Scene {scene_id:02d} WAV Duration: {dur:.2f}s")
 
-    print(f"\n✅ Total Voiceover Duration: {total_dur:.2f}s ({total_dur/60:.2f} minutes)")
-    with open(os.path.join(AUDIO_DIR, "durations.json"), "w") as f:
+    with open(os.path.join(AUDIO_DIR, "durations.json"), "w", encoding="utf-8") as f:
         json.dump(durations, f, indent=2)
+    print(f"\nTotal Gemini Native Voiceover Duration: {total:.2f}s ({total/60:.2f} min)")
     return durations
 
+
 if __name__ == "__main__":
-    asyncio.run(generate_all_scenes_audio())
+    generate_all_scenes_audio()

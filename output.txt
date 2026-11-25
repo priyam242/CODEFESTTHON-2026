@@ -1,88 +1,70 @@
 ================================================================================
-RENTSHIELD — CODEFESTTHON 2026 GRAND WINNER VERIFICATION REPORT
+RENTSHIELD — JUDGE DEMO OVERHAUL & GRAND-WINNER FEATURES REPORT (CODEFESTTHON 2026)
 ================================================================================
-Timestamp: 2026-11-24T22:34:00+05:30
-Repository: priyam242/CODEFESTTHON-2026 (Branch: main)
-Production Cloud URL: https://rentshield-web.onrender.com
-API Health Endpoint: https://rentshield-api.onrender.com/api/tenancy/ai-health
-Output Deliverable: RentShield_Full_SplitScreen_Demo.mp4
-
-================================================================================
-PART 1: REAL-WORLD TWO-PARTY PAYMENT HANDSHAKE & GEMINI PRE-WARM
-================================================================================
-[PASS] Stage 1 Escrow Deposit (Guest Payer -> Owner Receiver Handshake):
-  - Owner View (LandlordVerify.tsx / TenancyDetail.tsx):
-    Renders live "#owner-receiving-terminal" as soon as Step 02 Baseline is locked.
-    Displays Owner's live Receiving QR code (ownerQrDataUrl) and UPI ID (rajesh.prajapati@okhdfcbank).
-  - Guest View (PaymentModal.tsx):
-    Offers both Razorpay Verified Escrow (auto-closing in <200ms in test gateway mode) and Direct UPI.
-    Submitting Direct UPI marks status as DEPOSIT_SENT (action: MARK_SENT).
-  - Owner Confirmation Gate:
-    Only Owner's screen displays glowing "Confirm Rs 25,000 Received in Bank" button to unlock Step 03.
-    Guest payer cannot unilaterally force verification without Owner receipt.
-
-[PASS] Stage 2 Net Refund Handshake (Owner Payer -> Guest Receiver Handshake):
-  - Auto-Save Guest UPI:
-    tenantUpi automatically persists to Tenancy record during Step 04 Move-Out submission (zero manual "Save UPI" friction).
-  - Guest View (TenancyDetail.tsx):
-    Renders live "#guest-refund-terminal" as soon as Step 05 is reached.
-    Displays Guest's live Refund QR code (guestQrDataUrl) and UPI ID (priyam.prajapati@okaxis).
-  - Owner Payout (PaymentModal.tsx):
-    Owner releases payout via Razorpay Escrow or scans Guest QR and notifies "Refund Sent" (REFUND_SENT).
-  - Guest Confirmation Gate:
-    Only Guest's screen displays glowing "Confirm Rs 21,500 Received in Bank" button to unlock Step 06.
-    Both dashboards auto-clear to Rs 0 active deposit, transferring contract into Settled History.
-
-[PASS] Client Silent Pre-Warm on App Mount (App.tsx):
-  - Added background pre-warm fetch('/api/tenancy/ai-health') on boot, keeping Google Gemini connection active.
-
-[PASS] E2E Playwright Verification:
-  - Monorepo client test suite: 12/12 test scenarios passed (100% green).
-  - TypeScript build checks:
-    * Server (rentshield-server): 0 compile errors.
-    * Client (rentshield-client): 1708 modules built, 0 compile errors.
+Timestamp: 2026-11-25T13:54:34+05:30
+Repository: priyam242/CODEFESTTHON-2026 (Branch: main, Commit: e430d13)
+Live Web App: https://rentshield-web.onrender.com (Bundle: /assets/index-DJGBW-G4.js)
+Live API Base: https://rentshield-api.onrender.com
+Live Audit Endpoint: POST https://rentshield-api.onrender.com/api/tenancy/audit-lease
 
 ================================================================================
-PART 2: STUDIO-GRADE DUAL-TAB SPLIT-SCREEN DEMO VIDEO (FFPROBE VERIFIED)
+PART 1: BULLETPROOF 3-SCENARIO JUDGE DEMO DATA (SELF-HEALING + EMBEDDED ASSETS)
 ================================================================================
-Deliverable File: D:\22 Nove\RentShield_Full_SplitScreen_Demo.mp4
-Video Resolution: 1920x1080 (1080p Full-HD True 16:9 Widescreen)
-Nominal Frame Rate: 60/1 (60.00 FPS Constant, -r 60, fps=60)
-Pixel Format: yuv420p (Broadcast standard 4:2:0 YUV)
-Total Duration: 213.39 seconds (3.56 minutes • perfectly within 3.5 - 4.5m window)
-File Size: 21.06 MB (STRICT DISCORD/PORTAL LIMIT: < 25.0 MB -> 100% PASS)
-Audio Stream: aac @ 24,000 Hz, 1 channel mono, 192 kbps
-Peak Average Frame Luminance: 234.61 / 255
-White / Blank Flash Frames: 0 (ZERO WHITE FLASH GUARANTEE -> 100% PASS)
-
-Scene-by-Scene Checkpoint Breakdown:
-  - Scene 01 (23.70s): Full-Screen Dark Google Search -> Live Cyber-Shield Logo Laser Morph & PWA Install.
-  - Scene 02 (23.08s): Dual-Tab Split Screen • 1-Click Judge Demo Login & Profile Identity Vault held 1.8s.
-  - Scene 03 (15.64s): Fresh Tenancy Creation • Live Dynamic Sync to Owner (0 page reloads).
-  - Scene 04 (16.31s): Step 01 SHA-256 Move-In Baseline Upload with Visual File Explorer & Step 02 Revision Request.
-  - Scene 05 (12.44s): Step 02 Owner UPI Vault Approval -> Live Step 03 Escrow Unlock.
-  - Scene 06 (26.00s): Step 03 Stage-1 Deposit Payment & Owner Receiving Terminal with dynamic QR code.
-  - Scene 07 (35.58s): Step 04 Triple Anti-Fraud Engine (Duplicate Hash + Scene Mismatch + Gemini AI Damage Audit).
-  - Scene 08 (22.43s): Step 05 Stage-2 Owner Net Refund Payout & Guest Refund Terminal -> Auto-Clear to Rs 0.
-  - Scene 09 (16.74s): Step 06 Society Gate Pass NOC & Owner Settlement Receipt held side-by-side for 4 full seconds.
-  - Scene 10 (21.25s): Zero-Server Courtroom Byte Verifier (/verify) • 100% Authentic seal held 3.0s before Outro Card.
+- Created server/src/prisma/demo-assets.ts & upgraded seedDemoData() in
+  server/src/prisma/prisma.service.ts + server/src/auth/auth.service.ts:
+  * Embedded Base64 JPEG Data-URI room photos (480x320 / 480x268 rendered) with
+    matching computed SHA-256 hashes (zero broken Unsplash/CORS URLs).
+  * Fixed server/src/tenancy/tenancy.service.ts TENANCY_LIST_INCLUDE to select
+    moveInPhotoUrl so Dashboard property cards render crisp room thumbnails.
+  * Preserved priyam@gmail.com & rajesh@gmail.com at 0 tenancies in Neon DB.
+  * Seeded 3 scenarios on tenant.demo@rentshield.com <-> landlord.demo@rentshield.com:
+    1) Skyline Cyber-Vault 2BHK Indiranagar (demo-tenancy-indiranagar-001):
+       APPROVED, Rs.25,000 deposit paid, Step 01 & 02 sealed, ready for Step 04 AI Audit.
+    2) Greenwood Cyber-Residency 1BHK HSR (demo-tenancy-hsr-002):
+       ACTIVE, Rs.18,000 deposit, Step 01 uploaded, awaiting Owner Lock / Stage 1 Deposit.
+    3) Prestige Lakeside 3BHK Koramangala (koramangala-settled-002):
+       SETTLED, Rs.45,000 deposit, Rs.3,500 AI deduction, Rs.41,500 refunded (NOC + Receipt).
+- Added "Reset Judge Demo" button on client/src/pages/Dashboard.tsx.
 
 ================================================================================
-PART 3: SPOTLESS POST-RUN DATABASE & REPO VERIFICATION
+PART 2: FEATURE 1 — MTA 2021 SMART LEASE & DEPOSIT CLAUSE SCANNER
 ================================================================================
-[PASS] Neon PostgreSQL Clean State:
-  - Remaining Users: 0 (100% Completely Wiped)
-  - Remaining Active Tenancies: 0
-  - Remaining Inventory Items: 0
-  - Server Uploads (/server/uploads): 0 files
-  - Scratch & Temp Cache (/scripts/temp): Cleaned (0 MB)
-  - All temporary test tenancies, uploads, and user records purged.
-
-[PASS] Repository & Documentation:
-  - Root README.md updated with Mermaid Two-Party Escrow Sequence Diagram, System Architecture, and Judge Quick-Test Guide.
-  - .gitignore updated to prevent accidental staging of video binaries or scratch files (*.mp4, scripts/temp/, output.txt).
-  - ZERO PUSH compliance: RentShield_Full_SplitScreen_Demo.mp4 maintained strictly on local disk.
+- Backend: Added auditLeaseClause() in server/src/ai-audit/ai-audit.service.ts and
+  POST /api/tenancy/audit-lease in server/src/tenancy/tenancy.controller.ts.
+- Frontend: Created client/src/components/LeaseScannerModal.tsx & exposed
+  "Lease Risk Scanner" in client/src/components/Navbar.tsx & Dashboard.tsx.
+- Live Render Verification:
+  * Tested live on https://rentshield-web.onrender.com with "Predatory 10-Month Deposit
+    & Arbitrary Painting Clause": returned Legal Risk Score 95/100, verdict
+    HIGH_RISK (Audited by gemini-3.5-flash), flagged Model Tenancy Act 2021
+    Section 11 & Section 13/15 violations, and provided copyable fair wording.
 
 ================================================================================
-ALL THREE PARTS COMPLETED WITH 100% RIGOR AND VERIFIED PASSING.
+PART 3: FEATURE 2 — 1-CLICK JUDGE EVIDENCE SIMULATOR CHIPS (STEP 04 MODAL)
+================================================================================
+- Created client/src/utils/demoEvidenceSamples.ts & added "Judge Quick-Test Samples:"
+  bar inside client/src/pages/TenancyDetail.tsx Step 04 Move-Out modal:
+  * "Load Duplicate Move-In Photo" (triggers ANTI-FRAUD SHA-256 duplicate guard)
+  * "Load Selfie Portrait" (triggers 32x32 SCENE MISMATCH BLOCKED portrait guard)
+  * "Load Damaged Sofa Photo" (pre-loads damaged sofa evidence ready for Gemini Audit)
+- Fixed analyzeImagePairClientSide Data-URI URL handling (skip ?cacheBust= on data:)
+  and calibrated isHumanPortraitCluster spatial skin threshold on 32x32 canvas.
+
+================================================================================
+VERIFICATION CHECKS & VISUAL PROOFS
+================================================================================
+1. Server & Client Builds:
+   - pnpm --filter rentshield-server build -> Exit 0
+   - pnpm --filter rentshield-client build -> Exit 0 (1710 modules, 2.33s)
+2. Full Playwright E2E Suite (pnpm --filter rentshield-client test:e2e):
+   - 14 passed (0 failed) in 1.7m, including Scenarios 13 & 14.
+3. Live Render & Neon DB Checks:
+   - Verified priyam@gmail.com / rajesh@gmail.com tenancies count = 0 in Neon DB.
+   - Verified tenant.demo@rentshield.com has all 3 seeded scenarios intact.
+   - Verified live Dashboard image elements load with naturalWidth=480, naturalHeight=268.
+4. Proof Screenshots Saved in D:\22 Nove\:
+   - D:\22 Nove\proof_new_1_lease_scanner.png
+   - D:\22 Nove\proof_new_2_judge_demo_3_scenarios.png
+   - D:\22 Nove\proof_new_3_judge_evidence_chips.png
+   - D:\22 Nove\proof_new_4_playwright_14_pass.png
 ================================================================================

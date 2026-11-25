@@ -1,0 +1,43 @@
+================================================================================
+DEVFOLIO SUBMISSION COPY — RENTSHIELD (CODEFESTTHON 2026)
+================================================================================
+
+1. PROJECT NAME:
+RentShield
+
+2. TAGLINE (<= 60 chars / punchy):
+Zero-Tamper AI & Cryptographic Rental Escrow Protocol
+
+(Alternate slightly longer tagline):
+Autonomous SHA-256 & Gemini 3.8 Flash Rental Deposit Cyber-Escrow
+
+3. TRACKS:
+- Open Innovation
+- AI/ML
+- Web3/Blockchain
+- FinTech
+
+4. LIVE LINKS:
+- Live Web App: https://rentshield-web.onrender.com
+- Live AI Health Check: https://rentshield-api.onrender.com/api/tenancy/ai-health
+- Zero-Server Courtroom Verifier: https://rentshield-web.onrender.com/verify
+- GitHub Repository: https://github.com/priyam242/CODEFESTTHON-2026
+
+5. THE PROBLEM IT SOLVES:
+Across India's urban rental ecosystem, over ₹40,000 Crore in tenant security deposits is locked in opaque, dispute-prone handoffs. At move-out, tenants routinely lose 20% to 50% of their hard-earned deposit to arbitrary damage claims ("scratched sofa", "wall scuffs", "broken fixture") because neither party holds a tamper-proof baseline record or an objective arbitrator. Landlords, meanwhile, have no instant way to verify authentic move-out photos against fake re-uploads or cropped screenshots, and both parties lack automated legal closure documents for residential housing societies and tax accounting.
+
+RentShield solves this end-to-end with a 6-Step Cryptographic & AI Cyber-Escrow Protocol:
+1. Local WebCrypto SHA-256 Sealing: Move-in photos are fingerprinted inside the browser via window.crypto.subtle before landlord lock—making post-hoc tampering mathematically impossible.
+2. Real-World Two-Party QR Escrow Terminals: Instead of illogical single-screen QR popups, the Receiver's screen (#owner-receiving-terminal in Stage 1, #guest-refund-terminal in Stage 2) displays a live NPCI UPI QR matrix while the Payer gets Razorpay Verified Escrow + Direct UPI with a strict zero self-approval gate.
+3. Triple Anti-Fraud Engine + Gemini 3.8 Flash Arbitration: Blocks duplicate move-in photo re-uploads via byte-hash checks, blocks selfies/UI screenshots via a 32x32 spatial skin-cluster & SSIM detector, and invokes Google Gemini 3.8 Flash under Indian Model Tenancy Act (MTA) 2021 Sections 13 & 15 to compute fair itemized deductions vs. normal wear-and-tear.
+4. Statutory Closure & Zero-Server /verify Courtroom: Auto-clears both dashboards to ₹0, generates a scannable Society Move-Out Gate Pass & NOC + tax-ready Settlement Receipt, and lets any arbitrator verify photo authenticity 100% offline in-browser.
+
+6. CHALLENGES I RAN INTO:
+- Backwards Real-World QR Payment UX: Early prototypes displayed the payment QR on the payer's own popup and allowed payers to mark their own transfer verified. Re-architecting PaymentModal + Live Receiving Terminals separated Receiver QR presentation from Payer Checkout and enforced two-party bank confirmation (DEPOSIT_CLAIMED / REFUND_CLAIMED) alongside <200ms Razorpay webhook verification.
+- Defeating Clever Photo Spoofing Without High Latency: Tenants or fraudsters can attempt to upload identical move-in photos or dark UI screenshots/selfies. Building a fast client + server 32x32 spatial correlation + skin-tone cluster guard stopped fake evidence pre-upload while keeping authentic Gemini 3.8 Flash canvas-compressed audits under 2.5 seconds.
+- Real-Time Multi-Tab State Without Loading Flicker: Keeping Guest and Owner views dynamically synchronized across independent browser contexts without page reloads caused intermittent loading-spinner flashes during 4s polls; guarding initial mount state with loading && !tenancy delivered seamless zero-flicker updates.
+- 2026 Gemini Model Deprecations: Older Gemini Flash endpoints began returning 404/403 on newer keys; implementing dynamic /v1beta/models capability discovery guarantees zero-downtime multimodal vision and native TTS resilience.
+
+7. TECHNOLOGIES USED:
+React 19, TypeScript, Vite 6, Tailwind CSS v4, NestJS 11, Prisma ORM 6, Neon PostgreSQL, Google Gemini 3.8 Flash, Google Gemini Native TTS (Puck), W3C Web Crypto API (SHA-256), Razorpay Escrow, NPCI UPI QR, Playwright, FFmpeg, jsPDF, BroadcastChannel API.
+================================================================================
