@@ -711,8 +711,11 @@ test.describe.serial('RentShield Full E2E Verification Suite (14 Critical Scenar
     // Ensure fresh demo sandbox via Reset Judge Demo
     const resetBtn = page.locator('button:has-text("Reset Judge Demo")').first();
     if (await resetBtn.isVisible()) {
-      await resetBtn.click();
-      await page.waitForTimeout(800);
+      await Promise.all([
+        page.waitForResponse((resp) => resp.url().includes('/demo/reset') && resp.ok()),
+        resetBtn.click(),
+      ]);
+      await page.waitForTimeout(300);
     }
 
     // Open Scenario A (Skyline Cyber-Vault 2BHK Indiranagar — Ready for Move-Out AI Audit)
