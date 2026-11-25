@@ -354,7 +354,25 @@ export const tenancyApi = {
     });
     return res.data;
   },
+  auditLease: async (clauseText: string): Promise<LeaseAuditResult> => {
+    const res = await axios.post<LeaseAuditResult>(`${API_BASE}/tenancy/audit-lease`, { clauseText });
+    return res.data;
+  },
 };
+
+export interface LeaseAuditResult {
+  riskScore: number;
+  verdict: 'HIGH_RISK' | 'MODERATE_RISK' | 'COMPLIANT';
+  summary: string;
+  modelUsed: string;
+  flaggedClauses: Array<{
+    section: string;
+    severity: 'HIGH' | 'MEDIUM' | 'LOW';
+    issue: string;
+    clauseExcerpt: string;
+    fairReplacement: string;
+  }>;
+}
 
 export const itemsApi = {
   uploadMoveIn: async (formData: FormData) => {

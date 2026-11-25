@@ -64,12 +64,13 @@ export class AuthService {
         });
       }
 
-      // 3. Guarantee that the 2BHK Indiranagar demo agreement is present for the judge
-      const tenancyId = 'demo-tenancy-indiranagar-001';
-      const existingTenancy = await this.prisma.tenancyClient.findUnique({ where: { id: tenancyId } });
-      if (!existingTenancy) {
+      // 3. Guarantee all 3 Judge Demo scenarios exist cleanly
+      const existingA = await this.prisma.tenancyClient.findUnique({ where: { id: 'demo-tenancy-indiranagar-001' } });
+      const existingB = await this.prisma.tenancyClient.findUnique({ where: { id: 'demo-tenancy-hsr-002' } });
+      const existingC = await this.prisma.tenancyClient.findUnique({ where: { id: 'koramangala-settled-002' } });
+      if (!existingA || !existingB || !existingC) {
         try {
-          await this.prisma.seedDemoData(true);
+          await this.prisma.seedDemoData(false);
         } catch {}
       }
 

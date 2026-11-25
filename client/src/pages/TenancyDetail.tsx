@@ -33,6 +33,12 @@ import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
 import { EscrowReceiptModal } from '../components/EscrowReceiptModal';
 import { getEscrowState } from '../utils/escrowSequence';
+import {
+  SAMPLE_SELFIE_DATA_URI,
+  SAMPLE_DAMAGED_SOFA_DATA_URI,
+  SAMPLE_CLEAN_ROOM_DATA_URI,
+  dataUriToFile,
+} from '../utils/demoEvidenceSamples';
 
 export const TenancyDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -347,7 +353,9 @@ export const TenancyDetail: React.FC = () => {
 
                 const centerSkinRatio1 = centerSkin1 / centerTotal;
                 const centerSkinRatio2 = centerSkin2 / centerTotal;
-                const isHumanPortraitCluster = centerSkinRatio2 >= 0.20 && centerSkinRatio1 < 0.10;
+                const isHumanPortraitCluster =
+                  centerSkinRatio2 >= 0.25 &&
+                  (centerSkinRatio1 < 0.12 || centerSkinRatio2 - centerSkinRatio1 >= 0.20);
 
                 const isSevereMismatch = meanGlobalShift > 80;
                 const isDarkVsBright = meanGlobalShift > 55 && luminanceDelta > 65;
@@ -393,7 +401,9 @@ export const TenancyDetail: React.FC = () => {
 
         img1.onerror = () => resolve(defaultFail);
         const resolvedSrc = getAssetUrl(moveInImgSrc);
-        img1.src = `${resolvedSrc}${resolvedSrc.includes('?') ? '&' : '?'}cacheBust=${Date.now()}`;
+        img1.src = resolvedSrc.startsWith('data:')
+          ? resolvedSrc
+          : `${resolvedSrc}${resolvedSrc.includes('?') ? '&' : '?'}cacheBust=${Date.now()}`;
       } catch {
         resolve(defaultFail);
       }
@@ -2185,6 +2195,59 @@ export const TenancyDetail: React.FC = () => {
                   onChange={(e) => handleMoveOutFileChange(e.target.files?.[0] || null)}
                   className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-500 file:text-slate-950 hover:file:bg-emerald-400 cursor-pointer"
                 />
+
+                {moveOutFile && (
+                  <div className="mt-2 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-300 flex items-center justify-between">
+                    <span className="truncate">Selected: {moveOutFile.name}</span>
+                    <span className="text-slate-500 ml-2">{Math.round(moveOutFile.size / 1024)} KB</span>
+                  </div>
+                )}
+
+                {/* Feature 2: 1-Click Judge Evidence Simulator Chips */}
+                <div className="mt-3 p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2">
+                  <div className="text-[11px] font-mono font-bold text-cyan-300 flex items-center space-x-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>⚡ Judge Quick-Test Samples:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const src = activeMoveOutItem.moveInPhotoUrl;
+                        if (src && src.startsWith('data:')) {
+                          await handleMoveOutFileChange(dataUriToFile(src, 'duplicate-move-in-photo.jpg'));
+                        } else if (src) {
+                          try {
+                            const r = await fetch(getAssetUrl(src));
+                            const b = await r.blob();
+                            await handleMoveOutFileChange(new File([b], 'duplicate-move-in-photo.jpg', { type: b.type || 'image/jpeg' }));
+                          } catch {
+                            await handleMoveOutFileChange(dataUriToFile(SAMPLE_CLEAN_ROOM_DATA_URI, 'duplicate-move-in-photo.jpg'));
+                          }
+                        } else {
+                          await handleMoveOutFileChange(dataUriToFile(SAMPLE_CLEAN_ROOM_DATA_URI, 'duplicate-move-in-photo.jpg'));
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/35 text-rose-300 text-[10px] font-mono font-bold transition"
+                    >
+                      🧪 Load Duplicate Move-In Photo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveOutFileChange(dataUriToFile(SAMPLE_SELFIE_DATA_URI, 'judge-selfie-portrait.jpg'))}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/35 text-amber-300 text-[10px] font-mono font-bold transition"
+                    >
+                      🤳 Load Selfie Portrait
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveOutFileChange(dataUriToFile(SAMPLE_DAMAGED_SOFA_DATA_URI, 'judge-damaged-sofa.jpg'))}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/35 text-emerald-300 text-[10px] font-mono font-bold transition"
+                    >
+                      🛋️ Load Damaged Sofa Photo
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Scene Mismatch Error Banner */}

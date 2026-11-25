@@ -26,7 +26,7 @@ function createTestImageBuffer(r = 16, g = 185, b = 129): Buffer {
   ]);
 }
 
-test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenarios)', () => {
+test.describe.serial('RentShield Full E2E Verification Suite (14 Critical Scenarios)', () => {
   let createdTenancyId = '';
   let landlordToken = '';
   const tenantEmail = `tenant.e2e.${Date.now()}@rentshield.com`;
@@ -89,14 +89,18 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
 
-    // Assert Active Tenancy Card (Indiranagar)
-    const activeProperty = page.locator('text=Indiranagar').first();
-    await expect(activeProperty).toBeVisible({ timeout: 10000 });
+    // Assert all 3 Pre-Seeded Judge Scenarios (Indiranagar Active, HSR Pending, Koramangala Settled)
+    await expect(page.locator('text=Skyline Cyber-Vault 2BHK Indiranagar').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=Greenwood Cyber-Residency 1BHK HSR').first()).toBeVisible();
 
-    // Assert Settled History Stack (Koramangala)
+    // Assert real embedded room thumbnails loaded cleanly (naturalWidth > 0)
+    const firstThumbWidth = await page.locator('img[alt*="Indiranagar"]').first().evaluate((el: HTMLImageElement) => el.naturalWidth);
+    expect(firstThumbWidth).toBeGreaterThan(0);
+
+    // Assert Settled History Stack (Prestige Lakeside Koramangala)
     const settledHeader = page.locator('text=Settled History & Past Locations').first();
     await expect(settledHeader).toBeVisible();
-    const settledCard = page.locator('text=Koramangala').first();
+    const settledCard = page.locator('text=Prestige Lakeside 3BHK Koramangala').first();
     await expect(settledCard).toBeVisible();
 
     // Assert Society Gate Pass NOC button works on settled card
@@ -308,18 +312,14 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     const modalHeader = page.locator('text=Stage 1: Move-In Security Deposit Escrow').first();
     await expect(modalHeader).toBeVisible();
 
-    // Verify Owner's receiving VPA is displayed (use .first() to prevent strict mode duplicate with subtitle)
+    // Verify Owner's receiving VPA is displayed & NO duplicate QR exists inside Payer checkout
     const vpaDisplay = page.locator('text=anand.singhania@okhdfcbank').first();
     await expect(vpaDisplay).toBeVisible();
+    const modalQrImgs = await page.locator('.fixed.inset-0 img').count();
+    expect(modalQrImgs).toBe(0);
 
-    // Verify QR code image is generated and scannable
-    const qrImg = page.locator('img[alt*="UPI QR"]').first();
-    await expect(qrImg).toBeVisible();
-    const qrSrc = await qrImg.getAttribute('src');
-    expect(qrSrc).toContain('data:image/png;base64');
-
-    // Confirm Payment via Instant UPI Confirmation
-    const confirmPaymentBtn = page.locator('button:has-text("Instant Confirm")');
+    // Confirm Payment via Razorpay Test Webhook
+    const confirmPaymentBtn = page.locator('button:has-text("Judge Demo Simulate Razorpay Webhook"), button:has-text("Instant Confirm")').first();
     await expect(confirmPaymentBtn).toBeVisible();
     await confirmPaymentBtn.click();
     await page.waitForTimeout(1000);
@@ -453,8 +453,8 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     const settlementTitle = page.locator('text=Stage 2: Move-Out Final Net Escrow Refund').first();
     await expect(settlementTitle).toBeVisible();
 
-    // Complete refund settlement via Instant UPI Confirmation
-    const confirmBtn = page.locator('button:has-text("Instant Confirm")');
+    // Complete refund settlement via Razorpay Test Webhook
+    const confirmBtn = page.locator('button:has-text("Judge Demo Simulate Razorpay Webhook"), button:has-text("Instant Confirm")').first();
     await expect(confirmBtn).toBeVisible();
     await confirmBtn.click();
     await page.waitForTimeout(1000);
@@ -668,5 +668,80 @@ test.describe.serial('RentShield Full E2E Verification Suite (10 Critical Scenar
     expect(deleteRes.status()).toBe(403);
     const deleteData = await deleteRes.json();
     expect(deleteData.message).toContain('Judge Demo accounts are protected from deletion');
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 13: MTA 2021 Smart Lease & Deposit Clause Scanner (UI + Gemini API)
+  // --------------------------------------------------------------------------
+  test('13. MTA 2021 Smart Lease & Deposit Clause Scanner detects predatory deposit & wear traps', async ({ page }) => {
+    await page.goto('/login');
+    await page.keyboard.press('Escape');
+
+    // Open Lease Risk Scanner from Navbar
+    const scannerNavBtn = page.locator('button:has-text("Lease Risk Scanner")').first();
+    await expect(scannerNavBtn).toBeVisible();
+    await scannerNavBtn.click();
+
+    await expect(page.locator('h3:has-text("MTA 2021 Smart Lease")')).toBeVisible();
+
+    // Click Predatory 10-Month Deposit Sample & scan
+    const predatoryBtn = page.locator('button:has-text("Predatory 10-Month Deposit")').first();
+    await predatoryBtn.click();
+
+    // Verify Risk Score & Red Illegal Clause flag rendered
+    const resultPanel = page.locator('#lease-audit-result');
+    await expect(resultPanel).toBeVisible({ timeout: 20000 });
+    await expect(resultPanel.locator('text=Legal Risk Score')).toBeVisible();
+    await expect(resultPanel.locator('text=ILLEGAL / PREDATORY CLAUSE').first()).toBeVisible();
+
+    // Close modal
+    await page.locator('button[title="Close Lease Scanner"]').click();
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 14: 1-Click Judge Evidence Simulator Chips in Step 04 Move-Out Modal
+  // --------------------------------------------------------------------------
+  test('14. 1-Click Judge Evidence Simulator Chips trigger Duplicate Hash & 32x32 Selfie Blockers', async ({ page }) => {
+    await page.goto('/login');
+    await page.keyboard.press('Escape');
+    await page.locator('button:has-text("Demo as Tenant")').click();
+    await page.waitForURL('/');
+    await page.keyboard.press('Escape');
+
+    // Ensure fresh demo sandbox via Reset Judge Demo
+    const resetBtn = page.locator('button:has-text("Reset Judge Demo")').first();
+    if (await resetBtn.isVisible()) {
+      await resetBtn.click();
+      await page.waitForTimeout(800);
+    }
+
+    // Open Scenario A (Skyline Cyber-Vault 2BHK Indiranagar — Ready for Move-Out AI Audit)
+    await page.goto('/tenancy/demo-tenancy-indiranagar-001');
+    await page.keyboard.press('Escape');
+
+    const moveOutBtn = page.locator('button:has-text("Upload Move-Out & Audit")').first();
+    await expect(moveOutBtn).toBeVisible({ timeout: 10000 });
+    await moveOutBtn.click();
+
+    // Verify all 3 Judge Evidence Chips render inside Move-Out Modal
+    const dupChip = page.locator('button:has-text("Load Duplicate Move-In Photo")').first();
+    const selfieChip = page.locator('button:has-text("Load Selfie Portrait")').first();
+    const damagedChip = page.locator('button:has-text("Load Damaged Sofa Photo")').first();
+    await expect(dupChip).toBeVisible();
+    await expect(selfieChip).toBeVisible();
+    await expect(damagedChip).toBeVisible();
+
+    // Click Duplicate chip -> triggers instant SHA-256 Anti-Fraud block!
+    await dupChip.click();
+    await expect(page.locator('text=ANTI-FRAUD TRIGGERED').first()).toBeVisible({ timeout: 8000 });
+
+    // Click Selfie Portrait chip -> triggers instant 32x32 Skin-Cluster Scene Mismatch block!
+    await selfieChip.click();
+    await expect(page.locator('text=SCENE MISMATCH BLOCKED').first()).toBeVisible({ timeout: 8000 });
+
+    // Click Damaged Sofa chip -> clears alerts & enables Run AI Damage Audit!
+    await damagedChip.click();
+    await page.waitForTimeout(500);
+    await expect(page.locator('button[type="submit"]:has-text("Run AI Damage Audit")')).toBeEnabled();
   });
 });

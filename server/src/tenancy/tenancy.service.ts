@@ -35,6 +35,7 @@ const TENANCY_LIST_INCLUDE = {
       roomName: true,
       itemName: true,
       moveInNotes: true,
+      moveInPhotoUrl: true,
       moveInPhotoHash: true,
       moveOutPhotoHash: true,
       aiVerdict: true,
@@ -377,7 +378,7 @@ export class TenancyService {
     await this.prisma.seedDemoData(true);
     return {
       success: true,
-      message: 'Demo tenancy successfully reset to pristine 2BHK Bangalore state',
+      message: 'Judge Demo sandbox reset (3 scenarios: Indiranagar Move-Out Ready, HSR Awaiting Owner Lock, Koramangala Settled)',
       demoTenancyId: 'demo-tenancy-indiranagar-001',
     };
   }

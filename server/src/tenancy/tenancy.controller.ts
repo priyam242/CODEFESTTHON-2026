@@ -102,6 +102,12 @@ export class TenancyController {
     return this.aiAuditService.generateSpeech(body.text, body.voiceName || 'Puck');
   }
 
+  // Feature 1: MTA 2021 Smart Lease & Deposit Clause Scanner
+  @Post('audit-lease')
+  async auditLeaseClause(@Body() body: { clauseText: string }) {
+    return this.aiAuditService.auditLeaseClause(body?.clauseText || '');
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get(':id')
   async findOne(@Request() req: any, @Param('id') id: string) {

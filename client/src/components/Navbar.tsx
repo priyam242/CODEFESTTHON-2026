@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, LogOut, Plus, CheckCircle2, Cpu, Bell, Smartphone, X } from 'lucide-react';
+import { Shield, LogOut, Plus, CheckCircle2, Cpu, Bell, Smartphone, X, ScrollText } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authApi, tenancyApi } from '../api';
 import { useLiveSync } from '../realtimeSync';
 import { replayIntroAnimation } from './IntroSplash';
 import { UserProfileModal } from './UserProfileModal';
+import { LeaseScannerModal } from './LeaseScannerModal';
 
 export const Navbar: React.FC = () => {
   const [user, setUser] = useState(() => authApi.getCurrentUser());
@@ -27,6 +28,7 @@ export const Navbar: React.FC = () => {
   });
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showLeaseScanner, setShowLeaseScanner] = useState(false);
 
   useEffect(() => {
     setUser(authApi.getCurrentUser());
@@ -156,6 +158,14 @@ export const Navbar: React.FC = () => {
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="text-[11px] font-semibold">Gemini 3.8 Flash + WebCrypto Active</span>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowLeaseScanner(true)}
+                className="relative z-50 cursor-pointer pointer-events-auto inline-flex items-center space-x-1 text-xs font-medium text-cyan-300 hover:text-emerald-300 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition"
+              >
+                <ScrollText className="w-3.5 h-3.5" />
+                <span>📜 Lease Risk Scanner</span>
+              </button>
               <Link
                 to="/verify"
                 className="relative z-50 cursor-pointer pointer-events-auto text-xs font-medium text-slate-300 hover:text-emerald-400 px-3 py-1.5 rounded-xl hover:bg-slate-900 border border-slate-800/60 transition"
@@ -183,6 +193,14 @@ export const Navbar: React.FC = () => {
             </div>
           ) : (
             <div className="flex items-center space-x-2 sm:space-x-3">
+              <button
+                type="button"
+                onClick={() => setShowLeaseScanner(true)}
+                className="hidden md:inline-flex items-center space-x-1.5 text-xs text-cyan-300 hover:text-emerald-300 font-semibold transition px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30"
+              >
+                <ScrollText className="w-3.5 h-3.5" />
+                <span>📜 Lease Risk Scanner</span>
+              </button>
               <Link
                 to="/verify"
                 className="hidden sm:inline-flex items-center space-x-1.5 text-xs text-slate-300 hover:text-emerald-400 font-medium transition px-3 py-1.5 rounded-xl hover:bg-slate-900 border border-slate-800/60"
@@ -288,6 +306,14 @@ export const Navbar: React.FC = () => {
           onClose={() => setShowProfileModal(false)}
           onLogout={handleLogout}
           onUserUpdated={(u) => setUser(u)}
+        />
+      )}
+
+      {/* MTA 2021 Smart Lease & Deposit Clause Scanner Modal */}
+      {showLeaseScanner && (
+        <LeaseScannerModal
+          isOpen={showLeaseScanner}
+          onClose={() => setShowLeaseScanner(false)}
         />
       )}
 

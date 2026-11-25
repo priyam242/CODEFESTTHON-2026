@@ -2,6 +2,12 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
+import {
+  DEMO_ROOM_CLEAN_DATA_URI,
+  DEMO_ROOM_CLEAN_SHA256,
+  DEMO_ROOM_DAMAGED_DATA_URI,
+  DEMO_ROOM_DAMAGED_SHA256,
+} from './demo-assets';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -191,47 +197,54 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         });
       }
 
-      // 3. Seed Realistic Indian Rental Tenancy (2BHK Indiranagar, Bangalore)
-      const tenancyId = 'demo-tenancy-indiranagar-001';
+      // 3. Clean up only demo tenancies when force=true (preserve priyam@gmail.com / rajesh@gmail.com data)
+      const scenarioAId = 'demo-tenancy-indiranagar-001';
+      const scenarioBId = 'demo-tenancy-hsr-002';
+      const scenarioCId = 'koramangala-settled-002';
+      const demoIds = [scenarioAId, scenarioBId, scenarioCId];
 
       if (force) {
         if (this.isConnected) {
           try {
             const ic = (this as any).item || (this as any).Item;
             const tc = (this as any).tenancy || (this as any).Tenancy;
-            if (ic?.deleteMany) await ic.deleteMany({});
-            if (tc?.deleteMany) await tc.deleteMany({});
+            const demoTenancies = await this.tenancyClient.findMany({
+              where: {
+                OR: [
+                  { userId: tenant.id },
+                  { landlordEmail },
+                  { id: { in: demoIds } },
+                ],
+              },
+            });
+            const idsToWipe = demoTenancies.map((t: any) => t.id);
+            if (idsToWipe.length > 0) {
+              if (ic?.deleteMany) await ic.deleteMany({ where: { tenancyId: { in: idsToWipe } } });
+              if (tc?.deleteMany) await tc.deleteMany({ where: { id: { in: idsToWipe } } });
+            }
           } catch {}
         } else {
-          this.memoryTenancies.clear();
-          this.memoryItems.clear();
+          for (const [k, v] of this.memoryTenancies.entries()) {
+            if (v.userId === tenant.id || v.landlordEmail === landlordEmail || demoIds.includes(k)) {
+              this.memoryTenancies.delete(k);
+            }
+          }
+          for (const [k, v] of this.memoryItems.entries()) {
+            if (!this.memoryTenancies.has(v.tenancyId)) this.memoryItems.delete(k);
+          }
         }
       }
 
-      const existingTenancy = await this.tenancyClient.findUnique({ where: { id: tenancyId } });
-
-      if (!existingTenancy || force) {
-        if (this.isConnected && !force) {
-          try {
-            const ic = (this as any).item || (this as any).Item;
-            const tc = (this as any).tenancy || (this as any).Tenancy;
-            if (ic?.deleteMany) await ic.deleteMany({ where: { tenancyId } });
-            if (tc?.deleteMany) await tc.deleteMany({ where: { id: tenancyId } });
-          } catch {}
-        } else if (!force) {
-          this.memoryTenancies.delete(tenancyId);
-          for (const [k, v] of this.memoryItems.entries()) {
-            if (v.tenancyId === tenancyId) this.memoryItems.delete(k);
-          }
-        }
-
-        const demoTenancy = await this.tenancyClient.create({
+      // SCENARIO A (Active — Ready for Move-Out AI Audit): ₹25,000 deposit paid
+      const existingA = await this.tenancyClient.findUnique({ where: { id: scenarioAId } });
+      if (!existingA || force) {
+        const tenancyA = await this.tenancyClient.create({
           data: {
-            id: tenancyId,
-            propertyTitle: '2BHK Luxury Apt - Indiranagar, Bangalore',
+            id: scenarioAId,
+            propertyTitle: 'Skyline Cyber-Vault 2BHK Indiranagar',
             propertyAddress: '#402, 12th Main Road, HAL 2nd Stage, Indiranagar, Bengaluru, KA 560038',
-            depositAmount: 50000,
-            depositAmountDecimal: 50000,
+            depositAmount: 25000,
+            depositAmountDecimal: 25000,
             landlordName: 'Ramesh Malik',
             landlordPhone: '+91 98765 43210',
             landlordEmail: landlordEmail,
@@ -250,80 +263,72 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             status: 'APPROVED',
             depositPaid: true,
             depositPaymentId: 'pay_RS_DEMO_882910',
-            moveInHash: '58a9db3bdc324855635e803e45982f1603afd532eeb6dfa4f92a73332df269fe',
-            estimatedRefund: 50000,
+            moveInHash: DEMO_ROOM_CLEAN_SHA256,
+            estimatedRefund: 25000,
             userId: tenant.id,
           },
         });
 
-        // Seed 3 realistic pre-hashed inventory fixtures with high-res interior thumbnails
-        const samplePhoto1 = 'https://images.unsplash.com/photo-1595428774223-ef52624120d2?w=800&auto=format&fit=crop&q=80';
-        const samplePhoto2 = 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=800&auto=format&fit=crop&q=80';
-        const samplePhoto3 = 'https://images.unsplash.com/photo-1615874959474-d609969a20ed?w=800&auto=format&fit=crop&q=80';
-
         await this.itemClient.create({
           data: {
             id: 'item-demo-001',
-            roomName: 'Master Bedroom',
-            itemName: 'Teak Wood Double Wardrobe',
-            moveInNotes: 'Pristine polished teak finish, all 4 internal shelves and hinges intact with keys.',
-            moveInPhotoUrl: samplePhoto1,
-            moveInPhotoHash: '45210e409329f475e91241b6f60c28f6da45acab8639d3bf6f3a4c70c100d17b',
-            tenancyId: demoTenancy.id,
-          },
-        });
-
-        await this.itemClient.create({
-          data: {
-            id: 'item-demo-002',
-            roomName: 'Kitchen',
-            itemName: 'Granite Countertop & 3-Burner Hob',
-            moveInNotes: 'Jet black polished granite without any hairline cracks; gas burners operational.',
-            moveInPhotoUrl: samplePhoto2,
-            moveInPhotoHash: 'f1a0fa58d46547f7131791b4fe579506011c5bc3f4d203d30202bf2e5aedec72',
-            tenancyId: demoTenancy.id,
-          },
-        });
-
-        await this.itemClient.create({
-          data: {
-            id: 'item-demo-003',
             roomName: 'Living Room',
-            itemName: 'Daikin 1.5 Ton Inverter AC',
-            moveInNotes: 'Brand new condition, cooling tested at 18C, remote controller operational.',
-            moveInPhotoUrl: samplePhoto3,
-            moveInPhotoHash: '96387f60937f6fb9dc418675ee7b14df6be3ffd231a8616f1bd506475bc95854',
-            tenancyId: demoTenancy.id,
+            itemName: 'Italian Leather Sofa & Recliner',
+            moveInNotes: 'Pristine beige leather upholstery, motorized recline tested & flawless.',
+            moveInPhotoUrl: DEMO_ROOM_CLEAN_DATA_URI,
+            moveInPhotoHash: DEMO_ROOM_CLEAN_SHA256,
+            tenancyId: tenancyA.id,
           },
         });
       }
 
-      // 4. Seed Completed Past Tenancy (3BHK Garden Villa, Koramangala - Settled with NOC)
-      const settledTenancyId = 'koramangala-settled-002';
-      const existingSettled = await this.tenancyClient.findUnique({ where: { id: settledTenancyId } });
-
-      if (!existingSettled || force) {
-        if (this.isConnected && !force) {
-          try {
-            const ic = (this as any).item || (this as any).Item;
-            const tc = (this as any).tenancy || (this as any).Tenancy;
-            if (ic?.deleteMany) await ic.deleteMany({ where: { tenancyId: settledTenancyId } });
-            if (tc?.deleteMany) await tc.deleteMany({ where: { id: settledTenancyId } });
-          } catch {}
-        } else if (!force) {
-          this.memoryTenancies.delete(settledTenancyId);
-          for (const [k, v] of this.memoryItems.entries()) {
-            if (v.tenancyId === settledTenancyId) this.memoryItems.delete(k);
-          }
-        }
-
-        const settledTenancy = await this.tenancyClient.create({
+      // SCENARIO B (Active — Awaiting Owner Lock): ₹18,000 deposit, Step 01 uploaded
+      const existingB = await this.tenancyClient.findUnique({ where: { id: scenarioBId } });
+      if (!existingB || force) {
+        const tenancyB = await this.tenancyClient.create({
           data: {
-            id: settledTenancyId,
-            propertyTitle: '3BHK Garden Villa - Koramangala, Bangalore',
+            id: scenarioBId,
+            propertyTitle: 'Greenwood Cyber-Residency 1BHK HSR',
+            propertyAddress: '#204, 27th Main Road, Sector 1, HSR Layout, Bengaluru, KA 560102',
+            depositAmount: 18000,
+            depositAmountDecimal: 18000,
+            landlordName: 'Ramesh Malik',
+            landlordPhone: '+91 98765 43210',
+            landlordEmail: landlordEmail,
+            landlordUpi: 'ramesh.malik@okhdfcbank',
+            agreementRef: 'BLR-HSR-2026-KA-7120',
+            landlordToken: 'demo-magic-token-hsr-2026',
+            status: 'ACTIVE',
+            depositPaid: false,
+            moveInHash: DEMO_ROOM_CLEAN_SHA256,
+            estimatedRefund: 18000,
+            userId: tenant.id,
+          },
+        });
+
+        await this.itemClient.create({
+          data: {
+            id: 'item-demo-hsr-001',
+            roomName: 'Living Room',
+            itemName: 'Modular Lounge & Wall Finish',
+            moveInNotes: 'Freshly painted walls, spotless sofa cushions and glass coffee table.',
+            moveInPhotoUrl: DEMO_ROOM_CLEAN_DATA_URI,
+            moveInPhotoHash: DEMO_ROOM_CLEAN_SHA256,
+            tenancyId: tenancyB.id,
+          },
+        });
+      }
+
+      // SCENARIO C (Settled History Stack): ₹45,000 deposit, ₹3,500 Gemini deduction, ₹41,500 refunded
+      const existingC = await this.tenancyClient.findUnique({ where: { id: scenarioCId } });
+      if (!existingC || force) {
+        const tenancyC = await this.tenancyClient.create({
+          data: {
+            id: scenarioCId,
+            propertyTitle: 'Prestige Lakeside 3BHK Koramangala',
             propertyAddress: '#18, 4th Block, 80 Feet Road, Koramangala, Bengaluru, KA 560034',
-            depositAmount: 75000,
-            depositAmountDecimal: 75000,
+            depositAmount: 45000,
+            depositAmountDecimal: 45000,
             landlordName: 'Ramesh Malik',
             landlordPhone: '+91 98765 43210',
             landlordEmail: landlordEmail,
@@ -343,8 +348,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             depositPaymentId: 'pay_RS_DEMO_882910',
             settlementPaymentId: 'pay_RS_REFUND_994102',
             settledAt: new Date('2026-10-15T14:30:00.000Z'),
-            moveInHash: '7a13bc54df65a782b12389fedc1432109845baef43210987654321abcdef0123',
-            estimatedRefund: 71500,
+            moveInHash: DEMO_ROOM_CLEAN_SHA256,
+            estimatedRefund: 41500,
             userId: tenant.id,
           },
         });
@@ -353,37 +358,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           data: {
             id: 'item-settled-001',
             roomName: 'Living Room',
-            itemName: 'Italian Marble Flooring',
-            moveInNotes: 'High-gloss Italian marble without chips or stains on move-in.',
-            moveInPhotoUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80',
-            moveInPhotoHash: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
-            moveOutPhotoUrl: 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=800&auto=format&fit=crop&q=80',
-            moveOutPhotoHash: 'b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3',
-            aiVerdict: 'NORMAL_WEAR_TEAR',
-            aiExplanation: 'Minor footwear scuffs consistent with standard residential use under Section 13 Model Tenancy Act 2021. Full deposit protected.',
-            suggestedCut: 0,
-            tenancyId: settledTenancy.id,
-          },
-        });
-
-        await this.itemClient.create({
-          data: {
-            id: 'item-settled-002',
-            roomName: 'Master Balcony',
-            itemName: 'Toughened Glass Balustrade',
-            moveInNotes: 'Seamless glass panels with stainless steel spigots.',
-            moveInPhotoUrl: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&auto=format&fit=crop&q=80',
-            moveInPhotoHash: 'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4',
-            moveOutPhotoUrl: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=800&auto=format&fit=crop&q=80',
-            moveOutPhotoHash: 'd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5',
+            itemName: 'Upholstered Fabric Sofa Set',
+            moveInNotes: 'Spotless cushion fabric and wooden armrests at handover.',
+            moveInPhotoUrl: DEMO_ROOM_CLEAN_DATA_URI,
+            moveInPhotoHash: DEMO_ROOM_CLEAN_SHA256,
+            moveOutPhotoUrl: DEMO_ROOM_DAMAGED_DATA_URI,
+            moveOutPhotoHash: DEMO_ROOM_DAMAGED_SHA256,
             aiVerdict: 'DAMAGE_DETECTED',
-            aiExplanation: 'Impact chip near bottom right mounting clamp detected on exit inspection. Local Bangalore glazier replacement quotation applied.',
+            aiExplanation: 'Localized fabric tear and cushion seam abrasion beyond normal wear under MTA 2021 Sec 15. Fair upholstery repair deduction applied.',
             suggestedCut: 3500,
-            tenancyId: settledTenancy.id,
+            tenancyId: tenancyC.id,
           },
         });
       }
-      this.logger.log('🎯 RentShield demo seed data verified (1 Active 2BHK Indiranagar + 1 Settled 3BHK Koramangala)');
+      this.logger.log('🎯 RentShield 3-Scenario Judge Demo data verified (Indiranagar Move-Out Ready + HSR Awaiting Owner Lock + Koramangala Settled)');
     } catch (err: any) {
       this.logger.warn(`Could not seed demo data: ${err?.message}`);
     }

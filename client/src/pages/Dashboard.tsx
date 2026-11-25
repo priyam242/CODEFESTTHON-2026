@@ -22,12 +22,14 @@ import {
   Receipt,
   RotateCcw,
   CreditCard,
+  ScrollText,
 } from 'lucide-react';
-import { Tenancy, tenancyApi, authApi, api } from '../api';
+import { Tenancy, tenancyApi, authApi, api, getAssetUrl } from '../api';
 import { useLiveSync, emitSyncEvent } from '../realtimeSync';
 import { PaymentModal } from '../components/PaymentModal';
 import { SocietyGatePassModal } from '../components/SocietyGatePassModal';
 import { EscrowReceiptModal } from '../components/EscrowReceiptModal';
+import { LeaseScannerModal } from '../components/LeaseScannerModal';
 import { getEscrowState } from '../utils/escrowSequence';
 
 export const Dashboard: React.FC = () => {
@@ -46,6 +48,7 @@ export const Dashboard: React.FC = () => {
   // Escrow Settlement Receipt Modal State
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptTenancy, setReceiptTenancy] = useState<Tenancy | null>(null);
+  const [showLeaseScanner, setShowLeaseScanner] = useState(false);
 
   // Real Phone-Scannable Payment & Settlement Modal State
   const [selectedPaymentTenancy, setSelectedPaymentTenancy] = useState<Tenancy | null>(null);
@@ -248,16 +251,24 @@ export const Dashboard: React.FC = () => {
           </p>
         </div>
         {!isLandlord ? (
-          <div className="mt-4 md:mt-0 flex items-center space-x-3">
+          <div className="mt-4 md:mt-0 flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowLeaseScanner(true)}
+              className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/35 text-xs font-bold transition shadow-sm"
+            >
+              <ScrollText className="w-3.5 h-3.5 text-cyan-400" />
+              <span>📜 Lease Risk Scanner</span>
+            </button>
             <button
               type="button"
               onClick={handleResetDemo}
               disabled={resettingDemo}
               className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-500/30 text-xs font-semibold transition shadow-sm"
-              title="Restore fresh 2BHK Bangalore demo tenancy"
+              title="Restore 3-Scenario Judge Demo Sandbox"
             >
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>{resettingDemo ? 'Resetting...' : 'Reset Demo State'}</span>
+              <span>{resettingDemo ? 'Resetting...' : '🔄 Reset Judge Demo'}</span>
             </button>
             <Link
               to="/tenancy/new"
@@ -268,7 +279,15 @@ export const Dashboard: React.FC = () => {
             </Link>
           </div>
         ) : (
-          <div className="mt-4 md:mt-0">
+          <div className="mt-4 md:mt-0 flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowLeaseScanner(true)}
+              className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/35 text-xs font-bold transition"
+            >
+              <ScrollText className="w-3.5 h-3.5 text-cyan-400" />
+              <span>📜 Lease Risk Scanner</span>
+            </button>
             <form onSubmit={handleClaim} className="flex items-center space-x-2">
               <input
                 type="text"
@@ -498,13 +517,24 @@ export const Dashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Title & Address */}
-                  <h3 className="text-base sm:text-lg font-bold text-slate-100 group-hover:text-emerald-300 transition line-clamp-1">
-                    {tenancy.propertyTitle}
-                  </h3>
-                  <p className="mt-1 text-xs text-slate-400 line-clamp-2">
-                    {tenancy.propertyAddress}
-                  </p>
+                  {/* Title, Address & Real Room Thumbnail */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-base sm:text-lg font-bold text-slate-100 group-hover:text-emerald-300 transition line-clamp-1">
+                        {tenancy.propertyTitle}
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-400 line-clamp-2">
+                        {tenancy.propertyAddress}
+                      </p>
+                    </div>
+                    {tenancy.items && tenancy.items[0]?.moveInPhotoUrl && (
+                      <img
+                        src={getAssetUrl(tenancy.items[0].moveInPhotoUrl)}
+                        alt={tenancy.propertyTitle}
+                        className="w-16 h-12 rounded-xl object-cover border border-slate-700/80 flex-shrink-0 bg-slate-950"
+                      />
+                    )}
+                  </div>
 
                   {/* STAGE 1: Move-In Escrow Deposit Pay Button for Unfunded Tenancy */}
                   {!tenancy.depositPaid && (
@@ -773,13 +803,24 @@ export const Dashboard: React.FC = () => {
                       </span>
                     </div>
 
-                    {/* Title & Address */}
-                    <h3 className="text-base font-bold text-slate-100 group-hover:text-emerald-300 transition line-clamp-1">
-                      {tenancy.propertyTitle}
-                    </h3>
-                    <p className="mt-1 text-xs text-slate-400 line-clamp-2">
-                      {tenancy.propertyAddress}
-                    </p>
+                    {/* Title, Address & Real Room Thumbnail */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-base font-bold text-slate-100 group-hover:text-emerald-300 transition line-clamp-1">
+                          {tenancy.propertyTitle}
+                        </h3>
+                        <p className="mt-1 text-xs text-slate-400 line-clamp-2">
+                          {tenancy.propertyAddress}
+                        </p>
+                      </div>
+                      {tenancy.items && tenancy.items[0]?.moveInPhotoUrl && (
+                        <img
+                          src={getAssetUrl(tenancy.items[0].moveInPhotoUrl)}
+                          alt={tenancy.propertyTitle}
+                          className="w-16 h-12 rounded-xl object-cover border border-emerald-500/30 flex-shrink-0 bg-slate-950"
+                        />
+                      )}
+                    </div>
 
                     {/* Counterparty info */}
                     <div className="mt-3 py-2 px-3 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs font-mono flex items-center justify-between">
@@ -908,6 +949,14 @@ export const Dashboard: React.FC = () => {
             setReceiptTenancy(null);
           }}
           tenancy={receiptTenancy}
+        />
+      )}
+
+      {/* MTA 2021 Smart Lease & Deposit Clause Scanner */}
+      {showLeaseScanner && (
+        <LeaseScannerModal
+          isOpen={showLeaseScanner}
+          onClose={() => setShowLeaseScanner(false)}
         />
       )}
     </div>
