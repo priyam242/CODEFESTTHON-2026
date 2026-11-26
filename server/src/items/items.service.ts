@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { AiAuditService } from '../ai-audit/ai-audit.service';
 import { TenancyService } from '../tenancy/tenancy.service';
+import { getUploadsDir } from '../app.setup';
 import { createHash, randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -9,7 +10,7 @@ import * as path from 'path';
 @Injectable()
 export class ItemsService {
   private readonly logger = new Logger(ItemsService.name);
-  private uploadsDir = path.join(process.cwd(), 'uploads');
+  private uploadsDir = getUploadsDir();
 
   constructor(
     private prisma: PrismaService,

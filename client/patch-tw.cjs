@@ -1,3 +1,5 @@
+if (process.platform !== 'win32') process.exit(0);
+
 const fs = require('fs');
 const path = require('path');
 

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
+import { getUploadsDir } from '../app.setup';
 
 export interface AuditResult {
   verdict: 'CLEAN' | 'NORMAL_WEAR_TEAR' | 'DAMAGE_DETECTED' | 'SCENE_MISMATCH';
@@ -82,7 +83,7 @@ export class AiAuditService {
     if (trimmed.startsWith('/uploads/')) {
       try {
         const filename = path.basename(trimmed);
-        const uploadsDir = path.join(process.cwd(), 'uploads');
+        const uploadsDir = getUploadsDir();
         const filePath = path.join(uploadsDir, filename);
         if (fs.existsSync(filePath)) {
           const buffer = fs.readFileSync(filePath);

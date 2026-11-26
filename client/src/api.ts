@@ -14,7 +14,7 @@ export function normalizeApiUrl(raw?: string): string {
   }
 
   let trimmed = raw.trim();
-  // Ensure protocol if user entered hostname like rentshield.onrender.com or onrender.com
+  // Ensure protocol if user entered a bare hostname without scheme
   if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('/')) {
     trimmed = `https://${trimmed}`;
   }

@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm prisma:generate && pnpm --filter rentshield-server build && pnpm --filter rentshield-client build",
+  "outputDirectory": "client/dist",
+  "regions": ["sin1"],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/uploads/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

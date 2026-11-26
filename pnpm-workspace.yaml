@@ -2,11 +2,11 @@ packages:
   - server
   - client
 
-onlyBuiltDependencies:
-  - '@google/genai'
-  - '@prisma/client'
-  - '@prisma/engines'
-  - core-js
-  - esbuild
-  - prisma
-  - protobufjs
+allowBuilds:
+  '@google/genai': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  core-js: true
+  esbuild: true
+  prisma: true
+  protobufjs: true
